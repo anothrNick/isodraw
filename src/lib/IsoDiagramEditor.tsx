@@ -898,12 +898,12 @@ function NodeInspector({
             {contents ? `Contains ${contents} item${contents === 1 ? '' : 's'} — they move with this area.` : 'Drop shapes inside to group them with this area.'}
           </span>
           {contents > 0 && (
-            <div className="isd-row">
-              <button type="button" className="isd-btn" onClick={onSelectContents}>
+            <div className="isd-container-actions">
+              <button type="button" className="isd-btn is-wide" onClick={onSelectContents}>
                 Select contents
               </button>
               <button type="button" className="isd-btn" onClick={onFitContents} title="Resize to wrap the contents">
-                Fit
+                Fit to contents
               </button>
               <button type="button" className="isd-btn" onClick={onUngroup} title="Remove the area, keep its contents (⇧⌘G)">
                 Ungroup
