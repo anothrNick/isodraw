@@ -25,6 +25,9 @@ A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run dep
   - *Style:* right-angle (optionally rounded), straight or curved. Solid, dashed or dotted lines. Each end can have an arrow, an open arrow, a circle or a diamond. New connections copy the style of the last connection you edited.
   - *Animation:* marching dashes (flow), data packets, a travelling pulse, or a breathing glow. Each has a direction setting (forward, reverse or both ways), a speed, and a highlight color. The toolbar has a play/pause button, and exported SVGs keep the animations.
 - **Editing:** drag to move (snaps to a 0.5 grid; hold `Alt` to move freely), drag the corner handle to resize, drag the blue dot to change height, `Shift+drag` for box select, copy/paste/duplicate, nudge with the arrow keys, lock, and undo/redo.
+- **Containers:** areas hold whatever sits inside them. Moving an area moves its contents, including nested subnets and the bends on connections between them. Dragging a node into an area adds it, and the area is highlighted while you drag. Press `⌘G` to wrap the selection in a new area, and `⇧⌘G` to ungroup it. Deleting an area also deletes its contents; *Ungroup* keeps them. Membership comes purely from position, so it always matches what you see.
+- **Readable at any angle:** text on the ground, area labels and image tiles turn to stay upright as you rotate the 2.5D view.
+- **Responsive:** below 1000px wide, the side panels become drawers you open from the toolbar, and the inspector opens when you select something.
 - **Export:** PNG, SVG (images are embedded in the file) and JSON. Open a saved diagram from JSON.
 
 ## Use as a library

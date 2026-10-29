@@ -79,6 +79,35 @@ export class Projector {
   }
 }
 
+/**
+ * Quarter turns (0..3) to rotate ground-plane content (text, logos) so it reads
+ * upright: the turn whose "rightward" direction points most to the right on
+ * screen, preferring right-and-down on ties.
+ */
+export function readableTurns(proj: Projector): number {
+  const o = proj.project(0, 0);
+  const dirs = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+  ];
+  let best = 0;
+  let bx = -Infinity;
+  let by = -Infinity;
+  dirs.forEach((d, k) => {
+    const p = proj.project(d.x, d.y);
+    const sx = p.x - o.x;
+    const sy = p.y - o.y;
+    if (sx > bx + 1e-6 || (Math.abs(sx - bx) <= 1e-6 && sy > by)) {
+      best = k;
+      bx = sx;
+      by = sy;
+    }
+  });
+  return best;
+}
+
 export function matrixAttr(m: Matrix): string {
   return `matrix(${m.map((v) => +v.toFixed(5)).join(' ')})`;
 }

@@ -9,3 +9,8 @@ body { background: #eef2f7; font-family: Inter, system-ui, -apple-system, 'Segoe
 .demo-actions button { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
 .demo-actions button:hover { border-color: #2563eb; color: #2563eb; }
 .demo-main { flex: 1; min-height: 0; padding: 0 16px 16px; }
+@media (max-width: 640px) {
+  .demo-header { padding: 8px 10px; }
+  .demo-brand span { display: none; }
+  .demo-main { padding: 0 8px 8px; }
+}

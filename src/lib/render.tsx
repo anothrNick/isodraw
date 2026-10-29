@@ -10,15 +10,34 @@ import {
   isFlat,
   matrixAttr,
   pointsAttr,
+  readableTurns,
   shade,
   solidFaces,
 } from './geometry';
+import { depthMap } from './containers';
 import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, LineStyle, MarkerKind } from './types';
 
 const CURVED = new Set(['cylinder', 'cone']);
 const INSIDE_LABEL_2D = new Set(['block', 'cylinder', 'hexagon']);
 const INV_TILE = 1 / TILE;
+
+/**
+ * A node's footprint as seen in its upright reading frame: rotate content by
+ * `deg` about the center, and lay it out in a `w` × `d` box (swapped for odd turns).
+ */
+function uprightFrame(node: DiagramNode, proj: Projector) {
+  const k = readableTurns(proj);
+  const c = center(node);
+  const odd = k % 2 === 1;
+  return {
+    transform: `rotate(${k * 90} ${c.x * TILE} ${c.y * TILE})`,
+    cx: c.x,
+    cy: c.y,
+    w: odd ? node.d : node.w,
+    d: odd ? node.w : node.d,
+  };
+}
 
 /** Group that maps TILE-scaled ground coordinates onto the ground plane at z. */
 function Ground({ proj, z, children }: { proj: Projector; z: number; children: ReactNode }) {
@@ -65,16 +84,18 @@ function ImageNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
     );
   }
   const top = style === 'tile' ? node.z + node.h : node.z;
+  const f = uprightFrame(node, proj);
   return (
     <>
       {style === 'tile' && <SolidFaces node={{ ...node, kind: 'block' }} proj={proj} />}
       <Ground proj={proj} z={top}>
         <image
           href={node.src}
-          x={(node.x + pad) * TILE}
-          y={(node.y + pad) * TILE}
-          width={(node.w - 2 * pad) * TILE}
-          height={(node.d - 2 * pad) * TILE}
+          transform={f.transform}
+          x={(f.cx - f.w / 2 + pad) * TILE}
+          y={(f.cy - f.d / 2 + pad) * TILE}
+          width={(f.w - 2 * pad) * TILE}
+          height={(f.d - 2 * pad) * TILE}
           preserveAspectRatio="xMidYMid meet"
         />
       </Ground>
@@ -108,6 +129,7 @@ function TextNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
   return (
     <Ground proj={proj} z={node.z}>
       <text
+        transform={uprightFrame(node, proj).transform}
         x={c.x * TILE}
         y={c.y * TILE - ((lines.length - 1) * fs * 1.2) / 2}
         fontSize={fs}
@@ -142,12 +164,14 @@ export function labelAnchor(node: DiagramNode, proj: Projector): Pt {
 function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
   if (!node.label || node.kind === 'text') return null;
   if (node.kind === 'area') {
-    // Area labels sit inside the top-left corner, painted on the ground.
+    // Area labels sit inside the (upright) top-left corner, painted on the ground.
+    const f = uprightFrame(node, proj);
     return (
       <Ground proj={proj} z={node.z}>
         <text
-          x={(node.x + 0.3) * TILE}
-          y={(node.y + 0.3) * TILE}
+          transform={f.transform}
+          x={(f.cx - f.w / 2 + 0.3) * TILE}
+          y={(f.cy - f.d / 2 + 0.3) * TILE}
           fontSize={13}
           fontWeight={700}
           dominantBaseline="hanging"
@@ -451,7 +475,10 @@ export function SceneContent({
   const ground: DiagramNode[] = [];
   const solids: DiagramNode[] = [];
   for (const n of diagram.nodes) (isFlat(n) ? ground : solids).push(n);
-  ground.sort((a, b) => a.z - b.z);
+  // Containers paint beneath what they contain.
+  const depth = depthMap(diagram.nodes);
+  const order = new Map(diagram.nodes.map((n, i) => [n.id, i]));
+  ground.sort((a, b) => a.z - b.z || depth.get(a.id)! - depth.get(b.id)! || order.get(a.id)! - order.get(b.id)!);
   const byId = new Map(diagram.nodes.map((n) => [n.id, n]));
   const sorted = depthSort(solids, proj);
   return (

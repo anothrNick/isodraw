@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type Ref } from 'react';
 import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, snap } from './geometry';
+import { containerOf, descendantsOf, isContainer } from './containers';
 import { SceneContent, edgeGeometry } from './render';
 import {
   SIDES,
@@ -50,7 +51,18 @@ export interface IsoCanvasProps {
 
 type Drag =
   | { type: 'pan'; sx: number; sy: number; cam: Camera; moved: boolean }
-  | { type: 'move'; start: Pt; origins: Map<string, Pt>; moved: boolean }
+  | {
+      type: 'move';
+      start: Pt;
+      /** Node under the pointer; its snapped position sets the offset for everything. */
+      primary: string;
+      origins: Map<string, Pt>;
+      /** Bends of edges whose both ends move, so they travel along. */
+      edgeOrigins: Map<string, Pt[]>;
+      moved: boolean;
+      /** Container the primary node will land in. */
+      dropTarget?: string;
+    }
   | { type: 'resize'; id: string; fixed: Pt; began: boolean }
   | { type: 'height'; id: string; sy: number; h0: number; began: boolean }
   | { type: 'connect'; from: string; fromSide?: Side; trail: Pt[]; cursor: Pt; target: string | null }
@@ -260,12 +272,24 @@ export function IsoCanvas(props: IsoCanvasProps) {
       }
       onSelectionChange({ nodes, edges: [] });
       if (readOnly) return;
+      // Containers carry everything inside them.
+      const containers = nodes.filter((id) => {
+        const n = nodeById.get(id);
+        return n && isContainer(n) && !n.locked;
+      });
+      const moving = new Set([...nodes, ...descendantsOf(containers, diagram.nodes)]);
       const origins = new Map<string, Pt>();
-      for (const id of nodes) {
+      for (const id of moving) {
         const n = nodeById.get(id);
         if (n && !n.locked) origins.set(id, { x: n.x, y: n.y });
       }
-      if (origins.size) setDrag({ type: 'move', start: toWorld(e.clientX, e.clientY), origins, moved: false });
+      const edgeOrigins = new Map<string, Pt[]>();
+      for (const ed of diagram.edges) {
+        if (ed.waypoints?.length && origins.has(ed.from) && origins.has(ed.to)) edgeOrigins.set(ed.id, ed.waypoints);
+      }
+      if (origins.has(nodeId)) {
+        setDrag({ type: 'move', start: toWorld(e.clientX, e.clientY), primary: nodeId, origins, edgeOrigins, moved: false });
+      }
       return;
     }
     if (edgeId) {
@@ -304,13 +328,25 @@ export function IsoCanvas(props: IsoCanvasProps) {
         if (!drag.moved) {
           if (Math.hypot(dx, dy) < 0.15) return;
           props.onBeginChange?.();
-          setDrag({ ...drag, moved: true });
         }
-        updateNodes((n) => {
+        // One offset for everything, so nested layouts keep their exact spacing.
+        const p = drag.origins.get(drag.primary)!;
+        const ox = free ? dx : snap(p.x + dx, snapStep) - p.x;
+        const oy = free ? dy : snap(p.y + dy, snapStep) - p.y;
+        const nodes = diagram.nodes.map((n) => {
           const o = drag.origins.get(n.id);
-          if (!o) return n;
-          return { ...n, x: free ? o.x + dx : snap(o.x + dx, snapStep), y: free ? o.y + dy : snap(o.y + dy, snapStep) };
+          return o ? { ...n, x: o.x + ox, y: o.y + oy } : n;
         });
+        const edges = drag.edgeOrigins.size
+          ? diagram.edges.map((ed) => {
+              const wps = drag.edgeOrigins.get(ed.id);
+              return wps ? { ...ed, waypoints: wps.map((w) => ({ x: w.x + ox, y: w.y + oy })) } : ed;
+            })
+          : diagram.edges;
+        const primary = nodes.find((n) => n.id === drag.primary)!;
+        const target = containerOf(primary, nodes, new Set(drag.origins.keys()))?.id;
+        if (target !== drag.dropTarget || !drag.moved) setDrag({ ...drag, moved: true, dropTarget: target });
+        props.onChange?.({ ...diagram, nodes, edges });
         break;
       }
       case 'resize': {
@@ -754,6 +790,17 @@ export function IsoCanvas(props: IsoCanvasProps) {
               />
               {sideHandles(hoverNode)}
             </g>
+          )}
+          {drag?.type === 'move' && drag.dropTarget && nodeById.get(drag.dropTarget) && (
+            <polygon
+              points={pointsAttr(footprint(nodeById.get(drag.dropTarget)!).map((q) => proj.project(q.x, q.y, nodeById.get(drag.dropTarget!)!.z)))}
+              fill="rgba(37,99,235,0.08)"
+              stroke={ACCENT}
+              strokeWidth={2.5}
+              strokeDasharray="8 5"
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
           )}
           <g pointerEvents="none">{overlay}</g>
           {handles}
