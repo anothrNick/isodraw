@@ -15,7 +15,7 @@ A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run dep
 
 ## Features
 
-- **Two views:** flat top-down and 2.5D isometric. The 2.5D view rotates in 90° steps. Press `Tab` to switch views and `R` / `Shift+R` to rotate.
+- **Two views:** flat top-down and 2.5D isometric. The 2.5D view rotates in 90° steps. Press `Tab` to switch views and `R` / `Shift+R` to rotate. The 2D/2.5D choice is saved on the diagram (`diagram.view`), so read-only, published and embedded copies are drawn the same way.
 - **Shapes:** block, cylinder, hexagon, pyramid, cone, sphere, rectangular area, circular area and ground text. Every shape has a color, size, height, elevation, opacity and label.
 - **Images and logos:** upload PNG/SVG/JPG files (or drop them on the editor), or add one by URL. Images can be drawn as a *tile* (an icon on a block, like Cloudcraft), *flat* on the ground, or *standing* upright.
 - **AWS icons:** the official AWS architecture icon set (about 800 icons: services, resources, groups and categories). They load at runtime from the jsDelivr CDN through the MIT-licensed [`aws-icons`](https://www.npmjs.com/package/aws-icons) npm package, and you can search them.
@@ -65,7 +65,7 @@ function App() {
 | --- | --- |
 | `value` / `onChange` | Controlled diagram |
 | `defaultValue` | Starting diagram when uncontrolled |
-| `defaultView` | `'3d'` (default) or `'2d'` |
+| `defaultView` | `'3d'` (default) or `'2d'`, for diagrams without a saved `view` |
 | `awsIcons` | Load AWS icons from the CDN (default `true`) |
 | `iconLibraries` | Extra `IconLibrary[]` tabs for the palette |
 | `userIcons` / `onUserIconsChange` | Images the user imported, so the host app can save them |

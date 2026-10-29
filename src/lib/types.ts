@@ -115,6 +115,8 @@ export interface Diagram {
   edges: DiagramEdge[];
   /** Markdown documentation for the diagram as a whole. */
   doc?: string;
+  /** How the diagram is drawn everywhere it appears: 2.5D (default) or flat. */
+  view?: ViewMode;
 }
 
 /** What a documentation page is about. */

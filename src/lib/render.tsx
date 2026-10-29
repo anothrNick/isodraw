@@ -638,7 +638,7 @@ export function sceneBounds(d: Diagram, proj: Projector, pad = 28): { x: number;
  */
 export function StaticDiagram({
   diagram,
-  view = '3d',
+  view,
   rotation = 0,
   highlight,
   focus,
@@ -649,6 +649,7 @@ export function StaticDiagram({
   label,
 }: {
   diagram: Diagram;
+  /** Defaults to the diagram's own setting. */
   view?: '2d' | '3d';
   rotation?: 0 | 1 | 2 | 3;
   /** Outline this node. */
@@ -663,7 +664,7 @@ export function StaticDiagram({
   label?: string;
 }) {
   const idPrefix = useId().replace(/:/g, '');
-  const proj = new Projector(view, rotation);
+  const proj = new Projector(view ?? diagram.view ?? '3d', rotation);
   const b = sceneBounds(diagram, proj);
   const hl = highlight ? diagram.nodes.find((n) => n.id === highlight) : undefined;
   const onClick = (e: RMouseEvent) => {
