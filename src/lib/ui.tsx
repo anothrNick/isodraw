@@ -21,6 +21,7 @@ const paths: Record<string, ReactNode> = {
   panelR: <path d="M3 4h18v16H3V4Zm2 2v12h8V6H5Zm10 0v12h4V6h-4Z" />,
   close: <path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z" />,
   group: <path d="M3 3h6v2H5v4H3V3Zm12 0h6v6h-2V5h-4V3ZM3 15h2v4h4v2H3v-6Zm16 0h2v6h-6v-2h4v-4ZM8 8h8v8H8V8Z" />,
+  doc: <path d="M6 2h9l5 5v15H6V2Zm2 2v16h10V8h-4V4H8Zm2 7h6v2h-6v-2Zm0 4h6v2h-6v-2Z" />,
   play: <path d="M8 5v14l11-7L8 5Z" />,
   pause: <path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z" />,
   image: <path d="M3 4h18v16H3V4Zm2 2v9.6l4-4 4 4 2-2 4 4V6H5Zm10 2.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" />,

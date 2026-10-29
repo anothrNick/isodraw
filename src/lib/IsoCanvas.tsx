@@ -1,7 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type Ref } from 'react';
 import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, snap } from './geometry';
 import { containerOf, descendantsOf, isContainer } from './containers';
-import { SceneContent, edgeGeometry } from './render';
+import { hasDoc } from './docs';
+import { SceneContent, edgeGeometry, midpoint } from './render';
 import {
   SIDES,
   type InferredRoute,
@@ -14,7 +15,7 @@ import {
   previewRoute,
   resolveEdge,
 } from './routing';
-import type { Camera, Diagram, DiagramEdge, DiagramNode, Rotation, Side, ViewMode } from './types';
+import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, Rotation, Side, ViewMode } from './types';
 
 export interface Selection {
   nodes: string[];
@@ -47,6 +48,10 @@ export interface IsoCanvasProps {
   /** Payload dropped from the palette at the given world point. */
   onDropPayload?: (payload: string, world: Pt) => void;
   svgRef?: Ref<SVGSVGElement>;
+  /** Show a small badge on items that have documentation (default true). */
+  showDocBadges?: boolean;
+  /** A doc badge was clicked, or an item was double-clicked. */
+  onOpenDocs?: (target: DocTarget) => void;
 }
 
 type Drag =
@@ -127,7 +132,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
   // Space-to-pan.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !(e.target as HTMLElement)?.closest?.('input,textarea,select')) {
+      if (e.code === 'Space' && !(e.target as HTMLElement)?.closest?.('input,textarea,select,[contenteditable="true"]')) {
         setSpaceDown(true);
         e.preventDefault();
       }
@@ -235,6 +240,14 @@ export function IsoCanvas(props: IsoCanvasProps) {
     const handle = closestAttr(e.target, 'data-handle');
     const nodeId = closestAttr(e.target, 'data-node-id');
     const edgeId = closestAttr(e.target, 'data-edge-id');
+    const badge = closestAttr(e.target, 'data-doc-badge');
+
+    if (badge) {
+      const [kind, id] = badge.split(':') as ['node' | 'edge', string];
+      onSelectionChange(kind === 'node' ? { nodes: [id], edges: [] } : { nodes: [], edges: [id] });
+      props.onOpenDocs?.({ kind, id });
+      return;
+    }
 
     if (handle && !readOnly) {
       if (startEdgeHandle(handle, e)) return;
@@ -477,8 +490,15 @@ export function IsoCanvas(props: IsoCanvasProps) {
 
   const onDoubleClick = (e: React.MouseEvent) => {
     const handle = closestAttr(e.target, 'data-handle');
+    if (!handle) {
+      const nodeId = closestAttr(e.target, 'data-node-id');
+      const edgeId = closestAttr(e.target, 'data-edge-id');
+      if (nodeId) props.onOpenDocs?.({ kind: 'node', id: nodeId });
+      else if (edgeId) props.onOpenDocs?.({ kind: 'edge', id: edgeId });
+      return;
+    }
     const edge = edgeById.get(selection.edges[0]);
-    if (!handle?.startsWith('wp:') || !edge?.waypoints || readOnly) return;
+    if (!handle.startsWith('wp:') || !edge?.waypoints || readOnly) return;
     const i = Number(handle.split(':')[1]);
     props.onBeginChange?.();
     patchEdge(edge.id, { waypoints: edge.waypoints.filter((_, k) => k !== i) });
@@ -738,6 +758,49 @@ export function IsoCanvas(props: IsoCanvasProps) {
     );
   }
 
+  // ----- doc badges -----
+  const badgeSize = 16 / camera.zoom;
+  const badge = (key: string, p: Pt, title: string) => (
+    <g key={key} data-doc-badge={key} transform={`translate(${p.x} ${p.y}) scale(${1 / camera.zoom})`} style={{ cursor: 'pointer' }}>
+      <title>{`Documentation: ${title}`}</title>
+      <rect x={-8} y={-8} width={16} height={16} rx={4} fill="#fff" stroke={ACCENT} strokeWidth={1.25} />
+      <path d="M-4,-3.5 H4 M-4,0 H4 M-4,3.5 H1.5" stroke={ACCENT} strokeWidth={1.4} strokeLinecap="round" />
+    </g>
+  );
+  const docBadges =
+    props.showDocBadges === false
+      ? null
+      : [
+          ...diagram.nodes
+            .filter((n) => hasDoc(n.doc))
+            .map((n) => {
+              const flat = isFlat(n) || n.kind === 'sphere';
+              const top = flat ? n.z : n.z + n.h;
+              const pts = footprint(n).map((q) => proj.project(q.x, q.y, top));
+              // Solids: beside the right corner of the top face. Areas: just inside their back corner.
+              let p: Pt;
+              if (flat) {
+                const c = proj.project(center(n).x, center(n).y, top);
+                const back = pts.reduce((a, b) => (b.y < a.y ? b : a));
+                p = { x: back.x + (c.x - back.x) * 0.12, y: back.y + (c.y - back.y) * 0.12 + badgeSize };
+              } else {
+                const right = pts.reduce((a, b) => (b.x > a.x ? b : a));
+                p = { x: right.x + badgeSize * 0.2, y: right.y - badgeSize * 0.9 };
+              }
+              return badge(`node:${n.id}`, p, n.label || n.kind);
+            }),
+          ...diagram.edges
+            .filter((ed) => hasDoc(ed.doc))
+            .map((ed) => {
+              const ends = edgeEnds(ed);
+              if (!ends) return null;
+              const m = midpoint(edgeGeometry(ed, ends[0], ends[1], proj).screen);
+              // Sit beside the edge label pill when there is one.
+              const dx = ed.label ? (ed.label.length * 6.6 + 12) / 2 + 12 : 0;
+              return badge(`edge:${ed.id}`, { x: m.x + dx, y: m.y - (ed.label ? 0 : badgeSize * 0.9) }, ed.label || 'connection');
+            }),
+        ];
+
   const hoverNode = hover && tool === 'connect' && !drag ? nodeById.get(hover) : undefined;
 
   const cursor = drag?.type === 'pan' && drag.moved ? 'grabbing' : spaceDown ? 'grab' : tool === 'connect' ? 'crosshair' : 'default';
@@ -803,6 +866,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
             />
           )}
           <g pointerEvents="none">{overlay}</g>
+          {docBadges}
           {handles}
           {edgeHandles}
           {preview}

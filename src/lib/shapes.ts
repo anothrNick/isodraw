@@ -130,5 +130,19 @@ export function parseDiagram(json: unknown): Diagram {
     version: 1,
     nodes: obj.nodes.map((n) => ({ ...n, z: n.z ?? 0, h: n.h ?? 0 })),
     edges: obj.edges.filter((e) => ids.has(e.from) && ids.has(e.to)).map(migrateEdge),
+    ...(typeof obj.doc === 'string' ? { doc: obj.doc } : {}),
   };
 }
+
+export const KIND_NAMES: Record<ShapeKind, string> = {
+  block: 'Block',
+  cylinder: 'Cylinder',
+  hexagon: 'Hexagon',
+  pyramid: 'Pyramid',
+  cone: 'Cone',
+  sphere: 'Sphere',
+  area: 'Area',
+  circleArea: 'Circle area',
+  text: 'Text',
+  image: 'Image',
+};

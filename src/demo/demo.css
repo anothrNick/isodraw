@@ -8,6 +8,7 @@ body { background: #eef2f7; font-family: Inter, system-ui, -apple-system, 'Segoe
 .demo-actions { display: flex; gap: 6px; }
 .demo-actions button { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
 .demo-actions button:hover { border-color: #2563eb; color: #2563eb; }
+.demo-actions button.is-on { background: #2563eb; border-color: #2563eb; color: #fff; }
 .demo-main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 @media (max-width: 640px) {
   .demo-header { padding: 8px 10px; }

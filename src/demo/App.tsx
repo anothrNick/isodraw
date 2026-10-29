@@ -19,6 +19,7 @@ export function App() {
   const [icons, setIcons] = useState<IconDef[]>(() => load(ICONS_KEY, []));
   // Remounting the editor re-fits the camera after a reset.
   const [epoch, setEpoch] = useState(0);
+  const [viewOnly, setViewOnly] = useState(false);
 
   useEffect(() => {
     try {
@@ -53,6 +54,9 @@ export function App() {
           <span>Cloudcraft-style diagrams for React</span>
         </div>
         <div className="demo-actions">
+          <button type="button" aria-pressed={viewOnly} className={viewOnly ? 'is-on' : ''} onClick={() => setViewOnly(!viewOnly)} title="Browse the diagram and its docs without editing">
+            {viewOnly ? 'Viewing' : 'View only'}
+          </button>
           <button type="button" onClick={() => reset(sampleDiagram)}>Load sample</button>
           <button type="button" onClick={() => reset(emptyDiagram())}>New blank</button>
         </div>
@@ -64,6 +68,7 @@ export function App() {
           onChange={setDiagram}
           userIcons={icons}
           onUserIconsChange={setIcons}
+          readOnly={viewOnly}
         />
       </main>
     </div>
