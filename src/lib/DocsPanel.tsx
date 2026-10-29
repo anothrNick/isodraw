@@ -1,13 +1,14 @@
-import { Extension, mergeAttributes, type Editor, type Range } from '@tiptap/core';
+import { Extension, Node as TiptapNode, mergeAttributes, type Editor, type Range } from '@tiptap/core';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import Mention from '@tiptap/extension-mention';
 import { TableKit } from '@tiptap/extension-table';
 import { Placeholder } from '@tiptap/extensions';
-import { PluginKey } from '@tiptap/pm/state';
-import { EditorContent, useEditor } from '@tiptap/react';
+import { NodeSelection, PluginKey } from '@tiptap/pm/state';
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type NodeViewProps } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Markdown } from 'tiptap-markdown';
 import {
   MENTION_SCHEME,
@@ -20,7 +21,9 @@ import {
   titleOf,
   type Mentionable,
 } from './docs';
-import { KIND_NAMES } from './shapes';
+import { IsoDiagramEditor } from './IsoDiagramEditor';
+import { StaticDiagram } from './render';
+import { KIND_NAMES, emptyDiagram, parseDiagram } from './shapes';
 import type { Diagram, DocTarget } from './types';
 import { Icon } from './ui';
 
@@ -147,6 +150,151 @@ const ItemMention = Mention.extend({
   },
 });
 
+
+// ---------- embedded diagrams ----------
+
+function readEmbedded(json: string): Diagram {
+  try {
+    return json.trim() ? parseDiagram(JSON.parse(json)) : emptyDiagram();
+  } catch {
+    return emptyDiagram();
+  }
+}
+
+/** Full-screen editor for a diagram embedded in a doc. */
+function EmbedEditorModal({ initial, onSave, onCancel }: { initial: Diagram; onSave: (d: Diagram) => void; onCancel: () => void }) {
+  const [draft, setDraft] = useState(initial);
+  return (
+    <div
+      className="isd-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit embedded diagram"
+      // Keep keys and drops inside the modal: the outer editor is a React ancestor through the portal.
+      onKeyDown={(e) => e.stopPropagation()}
+      onDrop={(e) => e.stopPropagation()}
+      onDragOver={(e) => e.stopPropagation()}
+    >
+      <div className="isd-modal-box">
+        <header className="isd-modal-head">
+          <strong>Embedded diagram</strong>
+          <span>Shown inside this doc. Use it for the internals of a component: data flow, sub-services, sequences.</span>
+          <div className="isd-modal-actions">
+            <button type="button" className="isd-btn" onClick={onCancel}>
+              Cancel
+            </button>
+            <button type="button" className="isd-btn is-primary" onClick={() => onSave(draft)}>
+              Save diagram
+            </button>
+          </div>
+        </header>
+        <IsoDiagramEditor defaultValue={initial} onChange={setDraft} className="isd-modal-editor" />
+      </div>
+    </div>
+  );
+}
+
+function DiagramEmbedView({ node, updateAttributes, editor, selected }: NodeViewProps) {
+  const diagram = useMemo(() => readEmbedded(node.attrs.diagram as string), [node.attrs.diagram]);
+  const [open, setOpen] = useState(false);
+  const editable = editor.isEditable;
+  // A block just inserted with /Diagram opens its editor straight away.
+  useEffect(() => {
+    if (node.attrs.autoOpen && editable) {
+      setOpen(true);
+      updateAttributes({ autoOpen: false });
+    }
+  }, [node.attrs.autoOpen, editable]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <NodeViewWrapper className={`isd-embed${selected && editable ? ' is-selected' : ''}`} contentEditable={false}>
+      {editable && (
+        <div className="isd-embed-bar">
+          <span>Diagram</span>
+          <button type="button" className="isd-doc-btn" onClick={() => setOpen(true)}>
+            Edit diagram
+          </button>
+        </div>
+      )}
+      {diagram.nodes.length ? (
+        <div className="isd-embed-canvas" onDoubleClick={() => editable && setOpen(true)}>
+          <StaticDiagram diagram={diagram} maxHeight={360} label="Embedded diagram" />
+        </div>
+      ) : (
+        <div className="isd-embed-empty">{editable ? 'Empty diagram. Click Edit diagram to draw one.' : 'Empty diagram.'}</div>
+      )}
+      {open &&
+        createPortal(
+          <EmbedEditorModal
+            initial={diagram}
+            onCancel={() => setOpen(false)}
+            onSave={(d) => {
+              updateAttributes({ diagram: JSON.stringify({ version: 1, nodes: d.nodes, edges: d.edges, ...(d.doc ? { doc: d.doc } : {}) }) });
+              setOpen(false);
+            }}
+          />,
+          document.body,
+        )}
+    </NodeViewWrapper>
+  );
+}
+
+/**
+ * An IsoDraw diagram inside a doc. Stored in Markdown as a fenced block,
+ * ```isodraw followed by the diagram JSON, so the doc stays plain Markdown.
+ */
+const DiagramEmbed = TiptapNode.create({
+  name: 'isodrawDiagram',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      diagram: { default: '' },
+      // Transient: set by /Diagram, cleared once the editor opens; never written to Markdown or HTML.
+      autoOpen: { default: false, rendered: false, parseHTML: () => false },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        // Beats the code block rule for fenced ```isodraw blocks.
+        tag: 'pre',
+        priority: 60,
+        getAttrs: (el: HTMLElement) => {
+          const code = el.querySelector('code');
+          return code && /\blanguage-isodraw\b/.test(code.className) ? { diagram: code.textContent ?? '' } : false;
+        },
+      },
+      { tag: 'div[data-type="isodraw-diagram"]', getAttrs: (el: HTMLElement) => ({ diagram: el.getAttribute('data-diagram') ?? '' }) },
+    ];
+  },
+  renderHTML({ node }) {
+    return ['div', { 'data-type': 'isodraw-diagram', 'data-diagram': node.attrs.diagram }];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(DiagramEmbedView);
+  },
+  addStorage() {
+    return {
+      markdown: {
+        serialize(
+          state: { write: (s: string) => void; ensureNewLine: () => void; closeBlock: (n: unknown) => void },
+          node: { attrs: { diagram: string } },
+        ) {
+          const json = node.attrs.diagram?.trim() || JSON.stringify(emptyDiagram());
+          state.write('```isodraw');
+          state.ensureNewLine();
+          state.write(json);
+          state.ensureNewLine();
+          state.write('```');
+          state.closeBlock(node);
+        },
+        parse: {},
+      },
+    };
+  },
+});
+
 // ---------- slash commands ----------
 
 interface SlashItem {
@@ -170,6 +318,11 @@ const SLASH_ITEMS: SlashItem[] = [
     run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
   },
   { title: 'Divider', hint: '---', run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
+  {
+    title: 'Diagram',
+    hint: 'isodraw',
+    run: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'isodrawDiagram', attrs: { diagram: '', autoOpen: true } }).run(),
+  },
   { title: 'Link a component', hint: '@', run: (e, r) => e.chain().focus().deleteRange(r).insertContent('@').run() },
 ];
 
@@ -188,7 +341,7 @@ const SlashCommands = Extension.create<{ suggestion: Omit<SuggestionOptions<Slas
 type MarkdownStorage = { markdown: { getMarkdown: () => string } };
 const getMarkdown = (e: Editor) => (e.storage as unknown as MarkdownStorage).markdown.getMarkdown();
 
-function DocEditor({
+export function DocEditor({
   markdown,
   editable,
   items,
@@ -236,6 +389,7 @@ function DocEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       TableKit.configure({ table: { resizable: false } }),
+      DiagramEmbed,
       Markdown.configure({ html: true, linkify: true, transformPastedText: true, transformCopiedText: true, breaks: false }),
       ItemMention.configure({
         suggestion: {
@@ -303,7 +457,8 @@ function DocEditor({
       } else {
         setTableMenu(null);
       }
-      if (empty || !e.isEditable || !box) {
+      // A selected block (like an embedded diagram) gets no text formatting menu.
+      if (empty || !e.isEditable || !box || e.state.selection instanceof NodeSelection) {
         setBubble(null);
         return;
       }
