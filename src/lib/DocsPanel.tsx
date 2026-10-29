@@ -25,6 +25,7 @@ import { IsoDiagramEditor } from './IsoDiagramEditor';
 import { StaticDiagram } from './render';
 import { KIND_NAMES, emptyDiagram, parseDiagram } from './shapes';
 import type { Diagram, DocTarget } from './types';
+import { useTheme } from './theme';
 import { Icon } from './ui';
 
 export interface DocsPanelProps {
@@ -165,9 +166,12 @@ function readEmbedded(json: string): Diagram {
 /** Full-screen editor for a diagram embedded in a doc. */
 function EmbedEditorModal({ initial, onSave, onCancel }: { initial: Diagram; onSave: (d: Diagram) => void; onCancel: () => void }) {
   const [draft, setDraft] = useState(initial);
+  // Portaled to <body>, outside the editor's themed root, so it carries the theme itself.
+  const theme = useTheme();
   return (
     <div
       className="isd-modal"
+      data-theme={theme}
       role="dialog"
       aria-modal="true"
       aria-label="Edit embedded diagram"

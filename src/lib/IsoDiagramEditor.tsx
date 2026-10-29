@@ -5,6 +5,7 @@ import { exportDocsMarkdown, hasDoc, sameTarget, targetKey, withDoc } from './do
 import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } from './export';
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
+import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
 import { loadAwsIconLibrary } from './icons';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
@@ -29,6 +30,8 @@ export interface IsoDiagramEditorProps {
   readOnly?: boolean;
   /** When to show doc markers on documented items (default: on hover or selection). */
   docBadges?: 'hover' | 'always' | 'never';
+  /** Color theme. Defaults to the enclosing IsoDraw component's theme, or light. */
+  theme?: Theme;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -55,6 +58,7 @@ interface PalettePayload {
 
 export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const { readOnly, awsIcons = true } = props;
+  const theme = useResolvedTheme(props.theme);
   const [hist, setHist] = useState<History>(() => ({
     d: props.value ?? props.defaultValue ?? emptyDiagram(),
     past: [],
@@ -497,8 +501,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     try {
       if (fmt === 'docs') downloadBlob(exportDocsMarkdown(diagram), 'architecture.md', 'text/markdown');
       if (fmt === 'json') downloadBlob(exportJson(diagram), 'diagram.json', 'application/json');
-      if (fmt === 'svg' && svgRef.current) downloadBlob(await exportSvg(svgRef.current), 'diagram.svg', 'image/svg+xml');
-      if (fmt === 'png' && svgRef.current) downloadBlob(await exportPng(svgRef.current), 'diagram.png');
+      // Dark-theme ink is light, so dark exports carry the dark canvas behind it.
+      const background = theme === 'dark' ? CANVAS_BG.dark : undefined;
+      if (fmt === 'svg' && svgRef.current) downloadBlob(await exportSvg(svgRef.current, { background }), 'diagram.svg', 'image/svg+xml');
+      if (fmt === 'png' && svgRef.current) downloadBlob(await exportPng(svgRef.current, { background }), 'diagram.png');
     } catch (err) {
       setToast(`Export failed: ${(err as Error).message}`);
     }
@@ -567,8 +573,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const selEdge = selection.edges.length === 1 && !selection.nodes.length ? diagram.edges.find((e) => e.id === selection.edges[0]) : undefined;
 
   return (
+    <ThemeContext.Provider value={theme}>
     <div
       ref={rootRef}
+      data-theme={theme}
       className={`isd-root${compact ? ' is-compact' : ''} ${props.className ?? ''}`}
       style={props.style}
       onKeyDown={onKeyDown}
@@ -921,6 +929,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         )}
       </div>
     </div>
+    </ThemeContext.Provider>
   );
 }
 

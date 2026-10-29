@@ -37,6 +37,7 @@ A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run dep
   - *Export → Docs (Markdown)* writes a single `architecture.md`, nested by area, with mentions turned into links within the file.
   - The editor loads lazily, so pages that never open the docs never download Tiptap.
 - **Published view:** `<IsoDiagramPublished diagram={…} useHash />` turns a diagram and its docs into a read-only docs site. It has a table of contents nested by area, an overview page with the full diagram, and a page per component. Each component page shows the component drawn at the top, a "where it sits" map, its doc, and its incoming and outgoing connections (with their docs) at the bottom. The demo's *Published* mode shows it.
+- **Light and dark themes:** pass `theme="light" | "dark" | "system"` to the editor or the published view (`system` follows the OS). Every part of the UI switches, including the docs editor, embedded diagrams and the embed editor. Dark gray diagram ink, such as default text, slate connections and area labels, turns light in dark mode. Saturated colors stay exactly as picked. Exports from the dark theme get the dark canvas as their background so they stay readable.
 - **Export:** PNG, SVG (images are embedded in the file) and JSON. Open a saved diagram from JSON.
 
 ## Use as a library
@@ -70,6 +71,7 @@ function App() {
 | `iconLibraries` | Extra `IconLibrary[]` tabs for the palette |
 | `userIcons` / `onUserIconsChange` | Images the user imported, so the host app can save them |
 | `readOnly` | Hides the side panels and turns off editing |
+| `theme` | `'light'` (default), `'dark'` or `'system'`. Colors are CSS variables (`--isd-bg`, `--isd-accent`, …) you can override |
 
 Docs are Markdown strings on `node.doc`, `edge.doc` and `diagram.doc`. The library is built as ES and CommonJS modules. React, React DOM, `@tiptap/*` and `tiptap-markdown` are dependencies of the package rather than bundled into it.
 
