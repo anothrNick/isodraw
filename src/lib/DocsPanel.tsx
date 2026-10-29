@@ -204,6 +204,7 @@ function DocEditor({
   const [mentionPopup, setMentionPopup] = useState<PopupState<MentionItem> | null>(null);
   const [slashPopup, setSlashPopup] = useState<PopupState<SlashItem> | null>(null);
   const [bubble, setBubble] = useState<{ x: number; y: number; below: boolean } | null>(null);
+  const [tableMenu, setTableMenu] = useState<{ x: number; y: number; below: boolean } | null>(null);
   const mentionRef = useRef(mentionPopup);
   const slashRef = useRef(slashPopup);
   mentionRef.current = mentionPopup;
@@ -286,6 +287,22 @@ function DocEditor({
     onSelectionUpdate: ({ editor: e }) => {
       const { from, to, empty } = e.state.selection;
       const box = wrapRef.current?.getBoundingClientRect();
+      // Table menu: anchored to the current cell while the cursor is in a table.
+      const at = e.view.domAtPos(from).node;
+      const cell = (at instanceof Element ? at : at.parentElement)?.closest('td, th');
+      if (cell && empty && e.isEditable && box) {
+        const r = cell.getBoundingClientRect();
+        const half = 150;
+        const top = r.top - box.top;
+        const below = top < 48;
+        setTableMenu({
+          x: Math.min(Math.max(r.left + r.width / 2 - box.left, half + 4), box.width - half - 4),
+          y: below ? r.bottom - box.top : top,
+          below,
+        });
+      } else {
+        setTableMenu(null);
+      }
       if (empty || !e.isEditable || !box) {
         setBubble(null);
         return;
@@ -299,7 +316,10 @@ function DocEditor({
       const below = top < 48;
       setBubble({ x, y: below ? Math.max(a.bottom, b.bottom) - box.top : top, below });
     },
-    onBlur: () => setBubble(null),
+    onBlur: () => {
+      setBubble(null);
+      setTableMenu(null);
+    },
   });
 
   // Pick up outside changes (undo/redo) without clobbering what the user just typed.
@@ -354,15 +374,6 @@ function DocEditor({
 
   return (
     <div className="isd-doc-editor" ref={wrapRef}>
-      {editable && editor.isActive('table') && (
-        <div className="isd-doc-tablebar">
-          {btn('+ Row', 'Add row below', false, () => chain().addRowAfter().run())}
-          {btn('+ Col', 'Add column after', false, () => chain().addColumnAfter().run())}
-          {btn('− Row', 'Delete row', false, () => chain().deleteRow().run())}
-          {btn('− Col', 'Delete column', false, () => chain().deleteColumn().run())}
-          {btn('Delete table', 'Delete table', false, () => chain().deleteTable().run())}
-        </div>
-      )}
       <EditorContent editor={editor} className="isd-doc-content" />
 
       {bubble && (
@@ -372,6 +383,21 @@ function DocEditor({
           {btn(<s>S</s>, 'Strikethrough', editor.isActive('strike'), () => chain().toggleStrike().run())}
           {btn(<code>{'<>'}</code>, 'Inline code', editor.isActive('code'), () => chain().toggleCode().run())}
           {btn(<Icon name="link" size={14} />, 'Link', editor.isActive('link'), setLink)}
+        </div>
+      )}
+
+      {tableMenu && editor.isActive('table') && (
+        <div className={`isd-doc-bubble${tableMenu.below ? ' is-below' : ''}`} style={{ left: tableMenu.x, top: tableMenu.y }}>
+          <span className="isd-doc-bubble-label">Row</span>
+          {btn('+↑', 'Insert row above', false, () => chain().addRowBefore().run())}
+          {btn('+↓', 'Insert row below', false, () => chain().addRowAfter().run())}
+          {btn('✕', 'Delete row', false, () => chain().deleteRow().run())}
+          <span className="isd-doc-bubble-label">Col</span>
+          {btn('+←', 'Insert column left', false, () => chain().addColumnBefore().run())}
+          {btn('+→', 'Insert column right', false, () => chain().addColumnAfter().run())}
+          {btn('✕', 'Delete column', false, () => chain().deleteColumn().run())}
+          {btn('H', 'Toggle header row', false, () => chain().toggleHeaderRow().run())}
+          {btn(<Icon name="trash" size={14} />, 'Delete table', false, () => chain().deleteTable().run())}
         </div>
       )}
 
