@@ -245,6 +245,7 @@ textarea.isd-input { resize: vertical; }
 .isd-doc-bubble .isd-doc-btn.is-active { background: rgba(96, 165, 250, 0.3); color: #fff; }
 
 .isd-doc-popup {
+  /* Positioned so item offsetTop is relative to the list (used to keep the active item in view). */
   position: absolute; z-index: 6; min-width: 220px; max-width: calc(100% - 16px); max-height: 260px; overflow-y: auto; padding: 4px;
   border: 1px solid var(--isd-border); border-radius: 8px; background: var(--isd-bg); box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
 }

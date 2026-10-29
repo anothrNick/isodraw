@@ -313,6 +313,18 @@ function DocEditor({
     editor?.setEditable(editable);
   }, [editor, editable]);
 
+  // Keep the highlighted suggestion visible while arrowing through a long list.
+  useEffect(() => {
+    for (const list of wrapRef.current?.querySelectorAll<HTMLElement>('.isd-doc-popup') ?? []) {
+      const item = list.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!item) continue;
+      if (item.offsetTop < list.scrollTop) list.scrollTop = item.offsetTop - 4;
+      else if (item.offsetTop + item.offsetHeight > list.scrollTop + list.clientHeight) {
+        list.scrollTop = item.offsetTop + item.offsetHeight - list.clientHeight + 4;
+      }
+    }
+  }, [mentionPopup?.index, slashPopup?.index, mentionPopup?.items, slashPopup?.items]);
+
   if (!editor) return null;
 
   const btn = (label: ReactNode, title: string, active: boolean, run: () => void) => (
