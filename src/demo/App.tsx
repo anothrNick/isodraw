@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { IsoDiagramEditor, emptyDiagram, type Diagram, type IconDef } from '../lib';
+import { IsoDiagramEditor, IsoDiagramPublished, emptyDiagram, type Diagram, type IconDef } from '../lib';
 import { EXAMPLES } from './examples';
 import { sampleDiagram } from './sample';
 
@@ -20,7 +20,7 @@ export function App() {
   const [icons, setIcons] = useState<IconDef[]>(() => load(ICONS_KEY, []));
   // Remounting the editor re-fits the camera after a reset.
   const [epoch, setEpoch] = useState(0);
-  const [viewOnly, setViewOnly] = useState(false);
+  const [mode, setMode] = useState<'edit' | 'view' | 'published'>(() => (window.location.hash.startsWith('#/') ? 'published' : 'edit'));
 
   useEffect(() => {
     try {
@@ -55,9 +55,30 @@ export function App() {
           <span>Cloudcraft-style diagrams for React</span>
         </div>
         <div className="demo-actions">
-          <button type="button" aria-pressed={viewOnly} className={viewOnly ? 'is-on' : ''} onClick={() => setViewOnly(!viewOnly)} title="Browse the diagram and its docs without editing">
-            {viewOnly ? 'Viewing' : 'View only'}
-          </button>
+          <div className="demo-modes" role="radiogroup" aria-label="Mode">
+            {(
+              [
+                ['edit', 'Edit', 'Draw and document'],
+                ['view', 'View', 'Browse the diagram and its docs without editing'],
+                ['published', 'Published', 'Docs-site view: a page per component'],
+              ] as const
+            ).map(([m, label, hint]) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                className={mode === m ? 'is-on' : ''}
+                title={hint}
+                onClick={() => {
+                  setMode(m);
+                  if (m !== 'published' && window.location.hash) history.replaceState(null, '', window.location.pathname);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <label className="demo-select" title="Load an example diagram (replaces the current one)">
             <span>Examples</span>
             <select
@@ -82,14 +103,18 @@ export function App() {
         </div>
       </header>
       <main className="demo-main">
+        {mode === 'published' ? (
+          <IsoDiagramPublished diagram={diagram} useHash />
+        ) : (
         <IsoDiagramEditor
           key={epoch}
           value={diagram}
           onChange={setDiagram}
           userIcons={icons}
           onUserIconsChange={setIcons}
-          readOnly={viewOnly}
+          readOnly={mode === 'view'}
         />
+        )}
       </main>
     </div>
   );

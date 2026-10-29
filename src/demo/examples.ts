@@ -26,6 +26,26 @@ function edge(id: string, from: string, to: string, extra: Partial<DiagramEdge> 
 // Serverless order API
 // ---------------------------------------------------------------------------
 
+/** Embedded in the orders-api doc: what happens inside one invocation. */
+const ordersInternals: Diagram = {
+  version: 1,
+  nodes: [
+    { id: 'in', kind: 'block', label: 'API event', x: 0, y: 0, w: 2, d: 2, h: 0.5, z: 0, color: '#8c4fff' },
+    { id: 'validate', kind: 'hexagon', label: 'validate()', x: 4, y: 0, w: 2, d: 2, h: 0.75, z: 0, color: '#f2a93b' },
+    { id: 'idem', kind: 'cylinder', label: 'idempotency cache', x: 4, y: 4, w: 2, d: 2, h: 1, z: 0, color: '#64748b' },
+    { id: 'put', kind: 'block', label: 'table.put()', x: 8, y: 0, w: 2, d: 2, h: 0.75, z: 0, color: '#3b48cc' },
+    { id: 'send', kind: 'block', label: 'queue.send()', x: 12, y: 0, w: 2, d: 2, h: 0.75, z: 0, color: '#dd344c' },
+    { id: 'out', kind: 'pyramid', label: '201 Created', x: 12, y: 4, w: 2, d: 2, h: 1, z: 0, color: '#3fb27f' },
+  ],
+  edges: [
+    edge('i1', 'in', 'validate', { animation: 'packets' }),
+    edge('i2', 'validate', 'idem', { lineStyle: 'dashed', label: 'seen?', startMarker: 'arrow' }),
+    edge('i3', 'validate', 'put', { animation: 'packets' }),
+    edge('i4', 'put', 'send', { animation: 'packets' }),
+    edge('i5', 'send', 'out', { color: '#3fb27f' }),
+  ],
+};
+
 const serverless: Diagram = {
   version: 1,
   doc: md(
@@ -83,6 +103,14 @@ const serverless: Diagram = {
         '',
         '- [x] Idempotency keys on `POST /orders`',
         '- [ ] Move validation to a shared layer',
+        '',
+        '## Inside the function',
+        '',
+        'Each request passes through these steps. Anything that fails validation returns `400` before touching the database.',
+        '',
+        '```isodraw',
+        JSON.stringify(ordersInternals),
+        '```',
       ),
     }),
     icon('ddb', 'Orders table', svc('AmazonDynamoDB'), 12.5, -1, {

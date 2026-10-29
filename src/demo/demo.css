@@ -19,3 +19,6 @@ body { background: #eef2f7; font-family: Inter, system-ui, -apple-system, 'Segoe
   .demo-brand span { display: none; }
   .demo-main { padding: 0 8px 8px; }
 }
+.demo-modes { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; }
+.demo-modes button { border: 0 !important; padding: 4px 10px !important; border-radius: 5px !important; }
+.demo-modes button.is-on { background: #2563eb; color: #fff; }

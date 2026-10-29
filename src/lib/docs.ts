@@ -1,4 +1,4 @@
-import { containerOf, isContainer, parentMap } from './containers';
+import { containerOf, descendantsOf, isContainer, parentMap } from './containers';
 import { KIND_NAMES } from './shapes';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget } from './types';
 
@@ -160,4 +160,14 @@ export function exportDocsMarkdown(d: Diagram, title = 'Architecture'): string {
     }
   }
   return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
+}
+
+/** A component on its own: the node, anything inside it, and the connections between those. */
+export function componentScene(d: Diagram, id: string): Diagram {
+  const ids = new Set([id, ...descendantsOf([id], d.nodes)]);
+  return {
+    version: 1,
+    nodes: d.nodes.filter((n) => ids.has(n.id)),
+    edges: d.edges.filter((e) => ids.has(e.from) && ids.has(e.to)),
+  };
 }

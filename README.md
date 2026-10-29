@@ -33,8 +33,10 @@ A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run dep
   - The editor is Tiptap-based and stores Markdown. It has headings, lists, task lists, quotes, code blocks, tables and links, a formatting menu that appears over selected text, and `/` commands.
   - Type `@` to link another component. Clicking the link selects that component, centers it, and shows its doc. Links are stored as ordinary Markdown links (`[@ALB](isodraw:node/alb)`).
   - A small doc marker appears when you hover over or select a documented item (set `docBadges="always"` or `"never"` to change this). In `readOnly` mode, selecting a documented item opens its doc read-only, which turns the embedded viewer into browsable architecture documentation. The demo's *View only* button shows this.
+  - Type `/Diagram` to embed an IsoDraw diagram in a doc, for example the internals or data flow of one component. Edit it in a full editor that opens over the page. It's saved in the Markdown as a fenced ```` ```isodraw ```` block of diagram JSON.
   - *Export → Docs (Markdown)* writes a single `architecture.md`, nested by area, with mentions turned into links within the file.
   - The editor loads lazily, so pages that never open the docs never download Tiptap.
+- **Published view:** `<IsoDiagramPublished diagram={…} useHash />` turns a diagram and its docs into a read-only docs site. It has a table of contents nested by area, an overview page with the full diagram, and a page per component. Each component page shows the component drawn at the top, a "where it sits" map, its doc, and its incoming and outgoing connections (with their docs) at the bottom. The demo's *Published* mode shows it.
 - **Export:** PNG, SVG (images are embedded in the file) and JSON. Open a saved diagram from JSON.
 
 ## Use as a library
@@ -71,7 +73,7 @@ function App() {
 
 Docs are Markdown strings on `node.doc`, `edge.doc` and `diagram.doc`. The library is built as ES and CommonJS modules. React, React DOM, `@tiptap/*` and `tiptap-markdown` are dependencies of the package rather than bundled into it.
 
-Lower-level exports: `IsoCanvas` (just the canvas, without the toolbar and panels), `SceneContent`, `Projector`, `loadAwsIconLibrary`, `exportSvg`, `exportPng`, `exportDocsMarkdown`, `createShape`, `createEdge`, `parseDiagram`.
+Lower-level exports: `StaticDiagram` (a responsive, non-interactive render), `IsoCanvas` (just the canvas, without the toolbar and panels), `SceneContent`, `Projector`, `loadAwsIconLibrary`, `exportSvg`, `exportPng`, `exportDocsMarkdown`, `createShape`, `createEdge`, `parseDiagram`.
 
 ### Data model
 

@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useId, type MouseEvent as RMouseEvent, type ReactNode } from 'react';
 import {
   TILE,
   Projector,
@@ -527,6 +527,88 @@ export function ShapePreview({ node, size = 44 }: { node: DiagramNode; size?: nu
   return (
     <svg width={size} height={size} viewBox={`${minX - m} ${minY - m} ${w + 2 * m} ${h + 2 * m}`} aria-hidden>
       <NodeShape node={node} proj={proj} idPrefix="pv" />
+    </svg>
+  );
+}
+
+/** Scene-space bounds of everything drawn for a diagram, including labels. */
+export function sceneBounds(d: Diagram, proj: Projector, pad = 28): { x: number; y: number; w: number; h: number } {
+  const pts: Pt[] = [];
+  for (const n of d.nodes) {
+    const top = n.z + (isFlat(n) ? 0 : n.kind === 'sphere' ? Math.min(n.w, n.d) : n.h);
+    for (const q of footprint(n)) pts.push(proj.project(q.x, q.y, n.z), proj.project(q.x, q.y, top));
+    if (n.label && n.kind !== 'text' && n.kind !== 'area') pts.push(labelAnchor(n, proj));
+    if (n.kind === 'image' && n.imageStyle === 'standing') {
+      const c = proj.project(center(n).x, center(n).y, n.z);
+      pts.push({ x: c.x, y: c.y - Math.min(n.w, n.d) * TILE * 1.05 });
+    }
+  }
+  if (!pts.length) return { x: -100, y: -60, w: 200, h: 120 };
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const x = Math.min(...xs) - pad;
+  const y = Math.min(...ys) - pad;
+  return { x, y, w: Math.max(...xs) + pad - x, h: Math.max(...ys) + pad - y };
+}
+
+/**
+ * A non-interactive, responsive rendering of a diagram: it scales to the
+ * width of its container. Used for published pages, component pictures and
+ * diagrams embedded in docs.
+ */
+export function StaticDiagram({
+  diagram,
+  view = '3d',
+  rotation = 0,
+  highlight,
+  onNodeClick,
+  animate = true,
+  maxHeight,
+  className,
+  label,
+}: {
+  diagram: Diagram;
+  view?: '2d' | '3d';
+  rotation?: 0 | 1 | 2 | 3;
+  /** Outline this node. */
+  highlight?: string;
+  onNodeClick?: (id: string) => void;
+  animate?: boolean;
+  maxHeight?: number | string;
+  className?: string;
+  /** Accessible description of the picture. */
+  label?: string;
+}) {
+  const idPrefix = useId().replace(/:/g, '');
+  const proj = new Projector(view, rotation);
+  const b = sceneBounds(diagram, proj);
+  const hl = highlight ? diagram.nodes.find((n) => n.id === highlight) : undefined;
+  const onClick = (e: RMouseEvent) => {
+    const id = (e.target as Element).closest('[data-node-id]')?.getAttribute('data-node-id');
+    if (id && onNodeClick) onNodeClick(id);
+  };
+  return (
+    <svg
+      className={className}
+      viewBox={`${b.x} ${b.y} ${b.w} ${b.h}`}
+      width="100%"
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label={label ?? 'Architecture diagram'}
+      style={{ display: 'block', maxHeight, cursor: onNodeClick ? 'pointer' : undefined, fontFamily: 'inherit' }}
+      onClick={onClick}
+    >
+      <SceneContent diagram={diagram} proj={proj} idPrefix={idPrefix} animate={animate} />
+      {hl && (
+        <polygon
+          points={pointsAttr(footprint(hl).map((q) => proj.project(q.x, q.y, hl.z)))}
+          fill="rgba(37,99,235,0.1)"
+          stroke="#2563eb"
+          strokeWidth={2}
+          strokeDasharray="6 4"
+          pointerEvents="none"
+        />
+      )}
     </svg>
   );
 }
