@@ -161,5 +161,7 @@ textarea.isd-input { resize: vertical; }
   display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--isd-border); border-radius: 8px;
   background: var(--isd-bg); color: var(--isd-muted); font-size: 12px;
 }
-.isd-container-box .isd-btn { padding: 0 6px; font-size: 12px; }
+.isd-container-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.isd-container-actions .isd-btn { min-width: 0; padding: 0 6px; font-size: 12px; white-space: nowrap; }
+.isd-container-actions .is-wide { grid-column: 1 / -1; }
 .isd-root.is-compact .isd-hide-compact { display: none; }
