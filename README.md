@@ -11,6 +11,8 @@ npm run dev
 
 Then open http://localhost:5173. The demo saves your diagram and imported images to `localStorage`.
 
+A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run deploy`. That builds the demo and pushes it to the `gh-pages` branch.
+
 ## Features
 
 - **Two views:** flat top-down and 2.5D isometric. The 2.5D view rotates in 90° steps. Press `Tab` to switch views and `R` / `Shift+R` to rotate.
