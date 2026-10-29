@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { containerOf, isContainer, parentMap } from './containers';
 import { DocEditor } from './DocsPanel';
 import { componentScene, edgeTitle, hasDoc, mentionables, nodeTitle } from './docs';
@@ -62,9 +62,23 @@ function edgeStyleSummary(e: DiagramEdge): string {
   return bits.join(' · ');
 }
 
+/** The item whose @ mention is under the pointer; the page's diagrams outline it. */
+const FocusContext = createContext<{ focus: DocTarget | null; setFocus: (t: DocTarget | null) => void }>({
+  focus: null,
+  setFocus: () => undefined,
+});
+
 function ReadOnlyDoc({ markdown, diagram, onNavigate }: { markdown: string; diagram: Diagram; onNavigate: (t: DocTarget) => void }) {
+  const { setFocus } = useContext(FocusContext);
   return (
-    <DocEditor markdown={markdown} editable={false} items={() => mentionables(diagram)} onChange={() => undefined} onNavigate={onNavigate} />
+    <DocEditor
+      markdown={markdown}
+      editable={false}
+      items={() => mentionables(diagram)}
+      onChange={() => undefined}
+      onNavigate={onNavigate}
+      onMentionHover={setFocus}
+    />
   );
 }
 
@@ -73,6 +87,8 @@ export default function PublishedView({ diagram, title, useHash, className, styl
   const byId = useMemo(() => new Map(diagram.nodes.map((n) => [n.id, n])), [diagram.nodes]);
   const [page, setPage] = useState<Page>(() => (useHash ? readHash() : OVERVIEW));
   const [tocOpen, setTocOpen] = useState(false);
+  const [focus, setFocus] = useState<DocTarget | null>(null);
+  const focusValue = useMemo(() => ({ focus, setFocus }), [focus]);
   const mainRef = useRef<HTMLElement>(null);
   const pendingAnchor = useRef<string | null>(null);
   const name = siteTitle(diagram, title);
@@ -158,11 +174,13 @@ export default function PublishedView({ diagram, title, useHash, className, styl
           ☰ Contents
         </button>
         <article className="isd-pub-page" key={page}>
-          {!current ? (
-            <OverviewPage diagram={diagram} name={name} toc={toc} onOpen={go} onNavigate={navigate} />
-          ) : (
-            <ComponentPage diagram={diagram} node={current} onOpen={go} onNavigate={navigate} />
-          )}
+          <FocusContext.Provider value={focusValue}>
+            {!current ? (
+              <OverviewPage diagram={diagram} name={name} toc={toc} onOpen={go} onNavigate={navigate} />
+            ) : (
+              <ComponentPage diagram={diagram} node={current} onOpen={go} onNavigate={navigate} />
+            )}
+          </FocusContext.Provider>
           <nav className="isd-pub-pager" aria-label="Pages">
             {prev ? (
               <a href="#" onClick={(e) => (e.preventDefault(), go(prev))}>
@@ -216,6 +234,7 @@ function OverviewPage({
   onNavigate: (t: DocTarget) => void;
 }) {
   const documented = toc.filter((t) => hasDoc(t.node.doc)).length;
+  const { focus } = useContext(FocusContext);
   return (
     <>
       <header className="isd-pub-head">
@@ -225,7 +244,7 @@ function OverviewPage({
         </p>
       </header>
       <figure className="isd-pub-figure">
-        <StaticDiagram diagram={diagram} maxHeight={560} onNodeClick={(id) => onOpen(id)} label={`${name} architecture diagram`} />
+        <StaticDiagram diagram={diagram} focus={focus} maxHeight={560} onNodeClick={(id) => onOpen(id)} label={`${name} architecture diagram`} />
         <figcaption>Click a component to open its page.</figcaption>
       </figure>
       {hasDoc(diagram.doc) && (
@@ -267,6 +286,7 @@ function ComponentPage({
   const chain: DiagramNode[] = [];
   for (let p = containerOf(node, diagram.nodes); p; p = containerOf(p, diagram.nodes)) chain.unshift(p);
   const scene = componentScene(diagram, node.id);
+  const { focus } = useContext(FocusContext);
   const children = diagram.nodes.filter((n) => n.kind !== 'text' && containerOf(n, diagram.nodes)?.id === node.id);
   const edges = diagram.edges.filter((e) => e.from === node.id || e.to === node.id);
   const nameOf = (id: string) => {
@@ -299,10 +319,10 @@ function ComponentPage({
 
       <div className="isd-pub-hero">
         <figure className="isd-pub-figure is-component">
-          <StaticDiagram diagram={scene} maxHeight={isContainer(node) ? 320 : 190} label={nodeTitle(node)} />
+          <StaticDiagram diagram={scene} focus={focus} maxHeight={isContainer(node) ? 320 : 190} label={nodeTitle(node)} />
         </figure>
         <figure className="isd-pub-figure is-context" title="Where it sits in the overall architecture">
-          <StaticDiagram diagram={diagram} highlight={node.id} animate={false} maxHeight={180} onNodeClick={(id) => onOpen(id)} label="Context" />
+          <StaticDiagram diagram={diagram} highlight={node.id} focus={focus} animate={false} maxHeight={180} onNodeClick={(id) => onOpen(id)} label="Context" />
           <figcaption>Where it sits</figcaption>
         </figure>
       </div>

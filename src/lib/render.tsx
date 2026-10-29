@@ -1,4 +1,4 @@
-import { Fragment, useId, type MouseEvent as RMouseEvent, type ReactNode } from 'react';
+import { Fragment, useId, type CSSProperties, type MouseEvent as RMouseEvent, type ReactNode } from 'react';
 import {
   TILE,
   Projector,
@@ -17,7 +17,7 @@ import {
 } from './geometry';
 import { depthMap } from './containers';
 import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
-import type { Diagram, DiagramEdge, DiagramNode, LineStyle, MarkerKind } from './types';
+import type { Diagram, DiagramEdge, DiagramNode, DocTarget, LineStyle, MarkerKind } from './types';
 
 const CURVED = new Set(['cylinder', 'cone']);
 const INSIDE_LABEL_2D = new Set(['block', 'cylinder', 'hexagon']);
@@ -270,6 +270,58 @@ export function midpoint(pts: Pt[]): Pt {
 }
 
 /** Scene-space geometry of an edge: path data, projected points and length. */
+/** Convex hull of screen points (monotone chain), for outlining a solid. */
+function hull(pts: Pt[]): Pt[] {
+  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (p.length < 3) return p;
+  const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const half = (list: Pt[]) => {
+    const out: Pt[] = [];
+    for (const q of list) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], q) <= 0) out.pop();
+      out.push(q);
+    }
+    out.pop();
+    return out;
+  };
+  return [...half(p), ...half([...p].reverse())];
+}
+
+/** An outline drawn over a node or connection, e.g. while a doc mention of it is hovered. */
+export function TargetHighlight({ target, diagram, proj }: { target: DocTarget; diagram: Diagram; proj: Projector }) {
+  const stroke = { stroke: '#2563eb', strokeLinejoin: 'round' as const, pointerEvents: 'none' as const, vectorEffect: 'non-scaling-stroke' as const };
+  if (target.kind === 'node') {
+    const n = diagram.nodes.find((x) => x.id === target.id);
+    if (!n) return null;
+    const flat = isFlat(n);
+    const base = footprint(n).map((q) => proj.project(q.x, q.y, n.z));
+    const pts = flat ? base : hull([...base, ...footprint(n).map((q) => proj.project(q.x, q.y, n.z + n.h))]);
+    return (
+      <polygon
+        className="isd-target-highlight"
+        points={pointsAttr(pts)}
+        fill="rgba(37,99,235,0.14)"
+        strokeWidth={2.5}
+        {...stroke}
+      />
+    );
+  }
+  if (target.kind === 'edge') {
+    const e = diagram.edges.find((x) => x.id === target.id);
+    const a = e && diagram.nodes.find((n) => n.id === e.from);
+    const b = e && diagram.nodes.find((n) => n.id === e.to);
+    if (!e || !a || !b) return null;
+    const { d } = edgeGeometry(e, a, b, proj);
+    return (
+      <g className="isd-target-highlight">
+        <path d={d} fill="none" strokeOpacity={0.3} strokeWidth={10} strokeLinecap="round" {...stroke} />
+        <path d={d} fill="none" strokeWidth={2.5} strokeLinecap="round" {...stroke} />
+      </g>
+    );
+  }
+  return null;
+}
+
 export function edgeGeometry(edge: DiagramEdge, a: DiagramNode, b: DiagramNode, proj: Projector) {
   const r = resolveEdge(edge, a, b);
   const screen = r.pts.map((p, i) => proj.project(p.x, p.y, r.zs[i]));
@@ -314,7 +366,28 @@ function dashFor(style: LineStyle, w: number): string | undefined {
   return undefined;
 }
 
-/** Animated overlays for an edge (SMIL, so exported SVGs animate too). */
+/**
+ * Edge animations are CSS keyframes on paint-only properties (dash offset and
+ * opacity). SMIL moved elements every frame, which made Chrome re-run hover
+ * detection and flicker the cursor. The keyframes live in a <style> inside
+ * the scene, so exported SVGs still animate.
+ */
+export const EDGE_KEYFRAMES = `
+@keyframes isd-dash { from { stroke-dashoffset: var(--isd-from); } to { stroke-dashoffset: var(--isd-to); } }
+@keyframes isd-glow { 0%, 100% { stroke-opacity: 0.04; } 50% { stroke-opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .isd-anim { animation: none !important; } }
+`;
+
+/** Slide a dash pattern along its path from one offset to another, forever. */
+function dashMotion(from: number, to: number, seconds: number): CSSProperties {
+  return {
+    animation: `isd-dash ${seconds.toFixed(2)}s linear infinite`,
+    ['--isd-from' as string]: `${from.toFixed(2)}px`,
+    ['--isd-to' as string]: `${to.toFixed(2)}px`,
+  };
+}
+
+/** Animated overlays for an edge. */
 function EdgeAnimationLayer({ edge, d, length }: { edge: DiagramEdge; d: string; length: number }) {
   const anim = edge.animation ?? 'none';
   const w = edge.width;
@@ -325,26 +398,26 @@ function EdgeAnimationLayer({ edge, d, length }: { edge: DiagramEdge; d: string;
   const len = Math.max(1, length);
 
   if (anim === 'packets') {
+    // Each packet is a zero-length dash with a round cap; the gap spaces them evenly.
     const n = Math.max(1, Math.min(6, Math.round(len / 130)));
-    const dur = Math.max(0.6, len / pxPerSec);
+    const gap = len / n;
+    const dur = Math.max(0.6 / n, gap / pxPerSec);
+    const r = w + 1.6;
     const lanes: ('forward' | 'reverse')[] = dir === 'both' ? ['forward', 'reverse'] : [dir === 'reverse' ? 'reverse' : 'forward'];
     return (
       <g pointerEvents="none">
-        {lanes.flatMap((lane) =>
-          Array.from({ length: n }, (_, i) => (
-            <circle key={`${lane}-${i}`} r={w + 1.6} fill={lane === 'reverse' && dir === 'both' ? shade(edge.color, 0.7) : color} stroke="#ffffff" strokeWidth={1.2}>
-              <animateMotion
-                dur={`${dur.toFixed(2)}s`}
-                repeatCount="indefinite"
-                path={d}
-                begin={`-${((i * dur) / n + (lane === 'reverse' ? dur / (2 * n) : 0)).toFixed(2)}s`}
-                keyPoints={lane === 'reverse' ? '1;0' : '0;1'}
-                keyTimes="0;1"
-                calcMode="linear"
-              />
-            </circle>
-          )),
-        )}
+        {lanes.map((lane) => {
+          const phase = lane === 'reverse' && dir === 'both' ? gap / 2 : 0;
+          const motion = lane === 'reverse' ? dashMotion(phase - gap, phase, dur) : dashMotion(phase, phase - gap, dur);
+          const fill = lane === 'reverse' && dir === 'both' ? shade(edge.color, 0.7) : color;
+          const dash = `0.01 ${(gap - 0.01).toFixed(2)}`;
+          return (
+            <g key={lane}>
+              <path className="isd-anim" d={d} fill="none" stroke="#ffffff" strokeWidth={2 * r + 2.4} strokeLinecap="round" strokeDasharray={dash} style={motion} />
+              <path className="isd-anim" d={d} fill="none" stroke={fill} strokeWidth={2 * r} strokeLinecap="round" strokeDasharray={dash} style={motion} />
+            </g>
+          );
+        })}
       </g>
     );
   }
@@ -354,24 +427,36 @@ function EdgeAnimationLayer({ edge, d, length }: { edge: DiagramEdge; d: string;
     const sweeps: ('forward' | 'reverse')[] = dir === 'both' ? ['forward', 'reverse'] : [dir === 'reverse' ? 'reverse' : 'forward'];
     return (
       <g pointerEvents="none">
-        {sweeps.map((s) => (
-          <path key={s} d={d} fill="none" stroke={color} strokeWidth={w + 2.5} strokeLinecap="round" strokeDasharray={`${seg} ${len + seg}`}>
-            <animate
-              attributeName="stroke-dashoffset"
-              values={s === 'forward' ? `${seg};${-len}` : `${-len};${seg}`}
-              dur={`${dur.toFixed(2)}s`}
-              repeatCount="indefinite"
-            />
-          </path>
+        {sweeps.map((sw) => (
+          <path
+            key={sw}
+            className="isd-anim"
+            d={d}
+            fill="none"
+            stroke={color}
+            strokeWidth={w + 2.5}
+            strokeLinecap="round"
+            strokeDasharray={`${seg} ${len + seg}`}
+            style={sw === 'forward' ? dashMotion(seg, -len, dur) : dashMotion(-len, seg, dur)}
+          />
         ))}
       </g>
     );
   }
   if (anim === 'glow') {
     return (
-      <path d={d} fill="none" stroke={edge.color} strokeWidth={w + 8} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none">
-        <animate attributeName="stroke-opacity" values="0.04;0.35;0.04" dur={`${(2 / speed).toFixed(2)}s`} repeatCount="indefinite" />
-      </path>
+      <path
+        className="isd-anim"
+        d={d}
+        fill="none"
+        stroke={edge.color}
+        strokeOpacity={0.04}
+        strokeWidth={w + 8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        pointerEvents="none"
+        style={{ animation: `isd-glow ${(2 / speed).toFixed(2)}s ease-in-out infinite` }}
+      />
     );
   }
   return null;
@@ -430,16 +515,9 @@ export function EdgeShape({
         strokeDasharray={dash}
         markerEnd={end !== 'none' ? `url(#${endId})` : undefined}
         markerStart={start !== 'none' ? `url(#${startId})` : undefined}
-      >
-        {flowing && (
-          <animate
-            attributeName="stroke-dashoffset"
-            values={reverse ? `0;${period}` : `${period};0`}
-            dur={`${Math.max(0.15, period / (40 * speed)).toFixed(2)}s`}
-            repeatCount="indefinite"
-          />
-        )}
-      </path>
+        className={flowing ? 'isd-anim' : undefined}
+        style={flowing ? (reverse ? dashMotion(0, period, Math.max(0.15, period / (40 * speed))) : dashMotion(period, 0, Math.max(0.15, period / (40 * speed)))) : undefined}
+      />
       {animate && <EdgeAnimationLayer edge={edge} d={d} length={length} />}
     </g>
   );
@@ -484,8 +562,10 @@ export function SceneContent({
   ground.sort((a, b) => a.z - b.z || depth.get(a.id)! - depth.get(b.id)! || order.get(a.id)! - order.get(b.id)!);
   const byId = new Map(diagram.nodes.map((n) => [n.id, n]));
   const sorted = depthSort(solids, proj);
+  const animated = animate && diagram.edges.some((e) => e.animation && e.animation !== 'none');
   return (
     <>
+      {animated && <style>{EDGE_KEYFRAMES}</style>}
       {ground.map((n) => (
         <Fragment key={n.id}>
           <NodeShape node={n} proj={proj} idPrefix={idPrefix} />
@@ -561,6 +641,7 @@ export function StaticDiagram({
   view = '3d',
   rotation = 0,
   highlight,
+  focus,
   onNodeClick,
   animate = true,
   maxHeight,
@@ -572,6 +653,8 @@ export function StaticDiagram({
   rotation?: 0 | 1 | 2 | 3;
   /** Outline this node. */
   highlight?: string;
+  /** Emphasise this node or connection (e.g. while a mention of it is hovered). */
+  focus?: DocTarget | null;
   onNodeClick?: (id: string) => void;
   animate?: boolean;
   maxHeight?: number | string;
@@ -609,6 +692,7 @@ export function StaticDiagram({
           pointerEvents="none"
         />
       )}
+      {focus && <TargetHighlight target={focus} diagram={diagram} proj={proj} />}
     </svg>
   );
 }
