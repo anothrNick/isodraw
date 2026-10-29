@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { IsoDiagramEditor, emptyDiagram, type Diagram, type IconDef } from '../lib';
+import { EXAMPLES } from './examples';
 import { sampleDiagram } from './sample';
 
 const KEY = 'isodraw-demo:diagram';
@@ -57,7 +58,26 @@ export function App() {
           <button type="button" aria-pressed={viewOnly} className={viewOnly ? 'is-on' : ''} onClick={() => setViewOnly(!viewOnly)} title="Browse the diagram and its docs without editing">
             {viewOnly ? 'Viewing' : 'View only'}
           </button>
-          <button type="button" onClick={() => reset(sampleDiagram)}>Load sample</button>
+          <label className="demo-select" title="Load an example diagram (replaces the current one)">
+            <span>Examples</span>
+            <select
+              value=""
+              aria-label="Load an example diagram"
+              onChange={(e) => {
+                const ex = EXAMPLES.find((x) => x.id === e.target.value);
+                if (ex) reset(ex.diagram);
+              }}
+            >
+              <option value="" disabled>
+                Load example…
+              </option>
+              {EXAMPLES.map((ex) => (
+                <option key={ex.id} value={ex.id}>
+                  {ex.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="button" onClick={() => reset(emptyDiagram())}>New blank</button>
         </div>
       </header>

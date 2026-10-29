@@ -8,6 +8,10 @@ body { background: #eef2f7; font-family: Inter, system-ui, -apple-system, 'Segoe
 .demo-actions { display: flex; gap: 6px; }
 .demo-actions button { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
 .demo-actions button:hover { border-color: #2563eb; color: #2563eb; }
+.demo-select { position: relative; display: inline-flex; align-items: center; padding: 6px 28px 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.demo-select::after { content: ''; position: absolute; right: 11px; top: 50%; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-70%) rotate(45deg); }
+.demo-select:hover { border-color: #2563eb; color: #2563eb; }
+.demo-select select { position: absolute; inset: 0; opacity: 0; cursor: pointer; font: inherit; }
 .demo-actions button.is-on { background: #2563eb; border-color: #2563eb; color: #fff; }
 .demo-main { flex: 1; min-height: 0; padding: 0 16px 16px; }
 @media (max-width: 640px) {
