@@ -52,7 +52,26 @@ export interface DiagramNode {
   locked?: boolean;
 }
 
-export type EdgeRouting = 'straight' | 'orthogonal';
+export type EdgeRouting = 'straight' | 'orthogonal' | 'curved';
+
+/** Side of a node's footprint, in world directions (n = -y, e = +x). */
+export type Side = 'n' | 'e' | 's' | 'w';
+
+/** Where an edge attaches: a side, and a position along it (0..1, west→east or north→south). */
+export interface EdgeAnchor {
+  side: Side;
+  t: number;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export type LineStyle = 'solid' | 'dashed' | 'dotted';
+export type MarkerKind = 'none' | 'arrow' | 'open' | 'circle' | 'diamond';
+export type EdgeAnimation = 'none' | 'flow' | 'packets' | 'pulse' | 'glow';
+export type AnimationDirection = 'forward' | 'reverse' | 'both';
 
 export interface DiagramEdge {
   id: string;
@@ -60,11 +79,30 @@ export interface DiagramEdge {
   to: string;
   color: string;
   width: number;
-  dashed?: boolean;
   routing: EdgeRouting;
-  arrowStart?: boolean;
-  arrowEnd?: boolean;
+  /** Fixed attachment points; omitted ends are chosen automatically. */
+  fromAnchor?: EdgeAnchor;
+  toAnchor?: EdgeAnchor;
+  /** Bend points in world units, between the two ends. */
+  waypoints?: Point[];
+  /** Round the corners of orthogonal routes. */
+  rounded?: boolean;
+  lineStyle?: LineStyle;
+  startMarker?: MarkerKind;
+  endMarker?: MarkerKind;
+  animation?: EdgeAnimation;
+  animationDirection?: AnimationDirection;
+  /** Speed multiplier (1 = normal). */
+  animationSpeed?: number;
+  /** Color of packets / pulses; defaults to a lighter edge color. */
+  animationColor?: string;
   label?: string;
+  /** @deprecated use lineStyle */
+  dashed?: boolean;
+  /** @deprecated use startMarker */
+  arrowStart?: boolean;
+  /** @deprecated use endMarker */
+  arrowEnd?: boolean;
 }
 
 export interface Diagram {

@@ -127,3 +127,11 @@ textarea.isd-input { resize: vertical; }
 @media (max-width: 900px) {
   .isd-palette, .isd-inspector { width: 200px; }
 }
+
+.isd-segmented { display: flex; padding: 2px; gap: 2px; background: var(--isd-bg); border: 1px solid var(--isd-border); border-radius: 7px; }
+.isd-segmented button {
+  flex: 1; padding: 4px 6px; border: 0; border-radius: 5px; background: none; font: inherit; font-size: 12px; font-weight: 500;
+  color: var(--isd-muted); cursor: pointer; white-space: nowrap;
+}
+.isd-segmented button.is-active { background: var(--isd-accent-soft); color: var(--isd-accent); }
+.isd-panel .isd-section-title { margin: 6px 0 -4px; }

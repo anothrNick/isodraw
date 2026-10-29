@@ -4,7 +4,6 @@ import {
   Projector,
   type Pt,
   center,
-  clipToRect,
   contrastText,
   depthSort,
   footprint,
@@ -14,7 +13,8 @@ import {
   shade,
   solidFaces,
 } from './geometry';
-import type { Diagram, DiagramEdge, DiagramNode } from './types';
+import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
+import type { Diagram, DiagramEdge, DiagramNode, LineStyle, MarkerKind } from './types';
 
 const CURVED = new Set(['cylinder', 'cone']);
 const INSIDE_LABEL_2D = new Set(['block', 'cylinder', 'hexagon']);
@@ -152,7 +152,7 @@ function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
           fontWeight={700}
           dominantBaseline="hanging"
           fill={node.labelColor ?? shade(node.color, 0.6)}
-          style={{ userSelect: 'none' }}
+          style={{ userSelect: 'none' }} pointerEvents="none"
         >
           {node.label}
         </text>
@@ -164,7 +164,7 @@ function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
     // In the flat view, solids carry their label on their face.
     const c = proj.project(center(node).x, center(node).y);
     return (
-      <text x={c.x} y={c.y} fontSize={12} fontWeight={600} textAnchor="middle" dominantBaseline="central" fill={node.labelColor ?? contrastText(node.color)} style={{ userSelect: 'none' }}>
+      <text x={c.x} y={c.y} fontSize={12} fontWeight={600} textAnchor="middle" dominantBaseline="central" fill={node.labelColor ?? contrastText(node.color)} style={{ userSelect: 'none' }} pointerEvents="none">
         {node.label}
       </text>
     );
@@ -181,7 +181,7 @@ function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
       strokeWidth={3}
       strokeLinejoin="round"
       paintOrder="stroke"
-      style={{ userSelect: 'none' }}
+      style={{ userSelect: 'none' }} pointerEvents="none"
     >
       {node.label}
     </text>
@@ -229,33 +229,8 @@ export function NodeShape({ node, proj, idPrefix }: { node: DiagramNode; proj: P
 
 // ---------- edges ----------
 
-/** World-space polyline for an edge, clipped to the node footprints. */
-export function edgeWorldPath(edge: DiagramEdge, a: DiagramNode, b: DiagramNode): { pts: Pt[]; zs: number[] } {
-  const ca = center(a);
-  const cb = center(b);
-  if (edge.routing === 'orthogonal' && Math.abs(ca.x - cb.x) > 0.01 && Math.abs(ca.y - cb.y) > 0.01) {
-    const corner = { x: cb.x, y: ca.y };
-    const insideA = corner.x >= a.x && corner.x <= a.x + a.w;
-    const insideB = corner.y >= b.y && corner.y <= b.y + b.d;
-    if (!insideA && !insideB) {
-      const start = clipToRect(corner, ca, a);
-      const end = clipToRect(corner, cb, b);
-      return { pts: [start, corner, end], zs: [a.z, a.z, b.z] };
-    }
-    // Corner falls inside a footprint: route vertically-first instead.
-    const alt = { x: ca.x, y: cb.y };
-    return {
-      pts: [clipToRect(alt, ca, a), alt, clipToRect(alt, cb, b)],
-      zs: [a.z, b.z, b.z],
-    };
-  }
-  return { pts: [clipToRect(cb, ca, a), clipToRect(ca, cb, b)], zs: [a.z, b.z] };
-}
-
 function midpoint(pts: Pt[]): Pt {
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  let half = total / 2;
+  let half = polylineLength(pts) / 2;
   for (let i = 1; i < pts.length; i++) {
     const len = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
     if (half <= len && len > 0) {
@@ -267,6 +242,114 @@ function midpoint(pts: Pt[]): Pt {
   return pts[0];
 }
 
+/** Scene-space geometry of an edge: path data, projected points and length. */
+export function edgeGeometry(edge: DiagramEdge, a: DiagramNode, b: DiagramNode, proj: Projector) {
+  const r = resolveEdge(edge, a, b);
+  const screen = r.pts.map((p, i) => proj.project(p.x, p.y, r.zs[i]));
+  const d = edgePathD(r, edge.routing, edge.rounded ?? false, proj);
+  return { r, screen, d, length: polylineLength(screen) };
+}
+
+function Marker({ id, kind, color }: { id: string; kind: MarkerKind; color: string }) {
+  if (kind === 'none') return null;
+  const common = { id, viewBox: '0 0 10 10', markerWidth: 5, markerHeight: 5, orient: 'auto-start-reverse' };
+  switch (kind) {
+    case 'open':
+      return (
+        <marker {...common} refX="8.5" refY="5">
+          <path d="M1.5,1.5 L8.5,5 L1.5,8.5" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+        </marker>
+      );
+    case 'circle':
+      return (
+        <marker {...common} refX="5" refY="5">
+          <circle cx="5" cy="5" r="3.6" fill={color} />
+        </marker>
+      );
+    case 'diamond':
+      return (
+        <marker {...common} refX="9" refY="5">
+          <path d="M1,5 L5,1.5 L9,5 L5,8.5 z" fill={color} />
+        </marker>
+      );
+    default:
+      return (
+        <marker {...common} refX="8" refY="5">
+          <path d="M0,0 L10,5 L0,10 z" fill={color} />
+        </marker>
+      );
+  }
+}
+
+function dashFor(style: LineStyle, w: number): string | undefined {
+  if (style === 'dashed') return `${w * 3} ${w * 2.5}`;
+  if (style === 'dotted') return `0.01 ${w * 2.2}`;
+  return undefined;
+}
+
+/** Animated overlays for an edge (SMIL, so exported SVGs animate too). */
+function EdgeAnimationLayer({ edge, d, length }: { edge: DiagramEdge; d: string; length: number }) {
+  const anim = edge.animation ?? 'none';
+  const w = edge.width;
+  const speed = Math.max(0.1, edge.animationSpeed ?? 1);
+  const pxPerSec = 80 * speed;
+  const dir = edge.animationDirection ?? 'forward';
+  const color = edge.animationColor ?? shade(edge.color, 1.55);
+  const len = Math.max(1, length);
+
+  if (anim === 'packets') {
+    const n = Math.max(1, Math.min(6, Math.round(len / 130)));
+    const dur = Math.max(0.6, len / pxPerSec);
+    const lanes: ('forward' | 'reverse')[] = dir === 'both' ? ['forward', 'reverse'] : [dir === 'reverse' ? 'reverse' : 'forward'];
+    return (
+      <g pointerEvents="none">
+        {lanes.flatMap((lane) =>
+          Array.from({ length: n }, (_, i) => (
+            <circle key={`${lane}-${i}`} r={w + 1.6} fill={lane === 'reverse' && dir === 'both' ? shade(edge.color, 0.7) : color} stroke="#ffffff" strokeWidth={1.2}>
+              <animateMotion
+                dur={`${dur.toFixed(2)}s`}
+                repeatCount="indefinite"
+                path={d}
+                begin={`-${((i * dur) / n + (lane === 'reverse' ? dur / (2 * n) : 0)).toFixed(2)}s`}
+                keyPoints={lane === 'reverse' ? '1;0' : '0;1'}
+                keyTimes="0;1"
+                calcMode="linear"
+              />
+            </circle>
+          )),
+        )}
+      </g>
+    );
+  }
+  if (anim === 'pulse') {
+    const seg = Math.min(70, Math.max(16, len * 0.25));
+    const dur = Math.max(0.6, (len + seg) / pxPerSec);
+    const sweeps: ('forward' | 'reverse')[] = dir === 'both' ? ['forward', 'reverse'] : [dir === 'reverse' ? 'reverse' : 'forward'];
+    return (
+      <g pointerEvents="none">
+        {sweeps.map((s) => (
+          <path key={s} d={d} fill="none" stroke={color} strokeWidth={w + 2.5} strokeLinecap="round" strokeDasharray={`${seg} ${len + seg}`}>
+            <animate
+              attributeName="stroke-dashoffset"
+              values={s === 'forward' ? `${seg};${-len}` : `${-len};${seg}`}
+              dur={`${dur.toFixed(2)}s`}
+              repeatCount="indefinite"
+            />
+          </path>
+        ))}
+      </g>
+    );
+  }
+  if (anim === 'glow') {
+    return (
+      <path d={d} fill="none" stroke={edge.color} strokeWidth={w + 8} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none">
+        <animate attributeName="stroke-opacity" values="0.04;0.35;0.04" dur={`${(2 / speed).toFixed(2)}s`} repeatCount="indefinite" />
+      </path>
+    );
+  }
+  return null;
+}
+
 export function EdgeShape({
   edge,
   a,
@@ -274,6 +357,7 @@ export function EdgeShape({
   proj,
   idPrefix,
   selected,
+  animate = true,
 }: {
   edge: DiagramEdge;
   a: DiagramNode;
@@ -281,41 +365,62 @@ export function EdgeShape({
   proj: Projector;
   idPrefix: string;
   selected?: boolean;
+  animate?: boolean;
 }) {
-  const { pts, zs } = edgeWorldPath(edge, a, b);
-  const screen = pts.map((p, i) => proj.project(p.x, p.y, zs[i]));
-  const d = `M${screen.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' L')}`;
-  const markerId = `${idPrefix}-arrow-${edge.id}`;
+  const { d, length } = edgeGeometry(edge, a, b, proj);
+  const startId = `${idPrefix}-ms-${edge.id}`;
+  const endId = `${idPrefix}-me-${edge.id}`;
+  const start = startMarkerOf(edge);
+  const end = endMarkerOf(edge);
+  const style = lineStyleOf(edge);
+  const w = edge.width;
+  const flowing = animate && edge.animation === 'flow';
+  let dash = dashFor(style, w);
+  if (edge.animation === 'flow' && !dash) dash = `${w * 3} ${w * 2.5}`;
+  const period = dash ? dash.split(' ').reduce((acc, v) => acc + parseFloat(v), 0) : 0;
+  const speed = Math.max(0.1, edge.animationSpeed ?? 1);
+  const reverse = edge.animationDirection === 'reverse';
   return (
     <g data-edge-id={edge.id} style={{ cursor: 'pointer' }}>
       <defs>
-        <marker id={markerId} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" fill={edge.color} />
-        </marker>
+        <Marker id={startId} kind={start} color={edge.color} />
+        <Marker id={endId} kind={end} color={edge.color} />
       </defs>
       <path d={d} stroke="transparent" strokeWidth={14} fill="none" />
       {selected && (
-        <path d={d} stroke="#2563eb" strokeOpacity={0.3} strokeWidth={edge.width + 6} fill="none" strokeLinejoin="round" data-noexport="" />
+        <path d={d} stroke="#2563eb" strokeOpacity={0.3} strokeWidth={w + 6} fill="none" strokeLinejoin="round" strokeLinecap="round" data-noexport="" />
+      )}
+      {edge.animation === 'flow' && style === 'solid' && (
+        <path d={d} stroke={edge.color} strokeOpacity={0.25} strokeWidth={w} fill="none" strokeLinejoin="round" strokeLinecap="round" />
       )}
       <path
         d={d}
         stroke={edge.color}
-        strokeWidth={edge.width}
+        strokeWidth={w}
         fill="none"
         strokeLinejoin="round"
         strokeLinecap="round"
-        strokeDasharray={edge.dashed ? `${edge.width * 3} ${edge.width * 2.5}` : undefined}
-        markerEnd={edge.arrowEnd ? `url(#${markerId})` : undefined}
-        markerStart={edge.arrowStart ? `url(#${markerId})` : undefined}
-      />
+        strokeDasharray={dash}
+        markerEnd={end !== 'none' ? `url(#${endId})` : undefined}
+        markerStart={start !== 'none' ? `url(#${startId})` : undefined}
+      >
+        {flowing && (
+          <animate
+            attributeName="stroke-dashoffset"
+            values={reverse ? `0;${period}` : `${period};0`}
+            dur={`${Math.max(0.15, period / (40 * speed)).toFixed(2)}s`}
+            repeatCount="indefinite"
+          />
+        )}
+      </path>
+      {animate && <EdgeAnimationLayer edge={edge} d={d} length={length} />}
     </g>
   );
 }
 
 export function EdgeLabel({ edge, a, b, proj }: { edge: DiagramEdge; a: DiagramNode; b: DiagramNode; proj: Projector }) {
   if (!edge.label) return null;
-  const { pts, zs } = edgeWorldPath(edge, a, b);
-  const mid = midpoint(pts.map((p, i) => proj.project(p.x, p.y, zs[i])));
+  const mid = midpoint(edgeGeometry(edge, a, b, proj).screen);
   const labelW = edge.label.length * 6.6 + 12;
   return (
     <g data-edge-id={edge.id} style={{ cursor: 'pointer' }}>
@@ -334,11 +439,14 @@ export function SceneContent({
   proj,
   idPrefix,
   selectedEdges,
+  animate = true,
 }: {
   diagram: Diagram;
   proj: Projector;
   idPrefix: string;
   selectedEdges?: ReadonlySet<string>;
+  /** Play edge animations (default true). */
+  animate?: boolean;
 }) {
   const ground: DiagramNode[] = [];
   const solids: DiagramNode[] = [];
@@ -357,7 +465,7 @@ export function SceneContent({
         const a = byId.get(e.from);
         const b = byId.get(e.to);
         if (!a || !b) return null;
-        return <EdgeShape key={e.id} edge={e} a={a} b={b} proj={proj} idPrefix={idPrefix} selected={selectedEdges?.has(e.id)} />;
+        return <EdgeShape key={e.id} edge={e} a={a} b={b} proj={proj} idPrefix={idPrefix} selected={selectedEdges?.has(e.id)} animate={animate} />;
       })}
       {sorted.map((n) => (
         <NodeShape key={n.id} node={n} proj={proj} idPrefix={idPrefix} />
