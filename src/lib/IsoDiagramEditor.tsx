@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
 import { DRAG_MIME, IsoCanvas, type Selection, type Tool } from './IsoCanvas';
 import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } from './export';
-import { Projector, type Pt, footprint, isFlat, uid } from './geometry';
+import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
+import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { loadAwsIconLibrary } from './icons';
 import { ShapePreview } from './render';
-import { SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
-import type { Camera, Diagram, DiagramEdge, DiagramNode, IconDef, IconLibrary, Rotation, ShapeKind, ViewMode } from './types';
+import { EDGE_STYLE_KEYS, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
+import type { Camera, Diagram, DiagramEdge, DiagramNode, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
 import { Field, Icon, NumberInput, ToolButton } from './ui';
 
 export interface IsoDiagramEditorProps {
@@ -58,6 +59,9 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [tool, setTool] = useState<Tool>('select');
   const [showGrid, setShowGrid] = useState(true);
+  const [animate, setAnimate] = useState(true);
+  /** Style for new connections: follows the last connection you styled. */
+  const [edgeStyle, setEdgeStyle] = useState<Partial<DiagramEdge>>({});
   const [paletteTab, setPaletteTab] = useState('shapes');
   const [search, setSearch] = useState('');
   const [aws, setAws] = useState<IconLibrary | null>(null);
@@ -214,7 +218,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     commit((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) }), 'push', key && `${id}:${key}`);
   const updateNodes = (ids: string[], patch: Partial<DiagramNode>) =>
     commit((d) => ({ ...d, nodes: d.nodes.map((n) => (ids.includes(n.id) ? { ...n, ...patch } : n)) }));
-  const updateEdge = (id: string, patch: Partial<DiagramEdge>, key?: string) =>
+  const updateEdge = (id: string, patch: Partial<DiagramEdge>, key?: string) => {
+    const style = Object.fromEntries(Object.entries(patch).filter(([k]) => (EDGE_STYLE_KEYS as readonly string[]).includes(k)));
+    if (Object.keys(style).length) setEdgeStyle((s) => ({ ...s, ...style }));
+    commitEdge(id, patch, key);
+  };
+  const commitEdge = (id: string, patch: Partial<DiagramEdge>, key?: string) =>
     commit((d) => ({ ...d, edges: d.edges.map((e) => (e.id === id ? { ...e, ...patch } : e)) }), 'push', key && `${id}:${key}`);
 
   const deleteSelection = () => {
@@ -442,6 +451,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           <ToolButton icon="plus" label="Zoom in" onClick={() => zoomBy(1.25)} />
           <ToolButton icon="fit" label="Fit to content" onClick={() => fitTo(diagram, proj)} />
           <ToolButton icon="grid" label="Toggle grid" active={showGrid} onClick={() => setShowGrid(!showGrid)} />
+          <ToolButton icon={animate ? 'pause' : 'play'} label={animate ? 'Pause connection animations' : 'Play connection animations'} onClick={() => setAnimate(!animate)} />
         </div>
         <div className="isd-spacer" />
         {!readOnly && (
@@ -588,10 +598,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             tool={tool}
             readOnly={readOnly}
             showGrid={showGrid}
+            animate={animate}
+            newEdgeStyle={{ routing: 'orthogonal', rounded: true, ...edgeStyle }}
             onBeginChange={beginChange}
             onChange={(d) => commit(d, 'replace')}
-            onConnect={(from, to) => {
-              const edge = createEdge(from, to);
+            onConnect={(from, to, route) => {
+              const edge = createEdge(from, to, { ...edgeStyle, ...route });
               commit((d) => ({ ...d, edges: [...d.edges, edge] }));
               setSelection({ nodes: [], edges: [edge.id] });
             }}
@@ -624,7 +636,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 onReorder={reorder}
               />
             ) : selEdge ? (
-              <EdgeInspector edge={selEdge} onChange={(patch, key) => updateEdge(selEdge.id, patch, key)} onDelete={deleteSelection} />
+              <EdgeInspector
+                edge={selEdge}
+                onChange={(patch, key) => updateEdge(selEdge.id, patch, key)}
+                onRoute={(patch) => commitEdge(selEdge.id, patch)}
+                onDelete={deleteSelection}
+              />
             ) : selection.nodes.length > 1 ? (
               <div className="isd-panel">
                 <h3>{selection.nodes.length} nodes selected</h3>
@@ -840,15 +857,48 @@ function NodeInspector({
   );
 }
 
+function Segmented<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+  return (
+    <div className="isd-segmented" role="radiogroup">
+      {options.map(([v, label]) => (
+        <button key={v} type="button" role="radio" aria-checked={value === v} className={value === v ? 'is-active' : ''} onClick={() => onChange(v)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const MARKERS: [MarkerKind, string][] = [
+  ['none', 'None'],
+  ['arrow', 'Arrow'],
+  ['open', 'Open arrow'],
+  ['circle', 'Circle'],
+  ['diamond', 'Diamond'],
+];
+
+const ANIMATIONS: [EdgeAnimation, string][] = [
+  ['none', 'None'],
+  ['flow', 'Flow (marching dashes)'],
+  ['packets', 'Data packets'],
+  ['pulse', 'Pulse (travelling)'],
+  ['glow', 'Glow (breathing)'],
+];
+
 function EdgeInspector({
   edge,
   onChange,
+  onRoute,
   onDelete,
 }: {
   edge: DiagramEdge;
   onChange: (patch: Partial<DiagramEdge>, key?: string) => void;
+  /** Route changes (anchors, bends) that should not become the default style. */
+  onRoute: (patch: Partial<DiagramEdge>) => void;
   onDelete: () => void;
 }) {
+  const animation = edge.animation ?? 'none';
+  const custom = !!(edge.fromAnchor || edge.toAnchor || edge.waypoints?.length);
   return (
     <div className="isd-panel">
       <h3>Connection</h3>
@@ -858,28 +908,115 @@ function EdgeInspector({
       <Field label="Color">
         <Swatches value={edge.color} onChange={(color) => onChange({ color })} />
       </Field>
-      <Field label="Routing">
-        <select className="isd-input" value={edge.routing} onChange={(e) => onChange({ routing: e.target.value as DiagramEdge['routing'] })}>
-          <option value="orthogonal">Orthogonal</option>
-          <option value="straight">Straight</option>
-        </select>
-      </Field>
-      <Field label="Width">
-        <NumberInput value={edge.width} min={1} step={1} max={10} onChange={(width) => onChange({ width }, 'w')} />
-      </Field>
-      <label className="isd-check">
-        <input type="checkbox" checked={!!edge.dashed} onChange={(e) => onChange({ dashed: e.target.checked })} /> Dashed
-      </label>
-      <label className="isd-check">
-        <input type="checkbox" checked={!!edge.arrowStart} onChange={(e) => onChange({ arrowStart: e.target.checked })} /> Arrow at start
-      </label>
-      <label className="isd-check">
-        <input type="checkbox" checked={!!edge.arrowEnd} onChange={(e) => onChange({ arrowEnd: e.target.checked })} /> Arrow at end
-      </label>
+
+      <div className="isd-section-title">Path</div>
+      <Segmented
+        value={edge.routing}
+        options={[
+          ['orthogonal', 'Right-angle'],
+          ['straight', 'Straight'],
+          ['curved', 'Curved'],
+        ]}
+        onChange={(routing) => onChange({ routing })}
+      />
+      {edge.routing === 'orthogonal' && (
+        <label className="isd-check">
+          <input type="checkbox" checked={!!edge.rounded} onChange={(e) => onChange({ rounded: e.target.checked })} /> Rounded corners
+        </label>
+      )}
+      <p className="isd-hint">
+        {edge.routing === 'orthogonal'
+          ? 'Drag the square handles to move segments. Drag an end dot onto any side of a node to re-attach it.'
+          : 'Drag the small dots to add bends; double-click a bend to remove it. Drag an end dot to re-attach.'}
+      </p>
       <div className="isd-row">
-        <button type="button" className="isd-btn" onClick={() => onChange({ from: edge.to, to: edge.from })}>
+        <button type="button" className="isd-btn" disabled={!custom} onClick={() => onRoute({ fromAnchor: undefined, toAnchor: undefined, waypoints: undefined })}>
+          Reset route
+        </button>
+        <button type="button" className="isd-btn" onClick={() => onRoute({ from: edge.to, to: edge.from, fromAnchor: edge.toAnchor, toAnchor: edge.fromAnchor, waypoints: edge.waypoints?.slice().reverse() })}>
           Reverse
         </button>
+      </div>
+
+      <div className="isd-section-title">Line</div>
+      <Segmented
+        value={lineStyleOf(edge)}
+        options={[
+          ['solid', 'Solid'],
+          ['dashed', 'Dashed'],
+          ['dotted', 'Dotted'],
+        ]}
+        onChange={(lineStyle) => onChange({ lineStyle, dashed: undefined })}
+      />
+      <Field label="Width">
+        <input type="range" min={1} max={8} step={0.5} value={edge.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) }, 'w')} />
+      </Field>
+      <div className="isd-grid2">
+        <Field label="Start">
+          <select className="isd-input" value={startMarkerOf(edge)} onChange={(e) => onChange({ startMarker: e.target.value as MarkerKind, arrowStart: undefined })}>
+            {MARKERS.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="End">
+          <select className="isd-input" value={endMarkerOf(edge)} onChange={(e) => onChange({ endMarker: e.target.value as MarkerKind, arrowEnd: undefined })}>
+            {MARKERS.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      <div className="isd-section-title">Animation</div>
+      <select className="isd-input" value={animation} onChange={(e) => onChange({ animation: e.target.value as EdgeAnimation })}>
+        {ANIMATIONS.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
+      </select>
+      {animation !== 'none' && (
+        <>
+          {animation !== 'glow' && (
+            <Segmented
+              value={edge.animationDirection ?? 'forward'}
+              options={
+                animation === 'flow'
+                  ? [
+                      ['forward', 'Forward'],
+                      ['reverse', 'Reverse'],
+                    ]
+                  : [
+                      ['forward', 'Forward'],
+                      ['reverse', 'Reverse'],
+                      ['both', 'Both ways'],
+                    ]
+              }
+              onChange={(animationDirection) => onChange({ animationDirection })}
+            />
+          )}
+          <Field label={`Speed · ${(edge.animationSpeed ?? 1).toFixed(2).replace(/\.?0+$/, '')}×`}>
+            <input type="range" min={0.25} max={3} step={0.25} value={edge.animationSpeed ?? 1} onChange={(e) => onChange({ animationSpeed: parseFloat(e.target.value) }, 'speed')} />
+          </Field>
+          {animation !== 'flow' && animation !== 'glow' && (
+            <Field label="Highlight color">
+              <input
+                type="color"
+                className="isd-color"
+                value={edge.animationColor ?? shade(edge.color, 1.55)}
+                onChange={(e) => onChange({ animationColor: e.target.value }, 'ac')}
+              />
+            </Field>
+          )}
+        </>
+      )}
+
+      <div className="isd-row">
         <button type="button" className="isd-btn is-danger" onClick={onDelete}>
           <Icon name="trash" /> Delete
         </button>

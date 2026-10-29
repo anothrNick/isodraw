@@ -84,8 +84,36 @@ export function createEdge(from: string, to: string, extra: Partial<DiagramEdge>
     color: '#475569',
     width: 2,
     routing: 'orthogonal',
-    arrowEnd: true,
+    rounded: true,
+    lineStyle: 'solid',
+    endMarker: 'arrow',
     ...extra,
+  };
+}
+
+/** Edge style fields that new connections inherit from the last-edited edge. */
+export const EDGE_STYLE_KEYS = [
+  'color',
+  'width',
+  'routing',
+  'rounded',
+  'lineStyle',
+  'startMarker',
+  'endMarker',
+  'animation',
+  'animationDirection',
+  'animationSpeed',
+  'animationColor',
+] as const satisfies readonly (keyof DiagramEdge)[];
+
+/** Convert pre-0.2 edge fields (dashed / arrowStart / arrowEnd) to the current ones. */
+export function migrateEdge(e: DiagramEdge): DiagramEdge {
+  const { dashed, arrowStart, arrowEnd, ...rest } = e;
+  return {
+    ...rest,
+    lineStyle: e.lineStyle ?? (dashed ? 'dashed' : 'solid'),
+    startMarker: e.startMarker ?? (arrowStart ? 'arrow' : 'none'),
+    endMarker: e.endMarker ?? (arrowEnd ? 'arrow' : 'none'),
   };
 }
 
@@ -101,6 +129,6 @@ export function parseDiagram(json: unknown): Diagram {
   return {
     version: 1,
     nodes: obj.nodes.map((n) => ({ ...n, z: n.z ?? 0, h: n.h ?? 0 })),
-    edges: obj.edges.filter((e) => ids.has(e.from) && ids.has(e.to)),
+    edges: obj.edges.filter((e) => ids.has(e.from) && ids.has(e.to)).map(migrateEdge),
   };
 }
