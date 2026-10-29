@@ -32,7 +32,7 @@ A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run dep
   - Open the Docs panel with `D`, the toolbar *Docs* button, the inspector, a double-click, or a node's doc badge. The panel follows your selection, and breadcrumbs (*Diagram › VPC › App subnet*) lead to parent docs.
   - The editor is Tiptap-based and stores Markdown. It has headings, lists, task lists, quotes, code blocks, tables and links, a formatting menu that appears over selected text, and `/` commands.
   - Type `@` to link another component. Clicking the link selects that component, centers it, and shows its doc. Links are stored as ordinary Markdown links (`[@ALB](isodraw:node/alb)`).
-  - In `readOnly` mode, selecting a documented item opens its doc read-only, which turns the embedded viewer into browsable architecture documentation. The demo's *View only* button shows this.
+  - A small doc marker appears when you hover over or select a documented item (set `docBadges="always"` or `"never"` to change this). In `readOnly` mode, selecting a documented item opens its doc read-only, which turns the embedded viewer into browsable architecture documentation. The demo's *View only* button shows this.
   - *Export → Docs (Markdown)* writes a single `architecture.md`, nested by area, with mentions turned into links within the file.
   - The editor loads lazily, so pages that never open the docs never download Tiptap.
 - **Export:** PNG, SVG (images are embedded in the file) and JSON. Open a saved diagram from JSON.

@@ -27,6 +27,8 @@ export interface IsoDiagramEditorProps {
   userIcons?: IconDef[];
   onUserIconsChange?: (icons: IconDef[]) => void;
   readOnly?: boolean;
+  /** When to show doc markers on documented items (default: on hover or selection). */
+  docBadges?: 'hover' | 'always' | 'never';
   className?: string;
   style?: React.CSSProperties;
 }
@@ -782,6 +784,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             showGrid={showGrid}
             animate={animate}
             onOpenDocs={openDocs}
+            showDocBadges={props.docBadges}
             newEdgeStyle={{ routing: 'orthogonal', rounded: true, ...edgeStyle }}
             onBeginChange={beginChange}
             onChange={(d) => commit(d, 'replace')}
