@@ -203,7 +203,7 @@ function DocEditor({
 }) {
   const [mentionPopup, setMentionPopup] = useState<PopupState<MentionItem> | null>(null);
   const [slashPopup, setSlashPopup] = useState<PopupState<SlashItem> | null>(null);
-  const [bubble, setBubble] = useState<{ x: number; y: number } | null>(null);
+  const [bubble, setBubble] = useState<{ x: number; y: number; below: boolean } | null>(null);
   const mentionRef = useRef(mentionPopup);
   const slashRef = useRef(slashPopup);
   mentionRef.current = mentionPopup;
@@ -292,7 +292,12 @@ function DocEditor({
       }
       const a = e.view.coordsAtPos(from);
       const b = e.view.coordsAtPos(to);
-      setBubble({ x: (a.left + b.right) / 2 - box.left, y: Math.min(a.top, b.top) - box.top });
+      // Keep the menu inside the panel; flip below the selection near the top.
+      const half = 80;
+      const x = Math.min(Math.max((a.left + b.right) / 2 - box.left, half + 4), box.width - half - 4);
+      const top = Math.min(a.top, b.top) - box.top;
+      const below = top < 48;
+      setBubble({ x, y: below ? Math.max(a.bottom, b.bottom) - box.top : top, below });
     },
     onBlur: () => setBubble(null),
   });
@@ -337,27 +342,6 @@ function DocEditor({
 
   return (
     <div className="isd-doc-editor" ref={wrapRef}>
-      {editable && (
-        <div className="isd-doc-toolbar">
-          {btn(<b>B</b>, 'Bold (⌘B)', editor.isActive('bold'), () => chain().toggleBold().run())}
-          {btn(<i>I</i>, 'Italic (⌘I)', editor.isActive('italic'), () => chain().toggleItalic().run())}
-          {btn(<s>S</s>, 'Strikethrough', editor.isActive('strike'), () => chain().toggleStrike().run())}
-          {btn(<code>{'<>'}</code>, 'Inline code', editor.isActive('code'), () => chain().toggleCode().run())}
-          {btn(<Icon name="link" size={14} />, 'Link', editor.isActive('link'), setLink)}
-          <span className="isd-doc-sep" />
-          {btn('H1', 'Heading 1', editor.isActive('heading', { level: 1 }), () => chain().toggleHeading({ level: 1 }).run())}
-          {btn('H2', 'Heading 2', editor.isActive('heading', { level: 2 }), () => chain().toggleHeading({ level: 2 }).run())}
-          {btn('H3', 'Heading 3', editor.isActive('heading', { level: 3 }), () => chain().toggleHeading({ level: 3 }).run())}
-          <span className="isd-doc-sep" />
-          {btn('•', 'Bullet list', editor.isActive('bulletList'), () => chain().toggleBulletList().run())}
-          {btn('1.', 'Numbered list', editor.isActive('orderedList'), () => chain().toggleOrderedList().run())}
-          {btn('☑', 'Task list', editor.isActive('taskList'), () => chain().toggleTaskList().run())}
-          {btn('❝', 'Quote', editor.isActive('blockquote'), () => chain().toggleBlockquote().run())}
-          {btn('{ }', 'Code block', editor.isActive('codeBlock'), () => chain().toggleCodeBlock().run())}
-          {btn('▦', 'Table', editor.isActive('table'), () => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}
-          {btn('@', 'Link a component', false, () => chain().insertContent('@').run())}
-        </div>
-      )}
       {editable && editor.isActive('table') && (
         <div className="isd-doc-tablebar">
           {btn('+ Row', 'Add row below', false, () => chain().addRowAfter().run())}
@@ -370,7 +354,7 @@ function DocEditor({
       <EditorContent editor={editor} className="isd-doc-content" />
 
       {bubble && (
-        <div className="isd-doc-bubble" style={{ left: bubble.x, top: bubble.y }}>
+        <div className={`isd-doc-bubble${bubble.below ? ' is-below' : ''}`} style={{ left: bubble.x, top: bubble.y }}>
           {btn(<b>B</b>, 'Bold', editor.isActive('bold'), () => chain().toggleBold().run())}
           {btn(<i>I</i>, 'Italic', editor.isActive('italic'), () => chain().toggleItalic().run())}
           {btn(<s>S</s>, 'Strikethrough', editor.isActive('strike'), () => chain().toggleStrike().run())}

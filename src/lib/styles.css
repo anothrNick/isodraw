@@ -189,11 +189,10 @@ textarea.isd-input { resize: vertical; }
 .isd-docs-empty { padding: 16px; color: var(--isd-muted); }
 
 .isd-doc-editor { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.isd-doc-toolbar, .isd-doc-tablebar {
-  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 10px;
+.isd-doc-tablebar {
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px 10px;
   border-bottom: 1px solid var(--isd-border); background: var(--isd-panel);
 }
-.isd-doc-tablebar { padding: 4px 10px; background: var(--isd-bg); }
 .isd-doc-btn {
   min-width: 26px; height: 26px; padding: 0 6px; border: 0; border-radius: 5px; background: none; color: var(--isd-text);
   font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
@@ -201,7 +200,6 @@ textarea.isd-input { resize: vertical; }
 .isd-doc-btn:hover { background: var(--isd-border); }
 .isd-doc-btn.is-active { background: var(--isd-accent-soft); color: var(--isd-accent); }
 .isd-doc-btn code { font-size: 11px; }
-.isd-doc-sep { width: 1px; height: 16px; margin: 0 4px; background: var(--isd-border); }
 
 .isd-doc-content { flex: 1; min-height: 0; overflow-y: auto; }
 .isd-doc-content .ProseMirror { min-height: 100%; padding: 14px 16px 40px; outline: none; font-size: 14px; line-height: 1.6; color: var(--isd-text); }
@@ -241,6 +239,7 @@ textarea.isd-input { resize: vertical; }
   position: absolute; z-index: 5; display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: #0f172a;
   transform: translate(-50%, calc(-100% - 8px)); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
 }
+.isd-doc-bubble.is-below { transform: translate(-50%, 8px); }
 .isd-doc-bubble .isd-doc-btn { color: #e2e8f0; }
 .isd-doc-bubble .isd-doc-btn:hover { background: rgba(255, 255, 255, 0.12); }
 .isd-doc-bubble .isd-doc-btn.is-active { background: rgba(96, 165, 250, 0.3); color: #fff; }
@@ -259,3 +258,10 @@ textarea.isd-input { resize: vertical; }
 .isd-doc-popup-empty { padding: 6px 8px; color: var(--isd-muted); font-size: 12px; }
 
 .isd-root.is-compact .isd-docs { width: 100%; box-shadow: none; }
+
+/* Doc marker on the canvas: quiet until you point at it. */
+.isd-doc-badge { cursor: pointer; }
+.isd-doc-badge rect { fill: rgba(255, 255, 255, 0.92); stroke: var(--isd-grid-major, #cbd5e1); stroke-width: 1; }
+.isd-doc-badge path { fill: none; stroke: var(--isd-muted, #64748b); stroke-width: 1.3; stroke-linecap: round; }
+.isd-doc-badge:hover rect { fill: var(--isd-accent, #2563eb); stroke: var(--isd-accent, #2563eb); }
+.isd-doc-badge:hover path { stroke: #fff; }

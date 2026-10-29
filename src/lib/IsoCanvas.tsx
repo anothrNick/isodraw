@@ -48,8 +48,11 @@ export interface IsoCanvasProps {
   /** Payload dropped from the palette at the given world point. */
   onDropPayload?: (payload: string, world: Pt) => void;
   svgRef?: Ref<SVGSVGElement>;
-  /** Show a small badge on items that have documentation (default true). */
-  showDocBadges?: boolean;
+  /**
+   * When to show the small doc marker on documented items: on hover or
+   * selection (default), always, or never.
+   */
+  showDocBadges?: 'hover' | 'always' | 'never';
   /** A doc badge was clicked, or an item was double-clicked. */
   onOpenDocs?: (target: DocTarget) => void;
 }
@@ -106,6 +109,8 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  /** Item under the pointer as `node:id` / `edge:id`, for hover-only doc markers. */
+  const [hoverItem, setHoverItem] = useState<string | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
   const latest = useRef(props);
   latest.current = props;
@@ -322,6 +327,10 @@ export function IsoCanvas(props: IsoCanvasProps) {
       if (tool === 'connect' && !closestAttr(e.target, 'data-handle')?.startsWith('conn-')) {
         setHover(closestAttr(e.target, 'data-node-id'));
       }
+      const nodeId = closestAttr(e.target, 'data-node-id');
+      const edgeId = closestAttr(e.target, 'data-edge-id');
+      // Keep the marker while the pointer moves onto it.
+      setHoverItem(closestAttr(e.target, 'data-doc-badge') ?? (nodeId ? `node:${nodeId}` : edgeId ? `edge:${edgeId}` : null));
       return;
     }
     const free = e.altKey;
@@ -759,16 +768,24 @@ export function IsoCanvas(props: IsoCanvasProps) {
   }
 
   // ----- doc badges -----
-  const badgeSize = 16 / camera.zoom;
-  const badge = (key: string, p: Pt, title: string) => (
-    <g key={key} data-doc-badge={key} transform={`translate(${p.x} ${p.y}) scale(${1 / camera.zoom})`} style={{ cursor: 'pointer' }}>
-      <title>{`Documentation: ${title}`}</title>
-      <rect x={-8} y={-8} width={16} height={16} rx={4} fill="#fff" stroke={ACCENT} strokeWidth={1.25} />
-      <path d="M-4,-3.5 H4 M-4,0 H4 M-4,3.5 H1.5" stroke={ACCENT} strokeWidth={1.4} strokeLinecap="round" />
-    </g>
-  );
+  const badgeSize = 14 / camera.zoom;
+  const badgeMode = props.showDocBadges ?? 'hover';
+  const shownBadges = new Set([
+    ...(hoverItem ? [hoverItem] : []),
+    ...selection.nodes.map((id) => `node:${id}`),
+    ...selection.edges.map((id) => `edge:${id}`),
+  ]);
+  const badgeVisible = (key: string) => badgeMode === 'always' || (badgeMode === 'hover' && shownBadges.has(key));
+  const badge = (key: string, p: Pt, title: string) =>
+    badgeVisible(key) ? (
+      <g key={key} className="isd-doc-badge" data-doc-badge={key} transform={`translate(${p.x} ${p.y}) scale(${1 / camera.zoom})`}>
+        <title>{`Open docs: ${title}`}</title>
+        <rect x={-7} y={-7} width={14} height={14} rx={3.5} />
+        <path d="M-3.5,-3 H3.5 M-3.5,0 H3.5 M-3.5,3 H1" />
+      </g>
+    ) : null;
   const docBadges =
-    props.showDocBadges === false
+    badgeMode === 'never'
       ? null
       : [
           ...diagram.nodes
@@ -815,6 +832,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => setDrag(null)}
+      onPointerLeave={() => setHoverItem(null)}
       onDoubleClick={onDoubleClick}
       onContextMenu={(e) => e.preventDefault()}
       onDragOver={(e) => {
