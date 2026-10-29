@@ -359,3 +359,7 @@ textarea.isd-input { resize: vertical; }
   .isd-pub-hero { grid-template-columns: 1fr; }
   .isd-pub-head h1 { font-size: 24px; }
 }
+
+/* Outline of the item whose doc mention is hovered. */
+.isd-target-highlight { animation: isd-target-in 0.15s ease-out; }
+@keyframes isd-target-in { from { opacity: 0; } to { opacity: 1; } }

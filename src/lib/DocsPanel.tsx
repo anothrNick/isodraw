@@ -34,6 +34,7 @@ export interface DocsPanelProps {
   onChange: (target: DocTarget, markdown: string) => void;
   /** Go to another item (from a breadcrumb or a mention). */
   onNavigate: (target: DocTarget) => void;
+  onMentionHover?: (target: DocTarget | null) => void;
   onClose: () => void;
   onExport: () => void;
 }
@@ -347,12 +348,15 @@ export function DocEditor({
   items,
   onChange,
   onNavigate,
+  onMentionHover,
 }: {
   markdown: string;
   editable: boolean;
   items: () => Mentionable[];
   onChange: (md: string) => void;
   onNavigate: (t: DocTarget) => void;
+  /** The pointer moved onto a mention (its target) or off it (null). */
+  onMentionHover?: (t: DocTarget | null) => void;
 }) {
   const [mentionPopup, setMentionPopup] = useState<PopupState<MentionItem> | null>(null);
   const [slashPopup, setSlashPopup] = useState<PopupState<SlashItem> | null>(null);
@@ -362,8 +366,21 @@ export function DocEditor({
   const slashRef = useRef(slashPopup);
   mentionRef.current = mentionPopup;
   slashRef.current = slashPopup;
-  const latest = useRef({ onChange, onNavigate, items });
-  latest.current = { onChange, onNavigate, items };
+  const latest = useRef({ onChange, onNavigate, onMentionHover, items });
+  latest.current = { onChange, onNavigate, onMentionHover, items };
+  const hovered = useRef<string | null>(null);
+  const reportHover = (el: EventTarget | null) => {
+    const href = (el as HTMLElement | null)?.closest?.('a')?.getAttribute('href') ?? '';
+    const t = parseMentionHref(href);
+    const key = t ? targetKey(t) : null;
+    if (key === hovered.current) return;
+    hovered.current = key;
+    latest.current.onMentionHover?.(t);
+  };
+  // Clear a highlight left behind when the editor goes away mid-hover.
+  useEffect(() => () => {
+    if (hovered.current) latest.current.onMentionHover?.(null);
+  }, []);
   const emitted = useRef(markdown);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -413,6 +430,14 @@ export function DocEditor({
     ],
     editorProps: {
       handleDOMEvents: {
+        mouseover: (_view, event) => {
+          reportHover(event.target);
+          return false;
+        },
+        mouseleave: () => {
+          reportHover(null);
+          return false;
+        },
         click: (_view, event) => {
           const a = (event.target as HTMLElement).closest('a');
           const href = a?.getAttribute('href');
@@ -602,7 +627,7 @@ export function DocEditor({
 
 // ---------- panel ----------
 
-export default function DocsPanel({ target, diagram, readOnly, onChange, onNavigate, onClose, onExport }: DocsPanelProps) {
+export default function DocsPanel({ target, diagram, readOnly, onChange, onNavigate, onMentionHover, onClose, onExport }: DocsPanelProps) {
   const crumbs = breadcrumbs(target, diagram);
   const title = titleOf(target, diagram);
   const md = docOf(target, diagram);
@@ -663,6 +688,7 @@ export default function DocsPanel({ target, diagram, readOnly, onChange, onNavig
           items={() => mentionables(diagramRef.current)}
           onChange={(next) => onChange(target, next)}
           onNavigate={navigate}
+          onMentionHover={onMentionHover}
         />
       )}
     </aside>

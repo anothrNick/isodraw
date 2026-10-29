@@ -84,6 +84,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [docsOpen, setDocsOpen] = useState(false);
+  /** Item whose @ mention is under the pointer in the docs panel; outlined on the canvas. */
+  const [mentionHover, setMentionHover] = useState<DocTarget | null>(null);
   const [docsTarget, setDocsTarget] = useState<DocTarget>({ kind: 'diagram' });
   const svgRef = useRef<SVGSVGElement>(null);
   const clipboard = useRef<{ nodes: DiagramNode[]; edges: DiagramEdge[] } | null>(null);
@@ -784,6 +786,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             showGrid={showGrid}
             animate={animate}
             onOpenDocs={openDocs}
+            focus={docsOpen ? mentionHover : null}
             showDocBadges={props.docBadges}
             newEdgeStyle={{ routing: 'orthogonal', rounded: true, ...edgeStyle }}
             onBeginChange={beginChange}
@@ -813,6 +816,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 readOnly={readOnly}
                 onChange={updateDoc}
                 onNavigate={navigateTo}
+                onMentionHover={setMentionHover}
                 onClose={() => setDocsOpen(false)}
                 onExport={() => void doExport('docs')}
               />

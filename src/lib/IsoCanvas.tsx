@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as RPoin
 import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, snap } from './geometry';
 import { containerOf, descendantsOf, isContainer } from './containers';
 import { hasDoc } from './docs';
-import { SceneContent, edgeGeometry, midpoint } from './render';
+import { SceneContent, TargetHighlight, edgeGeometry, midpoint } from './render';
 import {
   SIDES,
   type InferredRoute,
@@ -55,6 +55,8 @@ export interface IsoCanvasProps {
   showDocBadges?: 'hover' | 'always' | 'never';
   /** A doc badge was clicked, or an item was double-clicked. */
   onOpenDocs?: (target: DocTarget) => void;
+  /** Emphasise this node or connection, e.g. while a doc mention of it is hovered. */
+  focus?: DocTarget | null;
 }
 
 type Drag =
@@ -867,6 +869,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
           <SceneContent diagram={diagram} proj={proj} idPrefix={idPrefix} selectedEdges={selectedSet} animate={animate} />
         </g>
         <g data-noexport="">
+          {props.focus && <TargetHighlight target={props.focus} diagram={diagram} proj={proj} />}
           {hoverNode && (
             <g>
               <polygon
