@@ -256,7 +256,7 @@ export function NodeShape({ node, proj, idPrefix }: { node: DiagramNode; proj: P
 
 // ---------- edges ----------
 
-function midpoint(pts: Pt[]): Pt {
+export function midpoint(pts: Pt[]): Pt {
   let half = polylineLength(pts) / 2;
   for (let i = 1; i < pts.length; i++) {
     const len = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);

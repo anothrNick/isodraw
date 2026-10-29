@@ -9,14 +9,14 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, 'src/lib/index.ts'),
-      name: 'IsoDraw',
       fileName: 'isodraw',
+      // ES + CJS (not UMD) so the Tiptap docs editor can stay a lazy-loaded chunk.
+      formats: ['es', 'cjs'],
     },
     cssCodeSplit: false,
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      external: [/^react(-dom)?($|\/)/, /^@tiptap\//, 'tiptap-markdown'],
       output: {
-        globals: { react: 'React', 'react-dom': 'ReactDOM', 'react/jsx-runtime': 'jsxRuntime' },
         assetFileNames: 'isodraw.[ext]',
       },
     },

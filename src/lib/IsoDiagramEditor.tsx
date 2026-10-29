@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
 import { DRAG_MIME, IsoCanvas, type Selection, type Tool } from './IsoCanvas';
 import { boundsOf, containerOf, descendantsOf, isContainer } from './containers';
+import { exportDocsMarkdown, hasDoc, sameTarget, targetKey, withDoc } from './docs';
 import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } from './export';
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { loadAwsIconLibrary } from './icons';
 import { ShapePreview } from './render';
-import { EDGE_STYLE_KEYS, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
-import type { Camera, Diagram, DiagramEdge, DiagramNode, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
+import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
+import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
 import { Field, Icon, NumberInput, ToolButton } from './ui';
 
 export interface IsoDiagramEditorProps {
@@ -35,6 +36,9 @@ interface History {
   past: Diagram[];
   future: Diagram[];
 }
+
+// Tiptap is large: load the docs editor only when someone opens it.
+const DocsPanel = lazy(() => import('./DocsPanel'));
 
 const HISTORY_LIMIT = 200;
 const COMPACT_WIDTH = 1000;
@@ -77,6 +81,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const [compact, setCompact] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [docsTarget, setDocsTarget] = useState<DocTarget>({ kind: 'diagram' });
   const svgRef = useRef<SVGSVGElement>(null);
   const clipboard = useRef<{ nodes: DiagramNode[]; edges: DiagramEdge[] } | null>(null);
   const coalesce = useRef<{ key: string; t: number } | null>(null);
@@ -162,10 +168,68 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     return () => ro.disconnect();
   }, []);
 
-  // In compact mode, open the inspector when something gets selected.
+  // In compact mode, open the inspector when something gets selected (unless docs are showing).
   useEffect(() => {
-    if (compact && (selection.nodes.length || selection.edges.length)) setInspectorOpen(true);
-  }, [compact, selection]);
+    if (compact && !docsOpen && !readOnly && (selection.nodes.length || selection.edges.length)) setInspectorOpen(true);
+  }, [compact, selection]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The docs panel follows the selection: one item → its page; nothing → the diagram.
+  const selectionTarget: DocTarget | null =
+    selection.nodes.length === 1 && !selection.edges.length
+      ? { kind: 'node', id: selection.nodes[0] }
+      : selection.edges.length === 1 && !selection.nodes.length
+        ? { kind: 'edge', id: selection.edges[0] }
+        : !selection.nodes.length && !selection.edges.length
+          ? { kind: 'diagram' }
+          : null;
+  useEffect(() => {
+    if (!selectionTarget) return;
+    setDocsTarget((cur) => (sameTarget(cur, selectionTarget) ? cur : selectionTarget));
+    // Viewers: selecting something documented opens its docs.
+    if (readOnly && selectionTarget.kind !== 'diagram') {
+      const item = selectionTarget.kind === 'node' ? diagram.nodes.find((n) => n.id === selectionTarget.id) : diagram.edges.find((e) => e.id === selectionTarget.id);
+      if (hasDoc(item?.doc)) setDocsOpen(true);
+    }
+  }, [selectionTarget && targetKey(selectionTarget)]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openDocs = (t?: DocTarget) => {
+    if (t) {
+      setDocsTarget(t);
+      setSelection(t.kind === 'diagram' ? NO_SELECTION : t.kind === 'node' ? { nodes: [t.id], edges: [] } : { nodes: [], edges: [t.id] });
+    }
+    setDocsOpen(true);
+    if (compact) {
+      setInspectorOpen(false);
+      setPaletteOpen(false);
+    }
+  };
+
+  /** Jump to an item from a mention or breadcrumb: select it, center it, show its docs. */
+  const navigateTo = (t: DocTarget) => {
+    openDocs(t);
+    if (t.kind === 'diagram') return;
+    let p: Pt | null = null;
+    if (t.kind === 'node') {
+      const n = diagram.nodes.find((x) => x.id === t.id);
+      if (n) p = proj.project(n.x + n.w / 2, n.y + n.d / 2, n.z);
+    } else {
+      const e = diagram.edges.find((x) => x.id === t.id);
+      const a = e && diagram.nodes.find((x) => x.id === e.from);
+      const b = e && diagram.nodes.find((x) => x.id === e.to);
+      if (a && b) {
+        const pa = proj.project(a.x + a.w / 2, a.y + a.d / 2, a.z);
+        const pb = proj.project(b.x + b.w / 2, b.y + b.d / 2, b.z);
+        p = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 };
+      }
+    }
+    if (!p) return;
+    const { w, h } = stageSize();
+    // Keep the item clear of the docs drawer on the right.
+    const visibleW = compact ? w : Math.max(w / 2, w - 440);
+    setCamera((c) => ({ ...c, x: visibleW / 2 - p!.x * c.zoom, y: h / 2 - p!.y * c.zoom }));
+  };
+
+  const updateDoc = (t: DocTarget, md: string) => commit((d) => withDoc(d, t, md), 'push', `doc:${targetKey(t)}`);
 
   // ----- camera helpers -----
   const stageSize = () => {
@@ -354,7 +418,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   };
 
   const onKeyDown = (e: RKeyboardEvent) => {
-    if ((e.target as HTMLElement).closest('input,textarea,select')) return;
+    if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
     const mod = e.metaKey || e.ctrlKey;
     const k = e.key.toLowerCase();
     if (mod && k === 'z') {
@@ -364,6 +428,9 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     } else if (mod && k === 'y') {
       e.preventDefault();
       redo();
+    } else if (k === 'd' && !mod) {
+      if (docsOpen) setDocsOpen(false);
+      else openDocs();
     } else if (mod && k === 'a') {
       e.preventDefault();
       setSelection({ nodes: diagram.nodes.map((n) => n.id), edges: [] });
@@ -417,9 +484,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
 
-  const doExport = async (fmt: 'json' | 'svg' | 'png') => {
+  const doExport = async (fmt: 'json' | 'svg' | 'png' | 'docs') => {
     setExportOpen(false);
     try {
+      if (fmt === 'docs') downloadBlob(exportDocsMarkdown(diagram), 'architecture.md', 'text/markdown');
       if (fmt === 'json') downloadBlob(exportJson(diagram), 'diagram.json', 'application/json');
       if (fmt === 'svg' && svgRef.current) downloadBlob(await exportSvg(svgRef.current), 'diagram.svg', 'image/svg+xml');
       if (fmt === 'png' && svgRef.current) downloadBlob(await exportPng(svgRef.current), 'diagram.png');
@@ -558,6 +626,11 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           </div>
         )}
         <div className="isd-group">
+          <ToolButton icon="doc" label={docsOpen ? 'Hide docs (D)' : 'Show docs (D)'} active={docsOpen} onClick={() => (docsOpen ? setDocsOpen(false) : openDocs())}>
+            Docs
+          </ToolButton>
+        </div>
+        <div className="isd-group">
           <ToolButton icon="download" label="Export" active={exportOpen} onClick={() => setExportOpen(!exportOpen)}>
             Export
           </ToolButton>
@@ -596,6 +669,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           <button type="button" onClick={() => doExport('png')}>PNG image</button>
           <button type="button" onClick={() => doExport('svg')}>SVG vector</button>
           <button type="button" onClick={() => doExport('json')}>Diagram JSON</button>
+          <button type="button" onClick={() => doExport('docs')}>Docs (Markdown)</button>
         </div>
       )}
       </div>
@@ -707,6 +781,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             readOnly={readOnly}
             showGrid={showGrid}
             animate={animate}
+            onOpenDocs={openDocs}
             newEdgeStyle={{ routing: 'orthogonal', rounded: true, ...edgeStyle }}
             onBeginChange={beginChange}
             onChange={(d) => commit(d, 'replace')}
@@ -727,6 +802,19 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             {view === '3d' ? `2.5D · ${['N', 'E', 'S', 'W'][rotation]}` : 'Flat'} · {diagram.nodes.length} nodes · {diagram.edges.length} connections
           </div>
           {toast && <div className="isd-toast">{toast}</div>}
+          {docsOpen && (
+            <Suspense fallback={<aside className="isd-docs isd-docs-loading">Loading editor…</aside>}>
+              <DocsPanel
+                target={docsTarget}
+                diagram={diagram}
+                readOnly={readOnly}
+                onChange={updateDoc}
+                onNavigate={navigateTo}
+                onClose={() => setDocsOpen(false)}
+                onExport={() => void doExport('docs')}
+              />
+            </Suspense>
+          )}
         </div>
 
         {/* ---------- inspector ---------- */}
@@ -740,6 +828,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             {selNode ? (
               <NodeInspector
                 node={selNode}
+                onOpenDocs={() => openDocs({ kind: 'node', id: selNode.id })}
                 parent={containerOf(selNode, diagram.nodes)}
                 contents={isContainer(selNode) ? descendantsOf([selNode.id], diagram.nodes).size : 0}
                 onSelectNodes={(ids) => setSelection({ nodes: ids, edges: [] })}
@@ -759,6 +848,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             ) : selEdge ? (
               <EdgeInspector
                 edge={selEdge}
+                onOpenDocs={() => openDocs({ kind: 'edge', id: selEdge.id })}
                 onChange={(patch, key) => updateEdge(selEdge.id, patch, key)}
                 onRoute={(patch) => commitEdge(selEdge.id, patch)}
                 onDelete={deleteSelection}
@@ -788,6 +878,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
               <div className="isd-panel">
                 <h3>Diagram</h3>
                 <p className="isd-hint">Click a shape or icon to add it, or drag it onto the canvas. Select a node to edit it.</p>
+                <DocsButton has={hasDoc(diagram.doc)} label="diagram overview" onClick={() => openDocs({ kind: 'diagram' })} />
                 <dl className="isd-keys">
                   <dt>Drag empty space</dt><dd>Pan</dd>
                   <dt>Scroll / pinch</dt><dd>Zoom</dd>
@@ -799,6 +890,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                   <dt>Alt + drag</dt><dd>Move without snapping</dd>
                   <dt>⌘D / ⌘C / ⌘V</dt><dd>Duplicate / copy / paste</dd>
                   <dt>⌘G / ⇧⌘G</dt><dd>Group into area / ungroup</dd>
+                  <dt>D / double-click</dt><dd>Open docs</dd>
                   <dt>⌘Z / ⇧⌘Z</dt><dd>Undo / redo</dd>
                 </dl>
                 {diagram.nodes.length > 0 && (
@@ -823,6 +915,14 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
 // ---------- inspectors ----------
 
+function DocsButton({ has, label, onClick }: { has: boolean; label: string; onClick: () => void }) {
+  return (
+    <button type="button" className={`isd-btn isd-docs-btn${has ? ' has-doc' : ''}`} onClick={onClick} title="Open the docs panel (D)">
+      <Icon name="doc" /> {has ? `Open ${label}` : `Add ${label}`}
+    </button>
+  );
+}
+
 function Swatches({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
     <div className="isd-swatches">
@@ -841,21 +941,10 @@ function Swatches({ value, onChange }: { value: string; onChange: (c: string) =>
   );
 }
 
-const KIND_NAMES: Record<ShapeKind, string> = {
-  block: 'Block',
-  cylinder: 'Cylinder',
-  hexagon: 'Hexagon',
-  pyramid: 'Pyramid',
-  cone: 'Cone',
-  sphere: 'Sphere',
-  area: 'Area',
-  circleArea: 'Circle area',
-  text: 'Text',
-  image: 'Image',
-};
 
 function NodeInspector({
   node,
+  onOpenDocs,
   parent,
   contents,
   onChange,
@@ -868,6 +957,7 @@ function NodeInspector({
   onUngroup,
 }: {
   node: DiagramNode;
+  onOpenDocs: () => void;
   /** Container this node sits in, if any. */
   parent?: DiagramNode;
   /** Number of items inside this node (containers only). */
@@ -887,6 +977,7 @@ function NodeInspector({
   return (
     <div className="isd-panel">
       <h3>{KIND_NAMES[node.kind]}</h3>
+      <DocsButton has={hasDoc(node.doc)} label={isContainer(node) ? 'area docs' : 'docs'} onClick={onOpenDocs} />
       {parent && (
         <button type="button" className="isd-breadcrumb" onClick={() => onSelectNodes([parent.id])} title="Select the containing area">
           Inside <strong>{parent.label || KIND_NAMES[parent.kind]}</strong>
@@ -1051,11 +1142,13 @@ const ANIMATIONS: [EdgeAnimation, string][] = [
 
 function EdgeInspector({
   edge,
+  onOpenDocs,
   onChange,
   onRoute,
   onDelete,
 }: {
   edge: DiagramEdge;
+  onOpenDocs: () => void;
   onChange: (patch: Partial<DiagramEdge>, key?: string) => void;
   /** Route changes (anchors, bends) that should not become the default style. */
   onRoute: (patch: Partial<DiagramEdge>) => void;
@@ -1066,6 +1159,7 @@ function EdgeInspector({
   return (
     <div className="isd-panel">
       <h3>Connection</h3>
+      <DocsButton has={hasDoc(edge.doc)} label="docs" onClick={onOpenDocs} />
       <Field label="Label">
         <input className="isd-input" value={edge.label ?? ''} placeholder="e.g. HTTPS" onChange={(e) => onChange({ label: e.target.value }, 'label')} />
       </Field>

@@ -28,6 +28,13 @@ A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run dep
 - **Containers:** areas hold whatever sits inside them. Moving an area moves its contents, including nested subnets and the bends on connections between them. Dragging a node into an area adds it, and the area is highlighted while you drag. Press `⌘G` to wrap the selection in a new area, and `⇧⌘G` to ungroup it. Deleting an area also deletes its contents; *Ungroup* keeps them. Membership comes purely from position, so it always matches what you see.
 - **Readable at any angle:** text on the ground, area labels and image tiles turn to stay upright as you rotate the 2.5D view.
 - **Responsive:** below 1000px wide, the side panels become drawers you open from the toolbar, and the inspector opens when you select something.
+- **Documentation:** every node, connection and area can have its own doc, and the diagram has an overview page.
+  - Open the Docs panel with `D`, the toolbar *Docs* button, the inspector, a double-click, or a node's doc badge. The panel follows your selection, and breadcrumbs (*Diagram › VPC › App subnet*) lead to parent docs.
+  - The editor is Tiptap-based and stores Markdown. It has headings, lists, task lists, quotes, code blocks, tables and links, a formatting menu that appears over selected text, and `/` commands.
+  - Type `@` to link another component. Clicking the link selects that component, centers it, and shows its doc. Links are stored as ordinary Markdown links (`[@ALB](isodraw:node/alb)`).
+  - In `readOnly` mode, selecting a documented item opens its doc read-only, which turns the embedded viewer into browsable architecture documentation. The demo's *View only* button shows this.
+  - *Export → Docs (Markdown)* writes a single `architecture.md`, nested by area, with mentions turned into links within the file.
+  - The editor loads lazily, so pages that never open the docs never download Tiptap.
 - **Export:** PNG, SVG (images are embedded in the file) and JSON. Open a saved diagram from JSON.
 
 ## Use as a library
@@ -62,7 +69,9 @@ function App() {
 | `userIcons` / `onUserIconsChange` | Images the user imported, so the host app can save them |
 | `readOnly` | Hides the side panels and turns off editing |
 
-Lower-level exports: `IsoCanvas` (just the canvas, without the toolbar and panels), `SceneContent`, `Projector`, `loadAwsIconLibrary`, `exportSvg`, `exportPng`, `createShape`, `createEdge`, `parseDiagram`.
+Docs are Markdown strings on `node.doc`, `edge.doc` and `diagram.doc`. The library is built as ES and CommonJS modules. React, React DOM, `@tiptap/*` and `tiptap-markdown` are dependencies of the package rather than bundled into it.
+
+Lower-level exports: `IsoCanvas` (just the canvas, without the toolbar and panels), `SceneContent`, `Projector`, `loadAwsIconLibrary`, `exportSvg`, `exportPng`, `exportDocsMarkdown`, `createShape`, `createEdge`, `parseDiagram`.
 
 ### Data model
 

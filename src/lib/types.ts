@@ -50,6 +50,8 @@ export interface DiagramNode {
   imageStyle?: ImageStyle;
   /** Locked nodes can be selected but not moved. */
   locked?: boolean;
+  /** Markdown documentation for this node. */
+  doc?: string;
 }
 
 export type EdgeRouting = 'straight' | 'orthogonal' | 'curved';
@@ -97,6 +99,8 @@ export interface DiagramEdge {
   /** Color of packets / pulses; defaults to a lighter edge color. */
   animationColor?: string;
   label?: string;
+  /** Markdown documentation for this connection. */
+  doc?: string;
   /** @deprecated use lineStyle */
   dashed?: boolean;
   /** @deprecated use startMarker */
@@ -109,7 +113,12 @@ export interface Diagram {
   version: 1;
   nodes: DiagramNode[];
   edges: DiagramEdge[];
+  /** Markdown documentation for the diagram as a whole. */
+  doc?: string;
 }
+
+/** What a documentation page is about. */
+export type DocTarget = { kind: 'diagram' } | { kind: 'node'; id: string } | { kind: 'edge'; id: string };
 
 export interface IconDef {
   id: string;
