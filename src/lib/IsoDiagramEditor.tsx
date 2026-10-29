@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
 import { DRAG_MIME, IsoCanvas, type Selection, type Tool } from './IsoCanvas';
+import { boundsOf, containerOf, descendantsOf, isContainer } from './containers';
 import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } from './export';
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
@@ -36,6 +37,7 @@ interface History {
 }
 
 const HISTORY_LIMIT = 200;
+const COMPACT_WIDTH = 1000;
 const NO_SELECTION: Selection = { nodes: [], edges: [] };
 
 interface PalettePayload {
@@ -69,7 +71,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const [localIcons, setLocalIcons] = useState<IconDef[]>(props.userIcons ?? []);
   const [toast, setToast] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  /** Narrow editors show the side panels as drawers over the canvas. */
+  const [compact, setCompact] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const svgRef = useRef<SVGSVGElement>(null);
   const clipboard = useRef<{ nodes: DiagramNode[]; edges: DiagramEdge[] } | null>(null);
   const coalesce = useRef<{ key: string; t: number } | null>(null);
@@ -135,6 +142,30 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     setHist((h) => (h.past.length ? { d: h.past[h.past.length - 1], past: h.past.slice(0, -1), future: [h.d, ...h.future] } : h));
   const redo = () =>
     setHist((h) => (h.future.length ? { d: h.future[0], past: [...h.past, h.d], future: h.future.slice(1) } : h));
+
+  // Switch between docked panels and drawers based on the editor's own width.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const apply = (w: number) =>
+      setCompact((was) => {
+        const next = w < COMPACT_WIDTH;
+        if (next !== was) {
+          setPaletteOpen(!next);
+          setInspectorOpen(!next);
+        }
+        return next;
+      });
+    apply(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(([entry]) => apply(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // In compact mode, open the inspector when something gets selected.
+  useEffect(() => {
+    if (compact && (selection.nodes.length || selection.edges.length)) setInspectorOpen(true);
+  }, [compact, selection]);
 
   // ----- camera helpers -----
   const stageSize = () => {
@@ -210,6 +241,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
   const placePayload = (p: PalettePayload, at: Pt) => {
     if (readOnly) return;
+    if (compact) setPaletteOpen(false);
     if (p.type === 'shape' && p.kind) addNode(createShape(p.kind, at.x, at.y));
     if (p.type === 'icon' && p.src) addNode(createImageNode(p.src, p.name ?? '', at.x, at.y));
   };
@@ -226,9 +258,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const commitEdge = (id: string, patch: Partial<DiagramEdge>, key?: string) =>
     commit((d) => ({ ...d, edges: d.edges.map((e) => (e.id === id ? { ...e, ...patch } : e)) }), 'push', key && `${id}:${key}`);
 
+  /** Selected nodes plus everything inside selected containers. */
+  const withContents = (ids: string[]) => new Set([...ids, ...descendantsOf(ids, diagram.nodes)]);
+
   const deleteSelection = () => {
     if (!selection.nodes.length && !selection.edges.length) return;
-    const ns = new Set(selection.nodes);
+    const ns = withContents(selection.nodes);
     const es = new Set(selection.edges);
     commit((d) => ({
       ...d,
@@ -239,7 +274,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   };
 
   const copySelection = () => {
-    const ns = new Set(selection.nodes);
+    const ns = withContents(selection.nodes);
     clipboard.current = {
       nodes: diagram.nodes.filter((n) => ns.has(n.id)),
       edges: diagram.edges.filter((e) => ns.has(e.from) && ns.has(e.to)),
@@ -255,10 +290,58 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       map.set(n.id, id);
       return { ...n, id, x: n.x + offset, y: n.y + offset };
     });
-    const edges = clip.edges.map((e) => ({ ...e, id: uid('e'), from: map.get(e.from)!, to: map.get(e.to)! }));
+    const edges = clip.edges.map((e) => ({
+      ...e,
+      id: uid('e'),
+      from: map.get(e.from)!,
+      to: map.get(e.to)!,
+      waypoints: e.waypoints?.map((w) => ({ x: w.x + offset, y: w.y + offset })),
+    }));
     commit((d) => ({ ...d, nodes: [...d.nodes, ...nodes], edges: [...d.edges, ...edges] }));
-    setSelection({ nodes: nodes.map((n) => n.id), edges: [] });
+    // Select only the top-level pasted items; their contents come along.
+    const pasted = new Set(nodes.map((n) => n.id));
+    const inner = descendantsOf(pasted, nodes);
+    setSelection({ nodes: nodes.filter((n) => !inner.has(n.id)).map((n) => n.id), edges: [] });
     clipboard.current = { nodes, edges };
+  };
+
+  /** Wrap the selection in a new container area. */
+  const groupSelection = () => {
+    const picked = diagram.nodes.filter((n) => selection.nodes.includes(n.id));
+    if (!picked.length) return;
+    const b = boundsOf(picked);
+    const parent = containerOf({ ...picked[0], ...b, kind: 'area' }, diagram.nodes, new Set(picked.map((n) => n.id)));
+    const group = {
+      ...createShape('area', 0, 0, {
+        z: Math.min(...picked.map((n) => n.z)),
+        color: '#64748b',
+        opacity: 0.08,
+        dashed: true,
+        label: 'Group',
+      }),
+      // createShape centers on a point; place the bounds exactly.
+      ...b,
+    };
+    commit((d) => ({ ...d, nodes: [group, ...d.nodes] }));
+    setSelection({ nodes: [group.id], edges: [] });
+    setToast(parent ? `Grouped inside ${parent.label || 'area'}` : 'Grouped');
+  };
+
+  /** Remove selected containers but keep their contents. */
+  const ungroupSelection = () => {
+    const containers = diagram.nodes.filter((n) => selection.nodes.includes(n.id) && isContainer(n));
+    if (!containers.length) return;
+    const ids = new Set(containers.map((c) => c.id));
+    const children = diagram.nodes.filter((n) => !ids.has(n.id) && containers.some((c) => containerOf(n, diagram.nodes)?.id === c.id));
+    commit((d) => ({ ...d, nodes: d.nodes.filter((n) => !ids.has(n.id)) }));
+    setSelection({ nodes: children.map((n) => n.id), edges: [] });
+  };
+
+  const fitContainer = (id: string) => {
+    const c = diagram.nodes.find((n) => n.id === id);
+    const inner = descendantsOf([id], diagram.nodes);
+    const kids = diagram.nodes.filter((n) => inner.has(n.id));
+    if (c && kids.length) updateNode(id, boundsOf(kids));
   };
 
   const reorder = (dir: 'front' | 'back') => {
@@ -296,6 +379,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       deleteSelection();
     } else if (mod && k === 'v') {
       paste();
+    } else if (mod && k === 'g') {
+      e.preventDefault();
+      if (e.shiftKey) ungroupSelection();
+      else groupSelection();
     } else if (mod && k === 'd') {
       e.preventDefault();
       copySelection();
@@ -317,7 +404,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       const step = e.shiftKey ? 1 : 0.5;
       const dirs: Record<string, Pt> = { arrowleft: { x: -1, y: 0 }, arrowright: { x: 1, y: 0 }, arrowup: { x: 0, y: -1 }, arrowdown: { x: 0, y: 1 } };
       const v = dirs[k];
-      const ids = new Set(selection.nodes);
+      const ids = withContents(selection.nodes.filter((id) => !diagram.nodes.find((n) => n.id === id)?.locked));
       commit(
         (d) => ({ ...d, nodes: d.nodes.map((n) => (ids.has(n.id) && !n.locked ? { ...n, x: n.x + v.x * step, y: n.y + v.y * step } : n)) }),
         'push',
@@ -405,7 +492,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
   return (
     <div
-      className={`isd-root ${props.className ?? ''}`}
+      ref={rootRef}
+      className={`isd-root${compact ? ' is-compact' : ''} ${props.className ?? ''}`}
       style={props.style}
       onKeyDown={onKeyDown}
       onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
@@ -420,7 +508,13 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       }}
     >
       {/* ---------- toolbar ---------- */}
+      <div className="isd-toolbar-wrap">
       <div className="isd-toolbar">
+        {!readOnly && (
+          <div className="isd-group">
+            <ToolButton icon="panelL" label={paletteOpen ? 'Hide shapes & icons' : 'Show shapes & icons'} active={paletteOpen} onClick={() => setPaletteOpen(!paletteOpen)} />
+          </div>
+        )}
         <div className="isd-group">
           <ToolButton icon="cube" label="2.5D view (Tab)" active={view === '3d'} onClick={() => changeProjection('3d', rotation)}>
             2.5D
@@ -445,10 +539,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             <ToolButton icon="redo" label="Redo (⇧⌘Z)" disabled={!hist.future.length} onClick={redo} />
           </div>
         )}
-        <div className="isd-group">
+        <div className="isd-group isd-hide-compact">
           <ToolButton icon="minus" label="Zoom out" onClick={() => zoomBy(1 / 1.25)} />
           <span className="isd-zoom">{Math.round(camera.zoom * 100)}%</span>
           <ToolButton icon="plus" label="Zoom in" onClick={() => zoomBy(1.25)} />
+        </div>
+        <div className="isd-group">
           <ToolButton icon="fit" label="Fit to content" onClick={() => fitTo(diagram, proj)} />
           <ToolButton icon="grid" label="Toggle grid" active={showGrid} onClick={() => setShowGrid(!showGrid)} />
           <ToolButton icon={animate ? 'pause' : 'play'} label={animate ? 'Pause connection animations' : 'Play connection animations'} onClick={() => setAnimate(!animate)} />
@@ -461,18 +557,16 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             </ToolButton>
           </div>
         )}
-        <div className="isd-group isd-menu-wrap">
+        <div className="isd-group">
           <ToolButton icon="download" label="Export" active={exportOpen} onClick={() => setExportOpen(!exportOpen)}>
             Export
           </ToolButton>
-          {exportOpen && (
-            <div className="isd-menu" onMouseLeave={() => setExportOpen(false)}>
-              <button type="button" onClick={() => doExport('png')}>PNG image</button>
-              <button type="button" onClick={() => doExport('svg')}>SVG vector</button>
-              <button type="button" onClick={() => doExport('json')}>Diagram JSON</button>
-            </div>
-          )}
         </div>
+        {!readOnly && (
+          <div className="isd-group">
+            <ToolButton icon="panelR" label={inspectorOpen ? 'Hide inspector' : 'Show inspector'} active={inspectorOpen} onClick={() => setInspectorOpen(!inspectorOpen)} />
+          </div>
+        )}
         <input
           ref={fileInput}
           type="file"
@@ -496,11 +590,25 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           }}
         />
       </div>
+      {/* Outside the scrolling toolbar so it is never clipped. */}
+      {exportOpen && (
+        <div className="isd-menu" onMouseLeave={() => setExportOpen(false)}>
+          <button type="button" onClick={() => doExport('png')}>PNG image</button>
+          <button type="button" onClick={() => doExport('svg')}>SVG vector</button>
+          <button type="button" onClick={() => doExport('json')}>Diagram JSON</button>
+        </div>
+      )}
+      </div>
 
       <div className="isd-body">
         {/* ---------- palette ---------- */}
-        {!readOnly && (
+        {!readOnly && paletteOpen && (
           <aside className="isd-palette">
+            {compact && (
+              <button type="button" className="isd-drawer-close" aria-label="Close panel" onClick={() => setPaletteOpen(false)}>
+                <Icon name="close" />
+              </button>
+            )}
             <div className="isd-tabs" role="tablist">
               {[{ id: 'shapes', name: 'Shapes' }, ...libraries].map((t) => (
                 <button key={t.id} type="button" role="tab" aria-selected={paletteTab === t.id} className={paletteTab === t.id ? 'is-active' : ''} onClick={() => setPaletteTab(t.id)}>
@@ -622,11 +730,24 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         </div>
 
         {/* ---------- inspector ---------- */}
-        {!readOnly && (
+        {!readOnly && inspectorOpen && (
           <aside className="isd-inspector">
+            {compact && (
+              <button type="button" className="isd-drawer-close" aria-label="Close inspector" onClick={() => setInspectorOpen(false)}>
+                <Icon name="close" />
+              </button>
+            )}
             {selNode ? (
               <NodeInspector
                 node={selNode}
+                parent={containerOf(selNode, diagram.nodes)}
+                contents={isContainer(selNode) ? descendantsOf([selNode.id], diagram.nodes).size : 0}
+                onSelectNodes={(ids) => setSelection({ nodes: ids, edges: [] })}
+                onSelectContents={() =>
+                  setSelection({ nodes: diagram.nodes.filter((n) => containerOf(n, diagram.nodes)?.id === selNode.id).map((n) => n.id), edges: [] })
+                }
+                onFitContents={() => fitContainer(selNode.id)}
+                onUngroup={ungroupSelection}
                 onChange={(patch, key) => updateNode(selNode.id, patch, key)}
                 onDelete={deleteSelection}
                 onDuplicate={() => {
@@ -651,6 +772,9 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 <Field label="Elevation">
                   <NumberInput value={diagram.nodes.find((n) => n.id === selection.nodes[0])?.z ?? 0} onChange={(z) => updateNodes(selection.nodes, { z })} />
                 </Field>
+                <button type="button" className="isd-btn" onClick={groupSelection} title="Wrap the selection in a new area (⌘G)">
+                  <Icon name="group" /> Group into area
+                </button>
                 <div className="isd-row">
                   <button type="button" className="isd-btn" onClick={() => { copySelection(); paste(); }}>
                     <Icon name="copy" /> Duplicate
@@ -674,6 +798,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                   <dt>Arrows</dt><dd>Nudge</dd>
                   <dt>Alt + drag</dt><dd>Move without snapping</dd>
                   <dt>⌘D / ⌘C / ⌘V</dt><dd>Duplicate / copy / paste</dd>
+                  <dt>⌘G / ⇧⌘G</dt><dd>Group into area / ungroup</dd>
                   <dt>⌘Z / ⇧⌘Z</dt><dd>Undo / redo</dd>
                 </dl>
                 {diagram.nodes.length > 0 && (
@@ -731,16 +856,30 @@ const KIND_NAMES: Record<ShapeKind, string> = {
 
 function NodeInspector({
   node,
+  parent,
+  contents,
   onChange,
   onDelete,
   onDuplicate,
   onReorder,
+  onSelectNodes,
+  onSelectContents,
+  onFitContents,
+  onUngroup,
 }: {
   node: DiagramNode;
+  /** Container this node sits in, if any. */
+  parent?: DiagramNode;
+  /** Number of items inside this node (containers only). */
+  contents: number;
   onChange: (patch: Partial<DiagramNode>, key?: string) => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onReorder: (dir: 'front' | 'back') => void;
+  onSelectNodes: (ids: string[]) => void;
+  onSelectContents: () => void;
+  onFitContents: () => void;
+  onUngroup: () => void;
 }) {
   const flat = isFlat(node);
   const isArea = node.kind === 'area' || node.kind === 'circleArea';
@@ -748,6 +887,31 @@ function NodeInspector({
   return (
     <div className="isd-panel">
       <h3>{KIND_NAMES[node.kind]}</h3>
+      {parent && (
+        <button type="button" className="isd-breadcrumb" onClick={() => onSelectNodes([parent.id])} title="Select the containing area">
+          Inside <strong>{parent.label || KIND_NAMES[parent.kind]}</strong>
+        </button>
+      )}
+      {isContainer(node) && (
+        <div className="isd-container-box">
+          <span>
+            {contents ? `Contains ${contents} item${contents === 1 ? '' : 's'} — they move with this area.` : 'Drop shapes inside to group them with this area.'}
+          </span>
+          {contents > 0 && (
+            <div className="isd-row">
+              <button type="button" className="isd-btn" onClick={onSelectContents}>
+                Select contents
+              </button>
+              <button type="button" className="isd-btn" onClick={onFitContents} title="Resize to wrap the contents">
+                Fit
+              </button>
+              <button type="button" className="isd-btn" onClick={onUngroup} title="Remove the area, keep its contents (⇧⌘G)">
+                Ungroup
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {node.kind === 'text' ? (
         <Field label="Text">
           <textarea className="isd-input" rows={3} value={node.text ?? ''} onChange={(e) => onChange({ text: e.target.value }, 'text')} />
@@ -849,8 +1013,8 @@ function NodeInspector({
         <button type="button" className="isd-btn" onClick={onDuplicate}>
           <Icon name="copy" /> Duplicate
         </button>
-        <button type="button" className="isd-btn is-danger" onClick={onDelete}>
-          <Icon name="trash" /> Delete
+        <button type="button" className="isd-btn is-danger" onClick={onDelete} title={contents ? 'Deletes the area and everything inside it' : undefined}>
+          <Icon name="trash" /> {contents ? 'Delete all' : 'Delete'}
         </button>
       </div>
     </div>
