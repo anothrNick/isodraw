@@ -17,7 +17,7 @@ export interface IsoDiagramEditorProps {
   /** Initial diagram when uncontrolled. */
   defaultValue?: Diagram;
   onChange?: (d: Diagram) => void;
-  /** Initial view mode. */
+  /** View for diagrams that do not set one (`diagram.view`). */
   defaultView?: ViewMode;
   /** Extra icon libraries to show in the palette. */
   iconLibraries?: IconLibrary[];
@@ -61,7 +61,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     future: [],
   }));
   const diagram = hist.d;
-  const [view, setView] = useState<ViewMode>(props.defaultView ?? '3d');
+  // The view is a diagram setting, so Edit, View and published pages agree.
+  const view: ViewMode = diagram.view ?? props.defaultView ?? '3d';
   const [rotation, setRotation] = useState<Rotation>(0);
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
@@ -148,10 +149,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     setHist((h) => ({ d: h.d, past: [...h.past, h.d].slice(-HISTORY_LIMIT), future: [] }));
   }, []);
 
+  /** Undo and redo restore content but keep the current view setting. */
+  const withView = (d: Diagram, from: Diagram): Diagram => (d.view === from.view ? d : { ...d, view: from.view });
   const undo = () =>
-    setHist((h) => (h.past.length ? { d: h.past[h.past.length - 1], past: h.past.slice(0, -1), future: [h.d, ...h.future] } : h));
+    setHist((h) => (h.past.length ? { d: withView(h.past[h.past.length - 1], h.d), past: h.past.slice(0, -1), future: [h.d, ...h.future] } : h));
   const redo = () =>
-    setHist((h) => (h.future.length ? { d: h.future[0], past: [...h.past, h.d], future: h.future.slice(1) } : h));
+    setHist((h) => (h.future.length ? { d: withView(h.future[0], h.d), past: [...h.past, h.d], future: h.future.slice(1) } : h));
 
   // Switch between docked panels and drawers based on the editor's own width.
   useLayoutEffect(() => {
@@ -289,7 +292,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     const s = np.project(c.x, c.y);
     const { w, h } = stageSize();
     setCamera({ ...camera, x: w / 2 - s.x * camera.zoom, y: h / 2 - s.y * camera.zoom });
-    setView(nextView);
+    // A display setting, not an edit: it stays out of undo history.
+    if (nextView !== view) setHist((h) => ({ ...h, d: { ...h.d, view: nextView } }));
     setRotation(nextRot);
   };
 

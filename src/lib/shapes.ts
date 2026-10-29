@@ -131,6 +131,7 @@ export function parseDiagram(json: unknown): Diagram {
     nodes: obj.nodes.map((n) => ({ ...n, z: n.z ?? 0, h: n.h ?? 0 })),
     edges: obj.edges.filter((e) => ids.has(e.from) && ids.has(e.to)).map(migrateEdge),
     ...(typeof obj.doc === 'string' ? { doc: obj.doc } : {}),
+    ...(obj.view === '2d' || obj.view === '3d' ? { view: obj.view } : {}),
   };
 }
 

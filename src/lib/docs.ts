@@ -167,6 +167,7 @@ export function componentScene(d: Diagram, id: string): Diagram {
   const ids = new Set([id, ...descendantsOf([id], d.nodes)]);
   return {
     version: 1,
+    ...(d.view ? { view: d.view } : {}),
     nodes: d.nodes.filter((n) => ids.has(n.id)),
     edges: d.edges.filter((e) => ids.has(e.from) && ids.has(e.to)),
   };
