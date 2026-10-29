@@ -521,10 +521,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 <div className="isd-section-title">Images & logos</div>
                 <div className="isd-import-row">
                   <button type="button" className="isd-btn" onClick={() => imageInput.current?.click()}>
-                    <Icon name="image" /> Upload images
+                    <Icon name="upload" /> Upload
                   </button>
                   <button type="button" className="isd-btn" onClick={addImageUrl}>
-                    From URL
+                    <Icon name="link" /> From URL
                   </button>
                 </div>
                 <p className="isd-hint">Tip: drop image files anywhere on the editor to import them.</p>
@@ -538,10 +538,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                   {paletteTab === 'mine' && (
                     <div className="isd-import-row">
                       <button type="button" className="isd-btn" onClick={() => imageInput.current?.click()}>
-                        <Icon name="image" /> Upload
+                        <Icon name="upload" /> Upload
                       </button>
                       <button type="button" className="isd-btn" onClick={addImageUrl}>
-                        From URL
+                        <Icon name="link" /> From URL
                       </button>
                     </div>
                   )}
