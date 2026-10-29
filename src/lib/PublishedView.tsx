@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { containerOf, isContainer, parentMap } from './containers';
 import { DocEditor } from './DocsPanel';
 import { componentScene, edgeTitle, hasDoc, mentionables, nodeTitle } from './docs';
-import type { IsoDiagramPublishedProps } from './Published';
+import type { PublishedViewProps } from './Published';
+import { ThemeContext } from './theme';
 import { StaticDiagram } from './render';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { KIND_NAMES } from './shapes';
@@ -82,7 +83,7 @@ function ReadOnlyDoc({ markdown, diagram, onNavigate }: { markdown: string; diag
   );
 }
 
-export default function PublishedView({ diagram, title, useHash, className, style }: IsoDiagramPublishedProps) {
+export default function PublishedView({ diagram, title, useHash, resolvedTheme, className, style }: PublishedViewProps) {
   const toc = useMemo(() => tableOfContents(diagram), [diagram]);
   const byId = useMemo(() => new Map(diagram.nodes.map((n) => [n.id, n])), [diagram.nodes]);
   const [page, setPage] = useState<Page>(() => (useHash ? readHash() : OVERVIEW));
@@ -139,7 +140,8 @@ export default function PublishedView({ diagram, title, useHash, className, styl
   const pageTitle = (p: Page) => (p === OVERVIEW ? 'Overview' : nodeTitle(byId.get(p)!));
 
   return (
-    <div className={`isd-pub ${tocOpen ? 'toc-open' : ''} ${className ?? ''}`} style={style}>
+    <ThemeContext.Provider value={resolvedTheme}>
+    <div className={`isd-pub ${tocOpen ? 'toc-open' : ''} ${className ?? ''}`} data-theme={resolvedTheme} style={style}>
       <aside className="isd-pub-toc" aria-label="Table of contents">
         <div className="isd-pub-brand">
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
@@ -200,6 +202,7 @@ export default function PublishedView({ diagram, title, useHash, className, styl
         </article>
       </main>
     </div>
+    </ThemeContext.Provider>
   );
 }
 

@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import { useResolvedTheme, type ResolvedTheme, type Theme } from './theme';
 import type { Diagram } from './types';
 
 export interface IsoDiagramPublishedProps {
@@ -7,6 +8,8 @@ export interface IsoDiagramPublishedProps {
   title?: string;
   /** Keep the current page in `location.hash` so pages can be linked and the back button works. */
   useHash?: boolean;
+  /** Color theme (default light). */
+  theme?: Theme;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -20,9 +23,19 @@ const PublishedView = lazy(() => import('./PublishedView'));
  * top, its documentation, and its connections at the bottom.
  */
 export function IsoDiagramPublished(props: IsoDiagramPublishedProps) {
+  const theme = useResolvedTheme(props.theme);
   return (
-    <Suspense fallback={<div className="isd-pub isd-pub-loading">Loading…</div>}>
-      <PublishedView {...props} />
+    <Suspense
+      fallback={
+        <div className="isd-pub isd-pub-loading" data-theme={theme}>
+          Loading…
+        </div>
+      }
+    >
+      <PublishedView {...props} resolvedTheme={theme} />
     </Suspense>
   );
 }
+
+/** Props the lazy view receives: the theme is resolved once, up front. */
+export type PublishedViewProps = IsoDiagramPublishedProps & { resolvedTheme: ResolvedTheme };

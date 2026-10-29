@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { IsoDiagramEditor, IsoDiagramPublished, emptyDiagram, type Diagram, type IconDef } from '../lib';
+import { IsoDiagramEditor, IsoDiagramPublished, emptyDiagram, useResolvedTheme, type Diagram, type IconDef, type Theme } from '../lib';
 import { EXAMPLES } from './examples';
 import { sampleDiagram } from './sample';
 
 const KEY = 'isodraw-demo:diagram';
 const ICONS_KEY = 'isodraw-demo:icons';
+const THEME_KEY = 'isodraw-demo:theme';
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -21,6 +22,20 @@ export function App() {
   // Remounting the editor re-fits the camera after a reset.
   const [epoch, setEpoch] = useState(0);
   const [mode, setMode] = useState<'edit' | 'view' | 'published'>(() => (window.location.hash.startsWith('#/') ? 'published' : 'edit'));
+  const [theme, setTheme] = useState<Theme>(() => load<Theme>(THEME_KEY, 'system'));
+  const resolved = useResolvedTheme(theme);
+
+  // The demo page follows the same theme as the components.
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolved;
+  }, [resolved]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(THEME_KEY, JSON.stringify(theme));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [theme]);
 
   useEffect(() => {
     try {
@@ -79,6 +94,19 @@ export function App() {
               </button>
             ))}
           </div>
+          <div className="demo-modes" role="radiogroup" aria-label="Theme">
+            {(
+              [
+                ['light', 'Light', 'Light theme'],
+                ['dark', 'Dark', 'Dark theme'],
+                ['system', 'Auto', 'Match the operating system'],
+              ] as const
+            ).map(([t, label, hint]) => (
+              <button key={t} type="button" role="radio" aria-checked={theme === t} className={theme === t ? 'is-on' : ''} title={hint} onClick={() => setTheme(t)}>
+                {label}
+              </button>
+            ))}
+          </div>
           <label className="demo-select" title="Load an example diagram (replaces the current one)">
             <span>Examples</span>
             <select
@@ -104,7 +132,7 @@ export function App() {
       </header>
       <main className="demo-main">
         {mode === 'published' ? (
-          <IsoDiagramPublished diagram={diagram} useHash />
+          <IsoDiagramPublished diagram={diagram} useHash theme={theme} />
         ) : (
         <IsoDiagramEditor
           key={epoch}
@@ -113,6 +141,7 @@ export function App() {
           userIcons={icons}
           onUserIconsChange={setIcons}
           readOnly={mode === 'view'}
+          theme={theme}
         />
         )}
       </main>

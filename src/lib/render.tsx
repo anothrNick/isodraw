@@ -1,4 +1,4 @@
-import { Fragment, useId, type CSSProperties, type MouseEvent as RMouseEvent, type ReactNode } from 'react';
+import { Fragment, useId, useMemo, type CSSProperties, type MouseEvent as RMouseEvent, type ReactNode } from 'react';
 import {
   TILE,
   Projector,
@@ -16,6 +16,7 @@ import {
   solidFaces,
 } from './geometry';
 import { depthMap } from './containers';
+import { INK, themedDiagram, useTheme } from './theme';
 import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget, LineStyle, MarkerKind } from './types';
 
@@ -165,6 +166,7 @@ export function labelAnchor(node: DiagramNode, proj: Projector): Pt {
 }
 
 function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
+  const theme = useTheme();
   if (!node.label || node.kind === 'text') return null;
   if (node.kind === 'area') {
     // Area labels sit inside the (upright) top-left corner, painted on the ground.
@@ -178,7 +180,7 @@ function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
           fontSize={13}
           fontWeight={700}
           dominantBaseline="hanging"
-          fill={node.labelColor ?? shade(node.color, 0.6)}
+          fill={node.labelColor ?? shade(node.color, theme === 'dark' ? 1.5 : 0.6)}
           style={{ userSelect: 'none' }} pointerEvents="none"
         >
           {node.label}
@@ -203,8 +205,8 @@ function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
       fontSize={12}
       fontWeight={600}
       textAnchor="middle"
-      fill={node.labelColor ?? '#1f2937'}
-      stroke="#ffffff"
+      fill={node.labelColor ?? INK[theme].text}
+      stroke={INK[theme].halo}
       strokeWidth={3}
       strokeLinejoin="round"
       paintOrder="stroke"
@@ -389,6 +391,7 @@ function dashMotion(from: number, to: number, seconds: number): CSSProperties {
 
 /** Animated overlays for an edge. */
 function EdgeAnimationLayer({ edge, d, length }: { edge: DiagramEdge; d: string; length: number }) {
+  const theme = useTheme();
   const anim = edge.animation ?? 'none';
   const w = edge.width;
   const speed = Math.max(0.1, edge.animationSpeed ?? 1);
@@ -413,7 +416,7 @@ function EdgeAnimationLayer({ edge, d, length }: { edge: DiagramEdge; d: string;
           const dash = `0.01 ${(gap - 0.01).toFixed(2)}`;
           return (
             <g key={lane}>
-              <path className="isd-anim" d={d} fill="none" stroke="#ffffff" strokeWidth={2 * r + 2.4} strokeLinecap="round" strokeDasharray={dash} style={motion} />
+              <path className="isd-anim" d={d} fill="none" stroke={INK[theme].halo} strokeWidth={2 * r + 2.4} strokeLinecap="round" strokeDasharray={dash} style={motion} />
               <path className="isd-anim" d={d} fill="none" stroke={fill} strokeWidth={2 * r} strokeLinecap="round" strokeDasharray={dash} style={motion} />
             </g>
           );
@@ -524,13 +527,14 @@ export function EdgeShape({
 }
 
 export function EdgeLabel({ edge, a, b, proj }: { edge: DiagramEdge; a: DiagramNode; b: DiagramNode; proj: Projector }) {
+  const theme = useTheme();
   if (!edge.label) return null;
   const mid = midpoint(edgeGeometry(edge, a, b, proj).screen);
   const labelW = edge.label.length * 6.6 + 12;
   return (
     <g data-edge-id={edge.id}>
-      <rect x={mid.x - labelW / 2} y={mid.y - 9} width={labelW} height={18} rx={9} fill="#ffffff" stroke={edge.color} strokeWidth={1} />
-      <text x={mid.x} y={mid.y} fontSize={11} fontWeight={600} textAnchor="middle" dominantBaseline="central" fill="#1f2937">
+      <rect x={mid.x - labelW / 2} y={mid.y - 9} width={labelW} height={18} rx={9} fill={INK[theme].chip} stroke={edge.color} strokeWidth={1} />
+      <text x={mid.x} y={mid.y} fontSize={11} fontWeight={600} textAnchor="middle" dominantBaseline="central" fill={INK[theme].text}>
         {edge.label}
       </text>
     </g>
@@ -540,7 +544,7 @@ export function EdgeLabel({ edge, a, b, proj }: { edge: DiagramEdge; a: DiagramN
 // ---------- scene ----------
 
 export function SceneContent({
-  diagram,
+  diagram: source,
   proj,
   idPrefix,
   selectedEdges,
@@ -553,6 +557,9 @@ export function SceneContent({
   /** Play edge animations (default true). */
   animate?: boolean;
 }) {
+  // Author colors adapted to the theme (dark grays become light grays in dark mode).
+  const theme = useTheme();
+  const diagram = useMemo(() => themedDiagram(source, theme), [source, theme]);
   const ground: DiagramNode[] = [];
   const solids: DiagramNode[] = [];
   for (const n of diagram.nodes) (isFlat(n) ? ground : solids).push(n);
