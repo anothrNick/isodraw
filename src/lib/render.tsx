@@ -10,6 +10,7 @@ import {
   isFlat,
   matrixAttr,
   pointsAttr,
+  flipTurns,
   readableTurns,
   shade,
   solidFaces,
@@ -23,11 +24,13 @@ const INSIDE_LABEL_2D = new Set(['block', 'cylinder', 'hexagon']);
 const INV_TILE = 1 / TILE;
 
 /**
- * A node's footprint as seen in its upright reading frame: rotate content by
- * `deg` about the center, and lay it out in a `w` × `d` box (swapped for odd turns).
+ * A node's footprint as seen in its upright reading frame: content is rotated
+ * about the center and laid out in a `w` × `d` box (swapped for odd turns).
+ * `flip` only ever turns 180° (for text, so it keeps its direction); `turn`
+ * may also turn 90° (for square logos, so they always face up).
  */
-function uprightFrame(node: DiagramNode, proj: Projector) {
-  const k = readableTurns(proj);
+function uprightFrame(node: DiagramNode, proj: Projector, mode: 'flip' | 'turn') {
+  const k = mode === 'flip' ? flipTurns(proj) : readableTurns(proj);
   const c = center(node);
   const odd = k % 2 === 1;
   return {
@@ -84,7 +87,7 @@ function ImageNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
     );
   }
   const top = style === 'tile' ? node.z + node.h : node.z;
-  const f = uprightFrame(node, proj);
+  const f = uprightFrame(node, proj, 'turn');
   return (
     <>
       {style === 'tile' && <SolidFaces node={{ ...node, kind: 'block' }} proj={proj} />}
@@ -129,7 +132,7 @@ function TextNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
   return (
     <Ground proj={proj} z={node.z}>
       <text
-        transform={uprightFrame(node, proj).transform}
+        transform={uprightFrame(node, proj, 'flip').transform}
         x={c.x * TILE}
         y={c.y * TILE - ((lines.length - 1) * fs * 1.2) / 2}
         fontSize={fs}
@@ -165,7 +168,7 @@ function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
   if (!node.label || node.kind === 'text') return null;
   if (node.kind === 'area') {
     // Area labels sit inside the (upright) top-left corner, painted on the ground.
-    const f = uprightFrame(node, proj);
+    const f = uprightFrame(node, proj, 'flip');
     return (
       <Ground proj={proj} z={node.z}>
         <text

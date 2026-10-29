@@ -108,6 +108,19 @@ export function readableTurns(proj: Projector): number {
   return best;
 }
 
+/**
+ * 0 or 2 quarter turns: flip ground-plane text 180° only when it would read
+ * upside down (its east-running baseline points left on screen), so it keeps
+ * running along the same axis as the diagram.
+ */
+export function flipTurns(proj: Projector): number {
+  const o = proj.project(0, 0);
+  const p = proj.project(1, 0);
+  const sx = p.x - o.x;
+  const sy = p.y - o.y;
+  return sx < -1e-6 || (Math.abs(sx) <= 1e-6 && sy < 0) ? 2 : 0;
+}
+
 export function matrixAttr(m: Matrix): string {
   return `matrix(${m.map((v) => +v.toFixed(5)).join(' ')})`;
 }
