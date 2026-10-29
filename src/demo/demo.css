@@ -1,0 +1,11 @@
+html, body, #root { height: 100%; margin: 0; }
+body { background: #eef2f7; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #0f172a; }
+.demo { display: flex; flex-direction: column; height: 100%; }
+.demo-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; gap: 12px; flex-wrap: wrap; }
+.demo-brand { display: flex; align-items: center; gap: 8px; }
+.demo-brand strong { font-size: 16px; }
+.demo-brand span { color: #64748b; font-size: 13px; }
+.demo-actions { display: flex; gap: 6px; }
+.demo-actions button { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
+.demo-actions button:hover { border-color: #2563eb; color: #2563eb; }
+.demo-main { flex: 1; min-height: 0; padding: 0 16px 16px; }
