@@ -248,7 +248,7 @@ export function NodeShape({ node, proj, idPrefix }: { node: DiagramNode; proj: P
   }
   const isArea = node.kind === 'area' || node.kind === 'circleArea';
   return (
-    <g data-node-id={node.id} opacity={isArea ? undefined : node.opacity ?? 1} style={{ cursor: node.locked ? 'default' : 'move' }}>
+    <g data-node-id={node.id} opacity={isArea ? undefined : node.opacity ?? 1}>
       {body}
     </g>
   );
@@ -408,7 +408,7 @@ export function EdgeShape({
   const speed = Math.max(0.1, edge.animationSpeed ?? 1);
   const reverse = edge.animationDirection === 'reverse';
   return (
-    <g data-edge-id={edge.id} style={{ cursor: 'pointer' }}>
+    <g data-edge-id={edge.id}>
       <defs>
         <Marker id={startId} kind={start} color={edge.color} />
         <Marker id={endId} kind={end} color={edge.color} />
@@ -450,7 +450,7 @@ export function EdgeLabel({ edge, a, b, proj }: { edge: DiagramEdge; a: DiagramN
   const mid = midpoint(edgeGeometry(edge, a, b, proj).screen);
   const labelW = edge.label.length * 6.6 + 12;
   return (
-    <g data-edge-id={edge.id} style={{ cursor: 'pointer' }}>
+    <g data-edge-id={edge.id}>
       <rect x={mid.x - labelW / 2} y={mid.y - 9} width={labelW} height={18} rx={9} fill="#ffffff" stroke={edge.color} strokeWidth={1} />
       <text x={mid.x} y={mid.y} fontSize={11} fontWeight={600} textAnchor="middle" dominantBaseline="central" fill="#1f2937">
         {edge.label}
