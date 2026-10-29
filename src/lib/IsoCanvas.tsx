@@ -820,12 +820,20 @@ export function IsoCanvas(props: IsoCanvasProps) {
 
   const hoverNode = hover && tool === 'connect' && !drag ? nodeById.get(hover) : undefined;
 
-  const cursor = drag?.type === 'pan' && drag.moved ? 'grabbing' : spaceDown ? 'grab' : tool === 'connect' ? 'crosshair' : 'default';
+  // Items keep the plain arrow on hover (a cursor per item flickers as the
+  // pointer crosses areas and connections); the drag itself sets the cursor.
+  const dragCursor =
+    drag?.type === 'pan' ? (drag.moved ? 'grabbing' : undefined)
+    : drag?.type === 'move' ? (drag.moved ? 'move' : undefined)
+    : drag?.type === 'connect' || drag?.type === 'edgeEnd' ? 'crosshair'
+    : drag?.type === 'segment' || drag?.type === 'waypoint' ? 'move'
+    : undefined;
+  const cursor = dragCursor ?? (spaceDown ? 'grab' : tool === 'connect' ? 'crosshair' : 'default');
 
   return (
     <svg
       ref={setSvg}
-      className="isd-canvas"
+      className={dragCursor ? 'isd-canvas isd-canvas-dragging' : 'isd-canvas'}
       tabIndex={0}
       style={{ cursor, touchAction: 'none' }}
       onPointerDown={onPointerDown}
