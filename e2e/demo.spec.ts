@@ -309,6 +309,25 @@ test.describe('detail diagrams', () => {
     await expect(page.getByRole('img', { name: 'Detail diagram' })).toBeVisible();
     await expect(page.locator('.isd-pub-doc .isd-embed.is-detail')).toContainText('Detail diagram · 6 items');
   });
+
+  test('published pages reach components at every level', async ({ page }) => {
+    await page.getByRole('radio', { name: 'Published' }).click();
+    const toc = page.locator('.isd-pub-toc');
+    // Two levels down: orders-api › validate() › stock levels.
+    await toc.getByRole('link', { name: 'stock levels' }).click();
+    expect(new URL(page.url()).hash).toBe('#/node/orders/validate/stock');
+    await expect(page.locator('.isd-pub-crumbs')).toHaveText('Overview›orders-api›validate()');
+    await expect(page.locator('.isd-pub-head')).toContainText('inside validate()');
+    await expect(page.locator('.isd-pub-pager')).toContainText('PreviousJSON schema');
+
+    // Up a level by crumb, then down again by clicking the detail diagram.
+    await page.locator('.isd-pub-crumbs').getByRole('link', { name: 'validate()' }).click();
+    await expect(page.locator('.isd-pub-head h1')).toHaveText('validate()');
+    await page.locator('.isd-pub-doc .isd-embed.is-detail [data-node-id="price"]').click();
+    await expect(page.locator('.isd-pub-head h1')).toHaveText('price & tax');
+    await page.goBack();
+    await expect(page.locator('.isd-pub-head h1')).toHaveText('validate()');
+  });
 });
 
 test.describe('Terraform import', () => {
