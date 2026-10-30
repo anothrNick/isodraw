@@ -46,6 +46,26 @@ interface History {
 const DocsPanel = lazy(() => import('./DocsPanel'));
 
 const HISTORY_LIMIT = 200;
+
+/** Side panel widths. Today's sizes are the minimums; dragging a panel's inner border widens it. */
+type Panel = 'palette' | 'inspector' | 'docs';
+const PANEL_MIN: Record<Panel, number> = { palette: 260, inspector: 260, docs: 440 };
+const PANEL_WIDTHS_KEY = 'isodraw:panel-widths';
+/** The canvas always keeps at least this much room. */
+const MIN_STAGE = 240;
+
+function loadPanelWidths(): Record<Panel, number> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PANEL_WIDTHS_KEY) ?? '{}') as Partial<Record<Panel, number>>;
+    const w = { ...PANEL_MIN };
+    for (const k of Object.keys(PANEL_MIN) as Panel[]) {
+      if (typeof saved[k] === 'number') w[k] = Math.max(PANEL_MIN[k], saved[k]!);
+    }
+    return w;
+  } catch {
+    return { ...PANEL_MIN };
+  }
+}
 const COMPACT_WIDTH = 1000;
 const NO_SELECTION: Selection = { nodes: [], edges: [] };
 
@@ -86,6 +106,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   /** Narrow editors show the side panels as drawers over the canvas. */
   const [compact, setCompact] = useState(false);
+  const [panelW, setPanelW] = useState(loadPanelWidths);
+  const [resizing, setResizing] = useState<Panel | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [docsOpen, setDocsOpen] = useState(false);
@@ -236,7 +258,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     if (!p) return;
     const { w, h } = stageSize();
     // Keep the item clear of the docs drawer on the right.
-    const visibleW = compact ? w : Math.max(w / 2, w - 440);
+    const visibleW = compact ? w : Math.max(w / 2, w - panelW.docs);
     setCamera((c) => ({ ...c, x: visibleW / 2 - p!.x * c.zoom, y: h / 2 - p!.y * c.zoom }));
   };
 
@@ -569,6 +591,66 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     e.dataTransfer.effectAllowed = 'copy';
   };
 
+  // ----- panel resizing -----
+  /** Widest a panel may get while leaving the canvas (and the other open panels) room. */
+  const maxWidth = (panel: Panel) => {
+    const total = rootRef.current?.clientWidth ?? 1200;
+    if (panel === 'docs') return Math.max(PANEL_MIN.docs, (stageRef.current?.clientWidth ?? total) - 80);
+    const other = panel === 'palette' ? (inspectorOpen ? panelW.inspector : 0) : paletteOpen ? panelW.palette : 0;
+    return Math.max(PANEL_MIN[panel], total - other - MIN_STAGE);
+  };
+  const saveWidths = (w: Record<Panel, number>) => {
+    try {
+      localStorage.setItem(PANEL_WIDTHS_KEY, JSON.stringify(w));
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  /** Drag handler for a panel border. `dir` is +1 when dragging right widens the panel, -1 when dragging left does. */
+  const startResize = (panel: Panel, dir: 1 | -1) => (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    const startX = e.clientX;
+    const startW = panelW[panel];
+    const max = maxWidth(panel);
+    let latest = panelW;
+    handle.setPointerCapture(e.pointerId);
+    setResizing(panel);
+    const move = (ev: PointerEvent) => {
+      const w = Math.round(Math.min(max, Math.max(PANEL_MIN[panel], startW + dir * (ev.clientX - startX))));
+      setPanelW((cur) => (latest = { ...cur, [panel]: w }));
+    };
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      setResizing(null);
+      saveWidths(latest);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  };
+  const resetWidth = (panel: Panel) =>
+    setPanelW((cur) => {
+      const next = { ...cur, [panel]: PANEL_MIN[panel] };
+      saveWidths(next);
+      return next;
+    });
+  const resizer = (panel: Panel, dir: 1 | -1, label: string) =>
+    compact ? null : (
+      <div
+        className={`isd-resizer is-${panel}${resizing === panel ? ' is-active' : ''}`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`Resize ${label}`}
+        title="Drag to resize · double-click to reset"
+        onPointerDown={startResize(panel, dir)}
+        onDoubleClick={() => resetWidth(panel)}
+      />
+    );
+
   const selNode = selection.nodes.length === 1 ? diagram.nodes.find((n) => n.id === selection.nodes[0]) : undefined;
   const selEdge = selection.edges.length === 1 && !selection.nodes.length ? diagram.edges.find((e) => e.id === selection.edges[0]) : undefined;
 
@@ -577,8 +659,15 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     <div
       ref={rootRef}
       data-theme={theme}
-      className={`isd-root${compact ? ' is-compact' : ''} ${props.className ?? ''}`}
-      style={props.style}
+      className={`isd-root${compact ? ' is-compact' : ''}${resizing ? ' is-resizing' : ''} ${props.className ?? ''}`}
+      style={
+        {
+          '--isd-palette-w': `${panelW.palette}px`,
+          '--isd-inspector-w': `${panelW.inspector}px`,
+          '--isd-docs-w': `${panelW.docs}px`,
+          ...props.style,
+        } as React.CSSProperties
+      }
       onKeyDown={onKeyDown}
       onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
       onDrop={(e) => {
@@ -781,6 +870,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             )}
           </aside>
         )}
+        {!readOnly && paletteOpen && resizer('palette', 1, 'shapes panel')}
 
         {/* ---------- canvas ---------- */}
         <div className="isd-stage" ref={stageRef}>
@@ -820,6 +910,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             {view === '3d' ? `2.5D · ${['N', 'E', 'S', 'W'][rotation]}` : 'Flat'} · {diagram.nodes.length} nodes · {diagram.edges.length} connections
           </div>
           {toast && <div className="isd-toast">{toast}</div>}
+          {docsOpen && resizer('docs', -1, 'docs panel')}
           {docsOpen && (
             <Suspense fallback={<aside className="isd-docs isd-docs-loading">Loading editor…</aside>}>
               <DocsPanel
@@ -837,6 +928,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         </div>
 
         {/* ---------- inspector ---------- */}
+        {!readOnly && inspectorOpen && resizer('inspector', -1, 'properties panel')}
         {!readOnly && inspectorOpen && (
           <aside className="isd-inspector">
             {compact && (
