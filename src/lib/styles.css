@@ -151,6 +151,34 @@
   position: absolute; left: 10px; bottom: 10px; padding: 3px 9px; border-radius: 999px; font-size: 11px;
   background: var(--isd-glass); border: 1px solid var(--isd-border); color: var(--isd-muted); pointer-events: none;
 }
+/* ----- detail diagram levels ----- */
+.isd-level-view { position: absolute; inset: 0; }
+.isd-level-view.is-in { animation: isd-level-in 220ms ease-out; }
+.isd-level-view.is-out { animation: isd-level-out 220ms ease-out; }
+@keyframes isd-level-in { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: none; } }
+@keyframes isd-level-out { from { opacity: 0; transform: scale(1.12); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .isd-level-view.is-in, .isd-level-view.is-out { animation: none; } }
+.isd-levels {
+  position: absolute; left: 10px; top: 10px; z-index: 5; display: flex; align-items: center; flex-wrap: wrap; gap: 2px;
+  max-width: calc(100% - 20px); padding: 3px 10px 3px 3px; border-radius: 999px; font-size: 12px;
+  background: var(--isd-glass); border: 1px solid var(--isd-border); color: var(--isd-muted);
+  box-shadow: 0 4px 14px rgb(var(--isd-shadow) / 0.1);
+}
+.isd-levels > span { display: inline-flex; align-items: center; gap: 2px; }
+.isd-levels button { border: 0; background: none; padding: 2px 5px; border-radius: 999px; font: inherit; color: inherit; cursor: pointer; }
+.isd-levels button:hover { background: var(--isd-accent-soft); color: var(--isd-accent); }
+.isd-levels .isd-levels-up { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; margin-right: 2px; background: var(--isd-bg); border: 1px solid var(--isd-border); }
+.isd-levels strong { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; color: var(--isd-text); font-weight: 600; }
+.isd-level-empty {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: min(360px, calc(100% - 40px));
+  padding: 10px 14px; border-radius: 10px; border: 1px dashed var(--isd-border); background: var(--isd-glass);
+  color: var(--isd-muted); font-size: 13px; text-align: center; pointer-events: none;
+}
+.isd-detail-badge { cursor: pointer; }
+.isd-detail-badge rect { fill: var(--isd-accent, #2563eb); stroke: var(--isd-bg, #fff); stroke-width: 1; }
+.isd-detail-badge path { fill: none; stroke: var(--isd-on-accent, #fff); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
+.isd-detail-badge:hover rect { fill: var(--isd-accent-strong, #1d4ed8); }
+
 .isd-toast {
   position: absolute; left: 50%; top: 14px; transform: translateX(-50%); padding: 7px 14px; border-radius: 8px;
   background: var(--isd-inverse-bg); color: var(--isd-inverse-text); font-weight: 500; box-shadow: 0 6px 18px rgb(var(--isd-shadow) / 0.25);
@@ -238,6 +266,14 @@ textarea.isd-input { resize: vertical; }
 .isd-docs-crumbs button { border: 0; background: none; padding: 1px 3px; border-radius: 4px; font: inherit; color: inherit; cursor: pointer; }
 .isd-docs-crumbs button:hover { background: var(--isd-panel); color: var(--isd-accent); }
 .isd-docs-title { position: relative; padding-right: 72px; margin-top: 4px; }
+.isd-docs-areas button { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.isd-docs-areas button:hover { color: var(--isd-accent); }
+.isd-docs-detail {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-bottom: 1px solid var(--isd-border);
+  background: var(--isd-accent-soft); color: var(--isd-accent); font-size: 12px; font-weight: 600;
+}
+.isd-docs-detail span { flex: 1; }
+.isd-embed-bar > span { display: inline-flex; align-items: center; gap: 5px; }
 .isd-docs-title h2 { margin: 0; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
 .isd-docs-title small { color: var(--isd-muted); font-size: 12px; }
 .isd-docs-title .isd-drawer-close { top: -2px; }

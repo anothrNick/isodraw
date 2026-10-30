@@ -73,6 +73,12 @@ describe.each(EXAMPLES.map((e) => [e.id, e] as const))('example %s', (id, exampl
     }
   });
 
+  it('only shows detail diagrams in components that have one', () => {
+    for (const n of d.nodes) {
+      if (n.doc?.includes('```isodraw-detail')) expect(n.detail, n.id).toBeTruthy();
+    }
+  });
+
   it('embeds valid diagrams', () => {
     for (const md of allDocs(d)) {
       for (const [, json] of md.matchAll(/```isodraw\n([\s\S]*?)\n```/g)) {

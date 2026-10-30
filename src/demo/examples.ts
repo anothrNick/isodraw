@@ -30,7 +30,7 @@ function edge(id: string, from: string, to: string, extra: Partial<DiagramEdge> 
 // Serverless order API
 // ---------------------------------------------------------------------------
 
-/** Embedded in the orders-api page: what happens inside one invocation. */
+/** The orders-api component's detail diagram: what happens inside one invocation. */
 const ordersInternals: Diagram = {
   version: 1,
   nodes: [
@@ -192,7 +192,7 @@ export interface Example {
 
 export const EXAMPLES: Example[] = [
   { id: 'three-tier', name: 'Three-tier web app', diagram: sampleDiagram },
-  { id: 'serverless', name: 'Serverless order API', diagram: withDocs(serverless, serverlessDocs, { ordersInternals }) },
+  { id: 'serverless', name: 'Serverless order API', diagram: withDocs({ ...serverless, nodes: serverless.nodes.map((n) => (n.id === 'orders' ? { ...n, detail: ordersInternals } : n)) }, serverlessDocs) },
   { id: 'streaming', name: 'Streaming IoT pipeline', diagram: withDocs(streaming, streamingDocs) },
   { id: 'kubernetes', name: 'Kubernetes microservices', diagram: withDocs(kubernetes, kubernetesDocs) },
   { id: 'terraform', name: 'Imported from Terraform (AWS)', diagram: terraformExample },

@@ -53,8 +53,10 @@ export interface IsoCanvasProps {
    * selection (default), always, or never.
    */
   showDocBadges?: 'hover' | 'always' | 'never';
-  /** A doc badge was clicked, or an item was double-clicked. */
+  /** A doc badge was clicked, or an item without a detail diagram was double-clicked. */
   onOpenDocs?: (target: DocTarget) => void;
+  /** A component's detail badge was clicked, or the component was double-clicked. */
+  onOpenDetail?: (id: string) => void;
   /** Emphasise this node or connection, e.g. while a doc mention of it is hovered. */
   focus?: DocTarget | null;
 }
@@ -248,7 +250,12 @@ export function IsoCanvas(props: IsoCanvasProps) {
     const nodeId = closestAttr(e.target, 'data-node-id');
     const edgeId = closestAttr(e.target, 'data-edge-id');
     const badge = closestAttr(e.target, 'data-doc-badge');
+    const detailBadge = closestAttr(e.target, 'data-detail-badge');
 
+    if (detailBadge) {
+      props.onOpenDetail?.(detailBadge);
+      return;
+    }
     if (badge) {
       const [kind, id] = badge.split(':') as ['node' | 'edge', string];
       onSelectionChange(kind === 'node' ? { nodes: [id], edges: [] } : { nodes: [], edges: [id] });
@@ -500,11 +507,14 @@ export function IsoCanvas(props: IsoCanvasProps) {
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
-    const handle = closestAttr(e.target, 'data-handle');
+    // Pointer capture retargets the click to the canvas itself, so look at what is under the pointer.
+    const hit = (e.target === e.currentTarget && document.elementFromPoint?.(e.clientX, e.clientY)) || e.target;
+    const handle = closestAttr(hit, 'data-handle');
     if (!handle) {
-      const nodeId = closestAttr(e.target, 'data-node-id');
-      const edgeId = closestAttr(e.target, 'data-edge-id');
-      if (nodeId) props.onOpenDocs?.({ kind: 'node', id: nodeId });
+      const nodeId = closestAttr(hit, 'data-node-id');
+      const edgeId = closestAttr(hit, 'data-edge-id');
+      if (nodeId && nodeById.get(nodeId)?.detail && props.onOpenDetail) props.onOpenDetail(nodeId);
+      else if (nodeId) props.onOpenDocs?.({ kind: 'node', id: nodeId });
       else if (edgeId) props.onOpenDocs?.({ kind: 'edge', id: edgeId });
       return;
     }
@@ -820,6 +830,33 @@ export function IsoCanvas(props: IsoCanvasProps) {
             }),
         ];
 
+  // Detail badges are how you find the way in, so they always show.
+  const detailBadges = diagram.nodes
+    .filter((n) => n.detail)
+    .map((n) => {
+      const flat = isFlat(n) || n.kind === 'sphere';
+      const top = flat ? n.z : n.z + n.h;
+      const pts = footprint(n).map((q) => proj.project(q.x, q.y, top));
+      // Solids: beside the left corner of the top face (the doc badge takes the right). Areas: beside the doc badge.
+      let p: Pt;
+      if (flat) {
+        const c = proj.project(center(n).x, center(n).y, top);
+        const back = pts.reduce((a, b) => (b.y < a.y ? b : a));
+        p = { x: back.x + (c.x - back.x) * 0.12 + badgeSize * 1.3, y: back.y + (c.y - back.y) * 0.12 + badgeSize };
+      } else {
+        const left = pts.reduce((a, b) => (b.x < a.x ? b : a));
+        p = { x: left.x - badgeSize * 0.2, y: left.y - badgeSize * 0.9 };
+      }
+      const items = n.detail!.nodes.filter((x) => x.kind !== 'text').length;
+      return (
+        <g key={`detail:${n.id}`} className="isd-detail-badge" data-detail-badge={n.id} transform={`translate(${p.x} ${p.y}) scale(${1 / camera.zoom})`}>
+          <title>{`Open the detail diagram of ${n.label || n.kind} (${items} item${items === 1 ? '' : 's'})`}</title>
+          <rect x={-7} y={-7} width={14} height={14} rx={3.5} />
+          <path d="M0,-4.2 L4.2,-2 L0,0.2 L-4.2,-2 Z M-4.2,0.6 L0,2.8 L4.2,0.6 M-4.2,3.2 L0,5.4 L4.2,3.2" />
+        </g>
+      );
+    });
+
   const hoverNode = hover && tool === 'connect' && !drag ? nodeById.get(hover) : undefined;
 
   // Items keep the plain arrow on hover (a cursor per item flickers as the
@@ -896,6 +933,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
           )}
           <g pointerEvents="none">{overlay}</g>
           {docBadges}
+          {detailBadges}
           {handles}
           {edgeHandles}
           {preview}

@@ -52,6 +52,8 @@ export interface DiagramNode {
   locked?: boolean;
   /** Markdown documentation for this node. */
   doc?: string;
+  /** The component's own diagram, opened by drilling into it. Its overview doc is this node's doc. */
+  detail?: Diagram;
 }
 
 export type EdgeRouting = 'straight' | 'orthogonal' | 'curved';

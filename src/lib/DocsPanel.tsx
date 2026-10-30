@@ -7,7 +7,7 @@ import { NodeSelection, PluginKey } from '@tiptap/pm/state';
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type NodeViewProps } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Markdown } from 'tiptap-markdown';
 import {
@@ -22,16 +22,35 @@ import {
   type Mentionable,
 } from './docs';
 import { IsoDiagramEditor } from './IsoDiagramEditor';
+import { detailSize } from './levels';
 import { StaticDiagram } from './render';
 import { KIND_NAMES, emptyDiagram, parseDiagram } from './shapes';
 import type { Diagram, DocTarget } from './types';
 import { useTheme } from './theme';
 import { Icon } from './ui';
 
+/** The detail diagram of the component a doc belongs to, and what can be done with it. */
+export interface DocDetail {
+  diagram?: Diagram;
+  /** Go into it; absent when it is already showing. */
+  onOpen?: () => void;
+  /** Give the component a detail diagram; absent when it has one or the doc is read-only. */
+  onAdd?: () => void;
+}
+
+/** Lets a doc's detail block show the detail diagram of the component the doc belongs to. */
+export const DetailContext = createContext<DocDetail | undefined>(undefined);
+
 export interface DocsPanelProps {
   target: DocTarget;
   diagram: Diagram;
   readOnly?: boolean;
+  /** Levels above the page, top first; each goes to that level's overview. */
+  levels?: { label: string; onClick: () => void }[];
+  /** The page is the overview of the detail diagram on screen (the target component's own doc). */
+  overview?: boolean;
+  /** Set when the page is a component that can have a detail diagram. */
+  detail?: DocDetail;
   onChange: (target: DocTarget, markdown: string) => void;
   /** Go to another item (from a breadcrumb or a mention). */
   onNavigate: (target: DocTarget) => void;
@@ -199,7 +218,53 @@ function EmbedEditorModal({ initial, onSave, onCancel }: { initial: Diagram; onS
   );
 }
 
-function DiagramEmbedView({ node, updateAttributes, editor, selected }: NodeViewProps) {
+/** Where a component's doc shows its detail diagram. Read from the doc's DetailContext. */
+function DetailBlockView({ selected, editor }: NodeViewProps) {
+  const detail = useContext(DetailContext);
+  const d = detail?.diagram;
+  const editable = editor.isEditable;
+  return (
+    <NodeViewWrapper className={`isd-embed is-detail${selected && editable ? ' is-selected' : ''}`} contentEditable={false}>
+      <div className="isd-embed-bar">
+        <span>
+          <Icon name="layers" size={13} /> Detail diagram{d ? ` · ${detailSize(d)} item${detailSize(d) === 1 ? '' : 's'}` : ''}
+        </span>
+        {detail?.onOpen && (
+          <button type="button" className="isd-doc-btn" onClick={detail.onOpen}>
+            Open ↘
+          </button>
+        )}
+      </div>
+      {d?.nodes.length ? (
+        <div className="isd-embed-canvas" onDoubleClick={detail?.onOpen}>
+          <StaticDiagram diagram={d} maxHeight={360} label="Detail diagram" />
+        </div>
+      ) : (
+        <div className="isd-embed-empty">
+          {!detail
+            ? 'Detail diagrams belong to components.'
+            : d
+              ? 'The detail diagram is empty.'
+              : 'This component has no detail diagram yet.'}
+          {detail?.onAdd && editable && (
+            <>
+              {' '}
+              <button type="button" className="isd-doc-btn" onClick={detail.onAdd}>
+                Add one
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </NodeViewWrapper>
+  );
+}
+
+function DiagramEmbedView(props: NodeViewProps) {
+  return props.node.attrs.detail ? <DetailBlockView {...props} /> : <FreeEmbedView {...props} />;
+}
+
+function FreeEmbedView({ node, updateAttributes, editor, selected }: NodeViewProps) {
   const diagram = useMemo(() => readEmbedded(node.attrs.diagram as string), [node.attrs.diagram]);
   const [open, setOpen] = useState(false);
   const editable = editor.isEditable;
@@ -246,6 +311,7 @@ function DiagramEmbedView({ node, updateAttributes, editor, selected }: NodeView
 /**
  * An IsoDraw diagram inside a doc. Stored in Markdown as a fenced block,
  * ```isodraw followed by the diagram JSON, so the doc stays plain Markdown.
+ * An empty ```isodraw-detail block shows the component's detail diagram instead.
  */
 const DiagramEmbed = TiptapNode.create({
   name: 'isodrawDiagram',
@@ -255,6 +321,7 @@ const DiagramEmbed = TiptapNode.create({
   addAttributes() {
     return {
       diagram: { default: '' },
+      detail: { default: false },
       // Transient: set by /Diagram, cleared once the editor opens; never written to Markdown or HTML.
       autoOpen: { default: false, rendered: false, parseHTML: () => false },
     };
@@ -267,14 +334,18 @@ const DiagramEmbed = TiptapNode.create({
         priority: 60,
         getAttrs: (el: HTMLElement) => {
           const code = el.querySelector('code');
-          return code && /\blanguage-isodraw\b/.test(code.className) ? { diagram: code.textContent ?? '' } : false;
+          if (code && /\blanguage-isodraw-detail\b/.test(code.className)) return { diagram: '', detail: true };
+          return code && /\blanguage-isodraw(?![\w-])/.test(code.className) ? { diagram: code.textContent ?? '' } : false;
         },
       },
-      { tag: 'div[data-type="isodraw-diagram"]', getAttrs: (el: HTMLElement) => ({ diagram: el.getAttribute('data-diagram') ?? '' }) },
+      {
+        tag: 'div[data-type="isodraw-diagram"]',
+        getAttrs: (el: HTMLElement) => ({ diagram: el.getAttribute('data-diagram') ?? '', detail: el.hasAttribute('data-detail') }),
+      },
     ];
   },
   renderHTML({ node }) {
-    return ['div', { 'data-type': 'isodraw-diagram', 'data-diagram': node.attrs.diagram }];
+    return ['div', { 'data-type': 'isodraw-diagram', 'data-diagram': node.attrs.diagram, ...(node.attrs.detail ? { 'data-detail': '' } : {}) }];
   },
   addNodeView() {
     return ReactNodeViewRenderer(DiagramEmbedView);
@@ -284,8 +355,15 @@ const DiagramEmbed = TiptapNode.create({
       markdown: {
         serialize(
           state: { write: (s: string) => void; ensureNewLine: () => void; closeBlock: (n: unknown) => void },
-          node: { attrs: { diagram: string } },
+          node: { attrs: { diagram: string; detail: boolean } },
         ) {
+          if (node.attrs.detail) {
+            state.write('```isodraw-detail');
+            state.ensureNewLine();
+            state.write('```');
+            state.closeBlock(node);
+            return;
+          }
           const json = node.attrs.diagram?.trim() || JSON.stringify(emptyDiagram());
           state.write('```isodraw');
           state.ensureNewLine();
@@ -328,6 +406,11 @@ const SLASH_ITEMS: SlashItem[] = [
     hint: 'isodraw',
     run: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'isodrawDiagram', attrs: { diagram: '', autoOpen: true } }).run(),
   },
+  {
+    title: 'Detail diagram',
+    hint: 'this component',
+    run: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'isodrawDiagram', attrs: { diagram: '', detail: true } }).run(),
+  },
   { title: 'Link a component', hint: '@', run: (e, r) => e.chain().focus().deleteRange(r).insertContent('@').run() },
 ];
 
@@ -353,9 +436,12 @@ export function DocEditor({
   onChange,
   onNavigate,
   onMentionHover,
+  allowDetail = false,
 }: {
   markdown: string;
   editable: boolean;
+  /** Offer the "Detail diagram" block: the doc belongs to a component. */
+  allowDetail?: boolean;
   items: () => Mentionable[];
   onChange: (md: string) => void;
   onNavigate: (t: DocTarget) => void;
@@ -370,8 +456,8 @@ export function DocEditor({
   const slashRef = useRef(slashPopup);
   mentionRef.current = mentionPopup;
   slashRef.current = slashPopup;
-  const latest = useRef({ onChange, onNavigate, onMentionHover, items });
-  latest.current = { onChange, onNavigate, onMentionHover, items };
+  const latest = useRef({ onChange, onNavigate, onMentionHover, items, allowDetail });
+  latest.current = { onChange, onNavigate, onMentionHover, items, allowDetail };
   const hovered = useRef<string | null>(null);
   const reportHover = (el: EventTarget | null) => {
     const href = (el as HTMLElement | null)?.closest?.('a')?.getAttribute('href') ?? '';
@@ -426,7 +512,10 @@ export function DocEditor({
         suggestion: {
           char: '/',
           startOfLine: false,
-          items: ({ query }) => SLASH_ITEMS.filter((i) => i.title.toLowerCase().includes(query.toLowerCase())),
+          items: ({ query }) =>
+            SLASH_ITEMS.filter(
+              (i) => i.title.toLowerCase().includes(query.toLowerCase()) && (i.title !== 'Detail diagram' || latest.current.allowDetail),
+            ),
           command: ({ editor: e, range, props }) => props.run(e, range),
           render: suggestionRenderer<SlashItem>(setSlash, () => slashRef.current),
         },
@@ -631,19 +720,33 @@ export function DocEditor({
 
 // ---------- panel ----------
 
-export default function DocsPanel({ target, diagram, readOnly, onChange, onNavigate, onMentionHover, onClose, onExport }: DocsPanelProps) {
-  const crumbs = breadcrumbs(target, diagram);
+export default function DocsPanel({
+  target,
+  diagram,
+  readOnly,
+  levels = [{ label: 'Diagram', onClick: () => onNavigate({ kind: 'diagram' }) }],
+  overview,
+  detail,
+  onChange,
+  onNavigate,
+  onMentionHover,
+  onClose,
+  onExport,
+}: DocsPanelProps) {
+  /** Areas the item sits in, on its own level. */
+  const areas = breadcrumbs(target, diagram).slice(1);
   const title = titleOf(target, diagram);
   const md = docOf(target, diagram);
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
   const [notice, setNotice] = useState<string | null>(null);
-  const kind =
+  const kindName =
     target.kind === 'diagram'
       ? 'Overview'
       : target.kind === 'edge'
         ? 'Connection'
         : KIND_NAMES[diagram.nodes.find((n) => n.id === target.id)?.kind ?? 'block'];
+  const kind = overview ? `Overview · ${kindName}` : kindName;
 
   useEffect(() => setNotice(null), [target]);
 
@@ -659,10 +762,10 @@ export default function DocsPanel({ target, diagram, readOnly, onChange, onNavig
     <aside className="isd-docs" aria-label="Documentation">
       <header className="isd-docs-head">
         <nav className="isd-docs-crumbs" aria-label="Breadcrumbs">
-          {crumbs.map((c) => (
-            <span key={targetKey(c)}>
-              <button type="button" onClick={() => onNavigate(c)}>
-                {titleOf(c, diagram)}
+          {levels.map((c, i) => (
+            <span key={i}>
+              <button type="button" onClick={c.onClick}>
+                {c.label}
               </button>
               <span aria-hidden>›</span>
             </span>
@@ -671,7 +774,23 @@ export default function DocsPanel({ target, diagram, readOnly, onChange, onNavig
         <div className="isd-docs-title">
           <div>
             <h2>{target.kind === 'diagram' ? 'Diagram overview' : title}</h2>
-            <small>{kind}</small>
+            <small>
+              {kind}
+              {areas.length > 0 && (
+                <span className="isd-docs-areas">
+                  {' '}
+                  in{' '}
+                  {areas.map((c, i) => (
+                    <span key={targetKey(c)}>
+                      {i > 0 && ' › '}
+                      <button type="button" onClick={() => onNavigate(c)}>
+                        {titleOf(c, diagram)}
+                      </button>
+                    </span>
+                  ))}
+                </span>
+              )}
+            </small>
           </div>
           <button type="button" className="isd-drawer-close" aria-label="Export all docs as Markdown" title="Export all docs as Markdown" onClick={onExport} style={{ right: 40 }}>
             <Icon name="download" />
@@ -682,18 +801,40 @@ export default function DocsPanel({ target, diagram, readOnly, onChange, onNavig
         </div>
       </header>
       {notice && <div className="isd-docs-notice">{notice}</div>}
+      {detail && (detail.onOpen || detail.onAdd) && (
+        <div className="isd-docs-detail">
+          <Icon name="layers" size={14} />
+          {detail.diagram ? (
+            <>
+              <span>
+                Detail diagram · {detailSize(detail.diagram)} item{detailSize(detail.diagram) === 1 ? '' : 's'}
+              </span>
+              <button type="button" className="isd-doc-btn" onClick={detail.onOpen}>
+                Open ↘
+              </button>
+            </>
+          ) : (
+            <button type="button" className="isd-doc-btn" onClick={detail.onAdd}>
+              Add detail diagram
+            </button>
+          )}
+        </div>
+      )}
       {readOnly && !md.trim() ? (
         <p className="isd-docs-empty">No documentation for this {target.kind === 'diagram' ? 'diagram' : 'item'} yet.</p>
       ) : (
+        <DetailContext.Provider value={detail}>
         <DocEditor
           key={targetKey(target)}
           markdown={md}
           editable={!readOnly}
+          allowDetail={!!detail}
           items={() => mentionables(diagramRef.current)}
           onChange={(next) => onChange(target, next)}
           onNavigate={navigate}
           onMentionHover={onMentionHover}
         />
+        </DetailContext.Provider>
       )}
     </aside>
   );

@@ -16,3 +16,5 @@ export type { TerraformImportResult, TerraformImportSummary, TerraformImportOpti
 export { exportSvg, exportPng, exportJson, downloadBlob } from './export';
 export { exportDocsMarkdown, docOf, withDoc, hasDoc, titleOf, mentionHref, parseMentionHref, componentScene } from './docs';
 export type * from './types';
+export { levelAt, validLevel, withLevel, liftEmbeds } from './levels';
+export type { LevelPath } from './levels';

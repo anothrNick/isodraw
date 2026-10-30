@@ -1,13 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
 import { DRAG_MIME, IsoCanvas, type Selection, type Tool } from './IsoCanvas';
 import { boundsOf, containerOf, descendantsOf, isContainer } from './containers';
-import { exportDocsMarkdown, hasDoc, sameTarget, targetKey, withDoc } from './docs';
+import { exportDocsMarkdown, hasDoc, nodeTitle, sameTarget, targetKey, withDoc } from './docs';
 import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } from './export';
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
 import { loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary } from './icons';
 import { importTerraform, isTerraformJson } from './terraform';
+import { canHaveDetail, detailSize, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
 import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
@@ -37,14 +38,27 @@ export interface IsoDiagramEditorProps {
   docBadges?: 'hover' | 'always' | 'never';
   /** Color theme. Defaults to the enclosing IsoDraw component's theme, or light. */
   theme?: Theme;
+  /**
+   * The detail diagram to show: ids of the components drilled into from the
+   * top (`[]` is the top diagram). The editor follows changes to it; pair with
+   * onLevelChange to keep it in the URL.
+   */
+  level?: LevelPath;
+  /** The user went into or out of a component's detail diagram. */
+  onLevelChange?: (level: LevelPath) => void;
   className?: string;
   style?: React.CSSProperties;
 }
 
-interface History {
+/** A state of the whole diagram, and the level the user was on when the change that made it happened. */
+interface Snapshot {
   d: Diagram;
-  past: Diagram[];
-  future: Diagram[];
+  at: LevelPath;
+}
+
+interface History extends Snapshot {
+  past: Snapshot[];
+  future: Snapshot[];
 }
 
 // Tiptap is large: load the docs editor only when someone opens it.
@@ -97,13 +111,21 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const { readOnly, awsIcons = true, gcpIcons = true, azureIcons = true } = props;
   const theme = useResolvedTheme(props.theme);
   const [hist, setHist] = useState<History>(() => ({
-    d: props.value ?? props.defaultValue ?? emptyDiagram(),
+    d: liftEmbeds(props.value ?? props.defaultValue ?? emptyDiagram()),
+    at: [],
     past: [],
     future: [],
   }));
-  const diagram = hist.d;
-  // The view is a diagram setting, so Edit, View and published pages agree.
-  const view: ViewMode = diagram.view ?? props.defaultView ?? '3d';
+  /** The whole diagram, with every detail diagram inside it. */
+  const root = hist.d;
+  const [path, setPath] = useState<LevelPath>(() => validLevel(hist.d, props.level ?? []));
+  /** Read by commits, so a change lands on the level that was showing when it was made. */
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  /** The diagram on screen: the top one, or the detail diagram drilled into. */
+  const diagram = levelAt(root, path) ?? root;
+  // The view is a diagram setting, so Edit, View and published pages agree. Detail diagrams follow the top one.
+  const view: ViewMode = root.view ?? props.defaultView ?? '3d';
   const [rotation, setRotation] = useState<Rotation>(0);
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
@@ -145,7 +167,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   // Sync controlled value.
   useEffect(() => {
     if (props.value && props.value !== lastEmitted.current && props.value !== hist.d) {
-      setHist((h) => ({ d: props.value!, past: [...h.past, h.d].slice(-HISTORY_LIMIT), future: [] }));
+      const d = liftEmbeds(props.value);
+      setHist((h) => ({ d, at: [], past: [...h.past, { d: h.d, at: h.at }].slice(-HISTORY_LIMIT), future: [] }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.value]);
@@ -182,30 +205,129 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  /** Apply a change. `mode: 'replace'` skips history (used mid-drag). */
-  const commit = useCallback((next: Diagram | ((d: Diagram) => Diagram), mode: 'push' | 'replace' = 'push', key?: string) => {
-    setHist((h) => {
-      const d = typeof next === 'function' ? next(h.d) : next;
-      if (d === h.d) return h;
-      const now = Date.now();
-      const sameKey = key && coalesce.current?.key === key && now - coalesce.current.t < 1200;
-      coalesce.current = key ? { key, t: now } : null;
-      if (mode === 'replace' || sameKey) return { ...h, d };
-      return { d, past: [...h.past, h.d].slice(-HISTORY_LIMIT), future: [] };
-    });
-  }, []);
+  /**
+   * Apply a change to the diagram at level `where` (default: the one showing).
+   * `mode: 'replace'` skips history (used mid-drag).
+   */
+  const commitAt = useCallback(
+    (where: LevelPath, next: Diagram | ((d: Diagram) => Diagram), mode: 'push' | 'replace' = 'push', key?: string) => {
+      const at = pathRef.current;
+      setHist((h) => {
+        const d = withLevel(h.d, where, (cur) => (typeof next === 'function' ? next(cur) : next));
+        if (d === h.d) return h;
+        const now = Date.now();
+        const k = key && `${levelKey(where)}|${key}`;
+        const sameKey = k && coalesce.current?.key === k && now - coalesce.current.t < 1200;
+        coalesce.current = k ? { key: k, t: now } : null;
+        if (mode === 'replace' || sameKey) return { ...h, d, at };
+        return { d, at, past: [...h.past, { d: h.d, at: h.at }].slice(-HISTORY_LIMIT), future: [] };
+      });
+    },
+    [],
+  );
+  const commit = useCallback(
+    (next: Diagram | ((d: Diagram) => Diagram), mode: 'push' | 'replace' = 'push', key?: string) => commitAt(pathRef.current, next, mode, key),
+    [commitAt],
+  );
 
   const beginChange = useCallback(() => {
     coalesce.current = null;
-    setHist((h) => ({ d: h.d, past: [...h.past, h.d].slice(-HISTORY_LIMIT), future: [] }));
+    setHist((h) => ({ d: h.d, at: pathRef.current, past: [...h.past, { d: h.d, at: h.at }].slice(-HISTORY_LIMIT), future: [] }));
   }, []);
 
-  /** Undo and redo restore content but keep the current view setting. */
+  /**
+   * Undo and redo restore content but keep the current view setting. They go
+   * to the level where the change happened, so nothing changes out of sight.
+   */
   const withView = (d: Diagram, from: Diagram): Diagram => (d.view === from.view ? d : { ...d, view: from.view });
-  const undo = () =>
-    setHist((h) => (h.past.length ? { d: withView(h.past[h.past.length - 1], h.d), past: h.past.slice(0, -1), future: [h.d, ...h.future] } : h));
-  const redo = () =>
-    setHist((h) => (h.future.length ? { d: withView(h.future[0], h.d), past: [...h.past, h.d], future: h.future.slice(1) } : h));
+  const undo = () => {
+    const prev = hist.past[hist.past.length - 1];
+    if (!prev) return;
+    const d = withView(prev.d, hist.d);
+    setHist({ d, at: prev.at, past: hist.past.slice(0, -1), future: [{ d: hist.d, at: hist.at }, ...hist.future] });
+    goLevel(validLevel(d, hist.at), { keepSelection: true });
+  };
+  const redo = () => {
+    const next = hist.future[0];
+    if (!next) return;
+    const d = withView(next.d, hist.d);
+    setHist({ d, at: next.at, past: [...hist.past, { d: hist.d, at: hist.at }].slice(-HISTORY_LIMIT), future: hist.future.slice(1) });
+    goLevel(validLevel(d, next.at), { keepSelection: true });
+  };
+
+  // ----- levels -----
+  /** Camera per level, so coming back shows what you were looking at. */
+  const cameras = useRef(new Map<string, Camera>());
+  /** Bumped on every level change; replays the zoom-in or zoom-out transition. */
+  const [levelMove, setLevelMove] = useState<{ dir: 'in' | 'out'; n: number }>({ dir: 'in', n: 0 });
+
+  /** Show another level. Going out selects the component you came out of. */
+  const goLevel = (next: LevelPath, opts: { select?: DocTarget; keepSelection?: boolean } = {}) => {
+    const cur = pathRef.current;
+    const toSelection = (t: DocTarget): Selection =>
+      t.kind === 'node' ? { nodes: [t.id], edges: [] } : t.kind === 'edge' ? { nodes: [], edges: [t.id] } : NO_SELECTION;
+    if (sameLevel(next, cur)) {
+      if (opts.select) setSelection(toSelection(opts.select));
+      return;
+    }
+    cameras.current.set(levelKey(cur), camera);
+    pathRef.current = next;
+    setPath(next);
+    const out = next.length < cur.length && sameLevel(next, cur.slice(0, next.length));
+    const cameFrom: DocTarget | undefined = out ? { kind: 'node', id: cur[next.length] } : undefined;
+    const select = opts.select ?? cameFrom;
+    if (select) setSelection(toSelection(select));
+    else if (!opts.keepSelection) setSelection(NO_SELECTION);
+    setMentionHover(null);
+    setTool('select');
+    setLevelMove((m) => ({ dir: next.length > cur.length ? 'in' : 'out', n: m.n + 1 }));
+    props.onLevelChange?.(next);
+  };
+  const goUp = () => {
+    if (path.length) goLevel(path.slice(0, -1));
+  };
+  /** Drill into a component's detail diagram. */
+  const openDetail = (id: string) => {
+    if (diagram.nodes.find((n) => n.id === id)?.detail) goLevel([...path, id]);
+  };
+  /** Give a component an empty detail diagram and go into it. */
+  const addDetail = (id: string) => {
+    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id && !n.detail ? { ...n, detail: emptyDiagram() } : n)) }));
+    goLevel([...path, id]);
+  };
+
+  // Restore or fit the camera for the level now showing.
+  const firstLevel = useRef(true);
+  useLayoutEffect(() => {
+    if (firstLevel.current) {
+      firstLevel.current = false;
+      return;
+    }
+    const saved = cameras.current.get(levelKey(path));
+    if (saved) setCamera(saved);
+    else fitTo(diagram, proj);
+    // The canvas was replaced and took the focus with it: give it to the new one.
+    const active = document.activeElement;
+    if (!active || active === document.body) {
+      stageRef.current?.querySelector<SVGSVGElement>('.isd-canvas')?.focus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [levelKey(path)]);
+
+  // A level can disappear (undo, delete, a new value): fall back to the nearest one that is left.
+  useEffect(() => {
+    const ok = validLevel(root, path);
+    if (ok.length !== path.length) goLevel(ok);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [root]);
+
+  // Follow the level prop, e.g. the browser's back button.
+  useEffect(() => {
+    if (!props.level) return;
+    const next = validLevel(root, props.level);
+    if (!sameLevel(next, path)) goLevel(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.level && levelKey(props.level)]);
 
   // Switch between docked panels and drawers based on the editor's own width.
   useLayoutEffect(() => {
@@ -248,7 +370,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       const item = selectionTarget.kind === 'node' ? diagram.nodes.find((n) => n.id === selectionTarget.id) : diagram.edges.find((e) => e.id === selectionTarget.id);
       if (hasDoc(item?.doc)) setDocsOpen(true);
     }
-  }, [selectionTarget && targetKey(selectionTarget)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectionTarget && targetKey(selectionTarget), levelKey(path)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openDocs = (t?: DocTarget) => {
     if (t) {
@@ -262,8 +384,23 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     }
   };
 
+  /**
+   * Inside a detail diagram, its overview is the doc of the component it
+   * details, which lives one level up. The docs panel works on that level.
+   */
+  const docsLevel = docsTarget.kind === 'diagram' && path.length ? path.slice(0, -1) : path;
+  const docsPageTarget: DocTarget = docsTarget.kind === 'diagram' && path.length ? { kind: 'node', id: path[path.length - 1] } : docsTarget;
+  const docsDiagram = levelAt(root, docsLevel) ?? root;
+
   /** Jump to an item from a mention or breadcrumb: select it, center it, show its docs. */
-  const navigateTo = (t: DocTarget) => {
+  const navigateTo = (t: DocTarget, level: LevelPath = path) => {
+    if (!sameLevel(level, path)) {
+      // Another level: show it whole, with the item selected.
+      goLevel(level, { select: t.kind === 'diagram' ? undefined : t });
+      setDocsTarget(t);
+      setDocsOpen(true);
+      return;
+    }
     openDocs(t);
     if (t.kind === 'diagram') return;
     let p: Pt | null = null;
@@ -287,7 +424,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     setCamera((c) => ({ ...c, x: visibleW / 2 - p!.x * c.zoom, y: h / 2 - p!.y * c.zoom }));
   };
 
-  const updateDoc = (t: DocTarget, md: string) => commit((d) => withDoc(d, t, md), 'push', `doc:${targetKey(t)}`);
+  const updateDoc = (t: DocTarget, md: string) => commitAt(docsLevel, (d) => withDoc(d, t, md), 'push', `doc:${targetKey(t)}`);
 
   // ----- camera helpers -----
   const stageSize = () => {
@@ -324,7 +461,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     const ro = new ResizeObserver(([entry]) => {
       if (entry.contentRect.width < 10 || entry.contentRect.height < 10) return;
       ro.disconnect();
-      fitTo(hist.d, proj);
+      fitTo(levelAt(hist.d, pathRef.current) ?? hist.d, proj);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -493,6 +630,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     } else if (mod && k === 'a') {
       e.preventDefault();
       setSelection({ nodes: diagram.nodes.map((n) => n.id), edges: [] });
+    } else if (k === 'enter' && !mod && selNode?.detail) {
+      e.preventDefault();
+      openDetail(selNode.id);
+    } else if ((k === 'arrowup' && e.altKey) || (k === 'escape' && path.length && !selection.nodes.length && !selection.edges.length)) {
+      e.preventDefault();
+      goUp();
     } else if (readOnly) {
       return;
     } else if (k === 'delete' || k === 'backspace') {
@@ -546,8 +689,9 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const doExport = async (fmt: 'json' | 'svg' | 'png' | 'docs') => {
     setExportOpen(false);
     try {
-      if (fmt === 'docs') downloadBlob(exportDocsMarkdown(diagram), 'architecture.md', 'text/markdown');
-      if (fmt === 'json') downloadBlob(exportJson(diagram), 'diagram.json', 'application/json');
+      // Docs and JSON cover the whole diagram; images show the level on screen.
+      if (fmt === 'docs') downloadBlob(exportDocsMarkdown(root), 'architecture.md', 'text/markdown');
+      if (fmt === 'json') downloadBlob(exportJson(root), 'diagram.json', 'application/json');
       // Dark-theme ink is light, so dark exports carry the dark canvas behind it.
       const background = theme === 'dark' ? CANVAS_BG.dark : undefined;
       if (fmt === 'svg' && svgRef.current) downloadBlob(await exportSvg(svgRef.current, { background }), 'diagram.svg', 'image/svg+xml');
@@ -557,25 +701,34 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     }
   };
 
-  /** Open an IsoDraw diagram, or import Terraform state or plan JSON. */
+  /**
+   * Open an IsoDraw diagram, or import Terraform state or plan JSON. It
+   * replaces the level on screen, so a component's detail can be imported too.
+   */
   const importJsonFile = async (file: File) => {
+    // The top diagram keeps its view setting; detail diagrams carry none.
+    const place = (d: Diagram): Diagram => {
+      const { view: _v, ...rest } = d;
+      return path.length ? rest : { ...rest, ...(root.view ? { view: root.view } : {}) };
+    };
+    const into = path.length ? ` into ${nodeTitle(levelNodes(root, path).pop()!)}` : '';
     try {
       const json: unknown = JSON.parse(await file.text());
       if (isTerraformJson(json)) {
         setToast('Reading Terraform…');
         const { diagram: d, summary } = await importTerraform(json, { gcpIcons: cloudLibs.gcp?.lib });
-        const next = { ...d, ...(diagram.view ? { view: diagram.view } : {}) };
+        const next = place(d);
         commit(next);
         setSelection(NO_SELECTION);
         fitTo(next, proj);
-        setToast(`Imported ${summary.components} components and ${summary.connections} connections from ${summary.resources} Terraform resources`);
+        setToast(`Imported ${summary.components} components and ${summary.connections} connections from ${summary.resources} Terraform resources${into}`);
         return;
       }
-      const d = parseDiagram(json);
+      const d = place(liftEmbeds(parseDiagram(json)));
       commit(d);
       setSelection(NO_SELECTION);
       fitTo(d, proj);
-      setToast(`Imported ${d.nodes.length} nodes`);
+      setToast(`Imported ${d.nodes.length} nodes${into}`);
     } catch (err) {
       setToast(err instanceof SyntaxError ? `${file.name} is not valid JSON` : (err as Error).message);
     }
@@ -690,6 +843,28 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     );
 
   const selNode = selection.nodes.length === 1 ? diagram.nodes.find((n) => n.id === selection.nodes[0]) : undefined;
+
+  /** "Diagram", then each component drilled into. */
+  const levelCrumbs = ['Diagram', ...levelNodes(root, path).map(nodeTitle)];
+  /** The docs panel's crumbs: the levels above its page. A detail diagram's overview sits under its parent's level. */
+  const docsLevelCrumbs = levelCrumbs.slice(0, docsLevel.length + 1).map((label, i) => ({
+    label,
+    // Nothing selected, so the panel shows that level's overview.
+    onClick: () => goLevel(path.slice(0, i), { select: { kind: 'diagram' } }),
+  }));
+  /** The component whose page the docs show, if it can have a detail diagram. */
+  const docsNode = docsPageTarget.kind === 'node' ? docsDiagram.nodes.find((n) => n.id === docsPageTarget.id) : undefined;
+  const inDocsNode = docsNode && sameLevel(path, [...docsLevel, docsNode.id]);
+  const docsDetail =
+    docsNode && canHaveDetail(docsNode)
+      ? {
+          diagram: docsNode.detail,
+          // Already inside it: nothing to open.
+          onOpen: docsNode.detail && !inDocsNode ? () => goLevel([...docsLevel, docsNode.id]) : undefined,
+          // Without a detail, the page is on the level showing.
+          onAdd: readOnly || docsNode.detail ? undefined : () => addDetail(docsNode.id),
+        }
+      : undefined;
   const selEdge = selection.edges.length === 1 && !selection.nodes.length ? diagram.edges.find((e) => e.id === selection.edges[0]) : undefined;
 
   return (
@@ -922,6 +1097,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
         {/* ---------- canvas ---------- */}
         <div className="isd-stage" ref={stageRef}>
+          {/* Keyed by level, so each level change replays the zoom transition. */}
+          <div key={levelKey(path)} className={`isd-level-view${levelMove.n ? ` is-${levelMove.dir}` : ''}`}>
           <IsoCanvas
             svgRef={svgRef}
             diagram={diagram}
@@ -936,7 +1113,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             showGrid={showGrid}
             animate={animate}
             onOpenDocs={openDocs}
-            focus={docsOpen ? mentionHover : null}
+            onOpenDetail={openDetail}
+            focus={docsOpen && sameLevel(docsLevel, path) ? mentionHover : null}
             showDocBadges={props.docBadges}
             newEdgeStyle={{ routing: 'orthogonal', rounded: true, ...edgeStyle }}
             onBeginChange={beginChange}
@@ -954,6 +1132,34 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
               }
             }}
           />
+          </div>
+          {path.length > 0 && (
+            <nav className="isd-levels" aria-label="Diagram levels">
+              <button type="button" className="isd-levels-up" onClick={goUp} title="Up one level (Esc)" aria-label="Up one level">
+                <Icon name="up" size={14} />
+              </button>
+              {levelCrumbs.map((c, i) =>
+                i < levelCrumbs.length - 1 ? (
+                  <span key={i}>
+                    <button type="button" onClick={() => goLevel(path.slice(0, i))}>
+                      {c}
+                    </button>
+                    <span aria-hidden>›</span>
+                  </span>
+                ) : (
+                  <strong key={i} aria-current="location">
+                    <Icon name="layers" size={13} />
+                    {c}
+                  </strong>
+                ),
+              )}
+            </nav>
+          )}
+          {path.length > 0 && !diagram.nodes.length && (
+            <div className="isd-level-empty">
+              {readOnly ? 'Nothing inside yet.' : 'Nothing inside yet. Add shapes and icons from the palette to draw this component\'s insides.'}
+            </div>
+          )}
           <div className="isd-status">
             {view === '3d' ? `2.5D · ${['N', 'E', 'S', 'W'][rotation]}` : 'Flat'} · {diagram.nodes.length} nodes · {diagram.edges.length} connections
           </div>
@@ -962,11 +1168,14 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           {docsOpen && (
             <Suspense fallback={<aside className="isd-docs isd-docs-loading">Loading editor…</aside>}>
               <DocsPanel
-                target={docsTarget}
-                diagram={diagram}
+                target={docsPageTarget}
+                diagram={docsDiagram}
                 readOnly={readOnly}
+                levels={docsLevelCrumbs}
+                overview={docsTarget.kind === 'diagram' && path.length > 0}
+                detail={docsDetail}
                 onChange={updateDoc}
-                onNavigate={navigateTo}
+                onNavigate={(t) => navigateTo(t, docsLevel)}
                 onMentionHover={setMentionHover}
                 onClose={() => setDocsOpen(false)}
                 onExport={() => void doExport('docs')}
@@ -988,6 +1197,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
               <NodeInspector
                 node={selNode}
                 onOpenDocs={() => openDocs({ kind: 'node', id: selNode.id })}
+                onOpenDetail={() => openDetail(selNode.id)}
+                onAddDetail={() => addDetail(selNode.id)}
                 parent={containerOf(selNode, diagram.nodes)}
                 contents={isContainer(selNode) ? descendantsOf([selNode.id], diagram.nodes).size : 0}
                 onSelectNodes={(ids) => setSelection({ nodes: ids, edges: [] })}
@@ -1035,9 +1246,13 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
               </div>
             ) : (
               <div className="isd-panel">
-                <h3>Diagram</h3>
+                <h3>{path.length ? `Inside ${levelCrumbs[levelCrumbs.length - 1]}` : 'Diagram'}</h3>
                 <p className="isd-hint">Click a shape or icon to add it, or drag it onto the canvas. Select a node to edit it.</p>
-                <DocsButton has={hasDoc(diagram.doc)} label="diagram overview" onClick={() => openDocs({ kind: 'diagram' })} />
+                <DocsButton
+                  has={hasDoc(path.length ? levelNodes(root, path).pop()?.doc : diagram.doc)}
+                  label={path.length ? 'overview' : 'diagram overview'}
+                  onClick={() => openDocs({ kind: 'diagram' })}
+                />
                 <dl className="isd-keys">
                   <dt>Drag empty space</dt><dd>Pan</dd>
                   <dt>Scroll / pinch</dt><dd>Zoom</dd>
@@ -1050,6 +1265,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                   <dt>⌘D / ⌘C / ⌘V</dt><dd>Duplicate / copy / paste</dd>
                   <dt>⌘G / ⇧⌘G</dt><dd>Group into area / ungroup</dd>
                   <dt>D / double-click</dt><dd>Open docs</dd>
+                  <dt>Enter / double-click</dt><dd>Go into a component's detail diagram</dd>
+                  <dt>Esc / ⌥↑</dt><dd>Up one level</dd>
                   <dt>⌘Z / ⇧⌘Z</dt><dd>Undo / redo</dd>
                 </dl>
                 {diagram.nodes.length > 0 && (
@@ -1057,7 +1274,9 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                     type="button"
                     className="isd-btn is-danger"
                     onClick={() => {
-                      if (window.confirm('Clear the whole diagram?')) commit(emptyDiagram());
+                      if (window.confirm(path.length ? `Clear everything inside ${levelCrumbs[levelCrumbs.length - 1]}?` : 'Clear the whole diagram?')) {
+                        commit((d) => ({ ...emptyDiagram(), ...(d.view ? { view: d.view } : {}) }));
+                      }
                     }}
                   >
                     <Icon name="trash" /> Clear diagram
@@ -1105,6 +1324,8 @@ function Swatches({ value, onChange }: { value: string; onChange: (c: string) =>
 function NodeInspector({
   node,
   onOpenDocs,
+  onOpenDetail,
+  onAddDetail,
   parent,
   contents,
   onChange,
@@ -1118,6 +1339,8 @@ function NodeInspector({
 }: {
   node: DiagramNode;
   onOpenDocs: () => void;
+  onOpenDetail: () => void;
+  onAddDetail: () => void;
   /** Container this node sits in, if any. */
   parent?: DiagramNode;
   /** Number of items inside this node (containers only). */
@@ -1138,6 +1361,16 @@ function NodeInspector({
     <div className="isd-panel">
       <h3>{KIND_NAMES[node.kind]}</h3>
       <DocsButton has={hasDoc(node.doc)} label={isContainer(node) ? 'area docs' : 'docs'} onClick={onOpenDocs} />
+      {canHaveDetail(node) &&
+        (node.detail ? (
+          <button type="button" className="isd-btn isd-docs-btn has-doc" onClick={onOpenDetail} title="Go into this component (Enter, or double-click it)">
+            <Icon name="layers" /> Open detail diagram · {detailSize(node.detail)} item{detailSize(node.detail) === 1 ? '' : 's'}
+          </button>
+        ) : (
+          <button type="button" className="isd-btn isd-docs-btn" onClick={onAddDetail} title="Draw this component's insides as its own diagram">
+            <Icon name="layers" /> Add detail diagram
+          </button>
+        ))}
       {parent && (
         <button type="button" className="isd-breadcrumb" onClick={() => onSelectNodes([parent.id])} title="Select the containing area">
           Inside <strong>{parent.label || KIND_NAMES[parent.kind]}</strong>

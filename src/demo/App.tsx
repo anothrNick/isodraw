@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { IsoDiagramEditor, IsoDiagramPublished, emptyDiagram, useResolvedTheme, type Diagram, type IconDef, type Theme } from '../lib';
+import { IsoDiagramEditor, IsoDiagramPublished, emptyDiagram, useResolvedTheme, type Diagram, type IconDef, type LevelPath, type Theme } from '../lib';
 import { EXAMPLES } from './examples';
 import { sampleDiagram } from './sample';
 
@@ -28,6 +28,13 @@ const MoonIcon = () => (
   </svg>
 );
 
+/** The detail diagram on screen lives in the URL as `#in/<component>/<component>`, so links and Back work. */
+function readLevel(): LevelPath {
+  const m = /^#in\/(.*)$/.exec(window.location.hash);
+  return m ? m[1].split('/').filter(Boolean).map(decodeURIComponent) : [];
+}
+const levelHash = (level: LevelPath) => (level.length ? `#in/${level.map(encodeURIComponent).join('/')}` : '');
+
 export function App() {
   const [diagram, setDiagram] = useState<Diagram>(() => load(KEY, sampleDiagram));
   const [icons, setIcons] = useState<IconDef[]>(() => load(ICONS_KEY, []));
@@ -36,6 +43,22 @@ export function App() {
   const [mode, setMode] = useState<'edit' | 'view' | 'published'>(() => (window.location.hash.startsWith('#/') ? 'published' : 'edit'));
   const [theme, setTheme] = useState<Theme>(() => load<Theme>(THEME_KEY, 'system'));
   const resolved = useResolvedTheme(theme);
+  const [level, setLevel] = useState<LevelPath>(readLevel);
+
+  useEffect(() => {
+    const onNav = () => setLevel(readLevel());
+    window.addEventListener('popstate', onNav);
+    window.addEventListener('hashchange', onNav);
+    return () => {
+      window.removeEventListener('popstate', onNav);
+      window.removeEventListener('hashchange', onNav);
+    };
+  }, []);
+  const changeLevel = (next: LevelPath) => {
+    setLevel(next);
+    const hash = levelHash(next);
+    if (window.location.hash !== hash) history.pushState(null, '', hash || window.location.pathname + window.location.search);
+  };
 
   // The demo page follows the same theme as the components.
   useEffect(() => {
@@ -67,6 +90,8 @@ export function App() {
   const reset = (d: Diagram) => {
     setDiagram(d);
     setEpoch((e) => e + 1);
+    setLevel([]);
+    if (window.location.hash.startsWith('#in/')) history.replaceState(null, '', window.location.pathname + window.location.search);
   };
 
   return (
@@ -99,7 +124,7 @@ export function App() {
                 title={hint}
                 onClick={() => {
                   setMode(m);
-                  if (m !== 'published' && window.location.hash) history.replaceState(null, '', window.location.pathname);
+                  if (m !== 'published' && window.location.hash.startsWith('#/')) history.replaceState(null, '', window.location.pathname);
                 }}
               >
                 {label}
@@ -150,6 +175,8 @@ export function App() {
           onUserIconsChange={setIcons}
           readOnly={mode === 'view'}
           theme={theme}
+          level={level}
+          onLevelChange={changeLevel}
         />
         )}
       </main>
