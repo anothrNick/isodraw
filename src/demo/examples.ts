@@ -4,6 +4,7 @@ import kubernetesDocs from './docs/kubernetes.md?raw';
 import serverlessDocs from './docs/serverless.md?raw';
 import streamingDocs from './docs/streaming.md?raw';
 import { sampleDiagram } from './sample';
+import { terraformExample } from './terraform';
 
 // Layouts live here; each example's documentation is a Markdown file in ./docs.
 
@@ -194,4 +195,5 @@ export const EXAMPLES: Example[] = [
   { id: 'serverless', name: 'Serverless order API', diagram: withDocs(serverless, serverlessDocs, { ordersInternals }) },
   { id: 'streaming', name: 'Streaming IoT pipeline', diagram: withDocs(streaming, streamingDocs) },
   { id: 'kubernetes', name: 'Kubernetes microservices', diagram: withDocs(kubernetes, kubernetesDocs) },
+  { id: 'terraform', name: 'Imported from Terraform (AWS)', diagram: terraformExample },
 ];

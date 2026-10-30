@@ -173,3 +173,16 @@ export async function loadAzureIconLibrary(opts: { signal?: AbortSignal } = {}):
   );
   return { id: 'azure', name: 'Azure', icons };
 }
+
+/**
+ * CDN URL for a cloud icon by reference, without loading a whole library:
+ * `aws:<folder>/<File>`, `azure:<key>` or `gcp:core/<key>`. Returns null for
+ * `gcp:product/…` icons, which only exist inside the GCP library JSON.
+ */
+export function cloudIconUrl(ref: string): string | null {
+  const [lib, key] = [ref.slice(0, ref.indexOf(':')), ref.slice(ref.indexOf(':') + 1)];
+  if (lib === 'aws') return `https://cdn.jsdelivr.net/npm/${AWS_PKG}@${AWS_VERSION}/icons/${key}.svg`;
+  if (lib === 'azure') return `${AZURE_PKG}/icons/${key}.svg`;
+  if (lib === 'gcp' && key.startsWith('core/')) return `${GCP_CORE}/icons/${key.slice(5)}.svg`;
+  return null;
+}

@@ -220,3 +220,35 @@ test.describe('published docs', () => {
     await expect(page.locator('.isd-pub-figure .isd-target-highlight').first()).toBeVisible();
   });
 });
+
+test.describe('Terraform import', () => {
+  const openInput = (page: Page) => page.locator('input[type="file"][accept*=".tfstate"]');
+
+  test('opens a state file as a laid-out diagram with docs', async ({ page }) => {
+    await page.getByRole('button', { name: 'New blank' }).click();
+    await expect(status(page)).toContainText('0 nodes');
+
+    await openInput(page).setInputFiles('src/demo/terraform/shop.tfstate.json');
+    await expect(page.locator('.isd-toast')).toContainText('Imported 17 components and 14 connections from 49 Terraform resources');
+    await expect(status(page)).toContainText('20 nodes · 14 connections');
+    await expect(canvas(page).locator('[data-node-id="aws_ecs_service.api"]')).toBeVisible();
+
+    // The import is one undoable step.
+    await page.getByRole('button', { name: 'Undo (⌘Z)' }).click();
+    await expect(status(page)).toContainText('0 nodes');
+    await page.getByRole('button', { name: 'Redo (⇧⌘Z)' }).click();
+
+    await page.getByRole('radio', { name: 'Published' }).click();
+    await page.getByRole('complementary', { name: 'Table of contents' }).getByRole('link', { name: 'shop-fulfil' }).click();
+    await expect(page.locator('.isd-pub-doc')).toContainText('Lambda function, managed by Terraform as aws_lambda_function.fulfil.');
+    await expect(page.locator('.isd-pub-doc')).toContainText('nodejs20.x');
+  });
+
+  test('reports files it cannot read', async ({ page }) => {
+    await openInput(page).setInputFiles({ name: 'broken.tfstate', mimeType: 'application/json', buffer: Buffer.from('{ not json') });
+    await expect(page.locator('.isd-toast')).toHaveText('broken.tfstate is not valid JSON');
+    await openInput(page).setInputFiles({ name: 'empty.tfstate', mimeType: 'application/json', buffer: Buffer.from('{"version":4,"resources":[]}') });
+    await expect(page.locator('.isd-toast')).toHaveText('No managed resources found in this Terraform file');
+    await expect(status(page)).toContainText('15 nodes');
+  });
+});

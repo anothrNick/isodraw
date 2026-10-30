@@ -7,6 +7,7 @@ import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
 import { loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary } from './icons';
+import { importTerraform, isTerraformJson } from './terraform';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
 import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
@@ -556,15 +557,27 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     }
   };
 
+  /** Open an IsoDraw diagram, or import Terraform state or plan JSON. */
   const importJsonFile = async (file: File) => {
     try {
-      const d = parseDiagram(JSON.parse(await file.text()));
+      const json: unknown = JSON.parse(await file.text());
+      if (isTerraformJson(json)) {
+        setToast('Reading Terraform…');
+        const { diagram: d, summary } = await importTerraform(json, { gcpIcons: cloudLibs.gcp?.lib });
+        const next = { ...d, ...(diagram.view ? { view: diagram.view } : {}) };
+        commit(next);
+        setSelection(NO_SELECTION);
+        fitTo(next, proj);
+        setToast(`Imported ${summary.components} components and ${summary.connections} connections from ${summary.resources} Terraform resources`);
+        return;
+      }
+      const d = parseDiagram(json);
       commit(d);
       setSelection(NO_SELECTION);
       fitTo(d, proj);
       setToast(`Imported ${d.nodes.length} nodes`);
     } catch (err) {
-      setToast((err as Error).message);
+      setToast(err instanceof SyntaxError ? `${file.name} is not valid JSON` : (err as Error).message);
     }
   };
 
@@ -699,7 +712,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         if (e.dataTransfer.files.length && !readOnly) {
           e.preventDefault();
           const files = Array.from(e.dataTransfer.files);
-          const json = files.find((f) => f.name.endsWith('.json'));
+          const json = files.find((f) => /\.(json|tfstate)$/i.test(f.name));
           if (json) void importJsonFile(json);
           else void importImages(files);
         }
@@ -750,7 +763,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         <div className="isd-spacer" />
         {!readOnly && (
           <div className="isd-group">
-            <ToolButton icon="upload" label="Open diagram (.json)" onClick={() => fileInput.current?.click()}>
+            <ToolButton icon="upload" label="Open a diagram, or import Terraform state or plan JSON" onClick={() => fileInput.current?.click()}>
               Open
             </ToolButton>
           </div>
@@ -773,7 +786,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         <input
           ref={fileInput}
           type="file"
-          accept=".json,application/json"
+          accept=".json,.tfstate,application/json"
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
