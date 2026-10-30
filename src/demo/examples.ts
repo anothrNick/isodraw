@@ -30,12 +30,36 @@ function edge(id: string, from: string, to: string, extra: Partial<DiagramEdge> 
 // Serverless order API
 // ---------------------------------------------------------------------------
 
+/** validate()'s detail diagram, a level further down: the checks an order goes through. */
+const validateSteps: Diagram = {
+  version: 1,
+  nodes: [
+    { id: 'schema', kind: 'hexagon', label: 'JSON schema', x: 0, y: 0, w: 2, d: 2, h: 0.5, z: 0, color: '#f2a93b' },
+    { id: 'stock', kind: 'cylinder', label: 'stock levels', x: 4, y: 0, w: 2, d: 2, h: 1, z: 0, color: '#3b48cc' },
+    { id: 'price', kind: 'block', label: 'price & tax', x: 8, y: 0, w: 2, d: 2, h: 0.75, z: 0, color: '#3fb27f' },
+  ],
+  edges: [edge('v1', 'schema', 'stock', { animation: 'packets' }), edge('v2', 'stock', 'price', { animation: 'packets' })],
+};
+
 /** The orders-api component's detail diagram: what happens inside one invocation. */
 const ordersInternals: Diagram = {
   version: 1,
   nodes: [
     { id: 'in', kind: 'block', label: 'API event', x: 0, y: 0, w: 2, d: 2, h: 0.5, z: 0, color: '#8c4fff' },
-    { id: 'validate', kind: 'hexagon', label: 'validate()', x: 4, y: 0, w: 2, d: 2, h: 0.75, z: 0, color: '#f2a93b' },
+    {
+      id: 'validate',
+      kind: 'hexagon',
+      label: 'validate()',
+      x: 4,
+      y: 0,
+      w: 2,
+      d: 2,
+      h: 0.75,
+      z: 0,
+      color: '#f2a93b',
+      doc: 'Rejects an order before anything is written: the body must match the schema, every item must be in stock, and the total is recalculated server-side.\n\n```isodraw-detail\n```',
+      detail: validateSteps,
+    },
     { id: 'idem', kind: 'cylinder', label: 'idempotency cache', x: 4, y: 4, w: 2, d: 2, h: 1, z: 0, color: '#64748b' },
     { id: 'put', kind: 'block', label: 'table.put()', x: 8, y: 0, w: 2, d: 2, h: 0.75, z: 0, color: '#3b48cc' },
     { id: 'send', kind: 'block', label: 'queue.send()', x: 12, y: 0, w: 2, d: 2, h: 0.75, z: 0, color: '#dd344c' },

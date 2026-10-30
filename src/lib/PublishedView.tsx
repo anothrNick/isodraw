@@ -1,26 +1,34 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { containerOf, isContainer, parentMap } from './containers';
 import { DetailContext, DocEditor } from './DocsPanel';
-import { DETAIL_BLOCK, detailSize } from './levels';
+import { DETAIL_BLOCK, detailSize, levelAt, levelKey, levelNodes, type LevelPath } from './levels';
 import { componentScene, edgeTitle, hasDoc, mentionables, nodeTitle } from './docs';
 import type { PublishedViewProps } from './Published';
 import { ThemeContext } from './theme';
+import { Icon } from './ui';
 import { StaticDiagram } from './render';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { KIND_NAMES } from './shapes';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget } from './types';
 
-/** `overview` or a node id. */
-type Page = string;
-const OVERVIEW = 'overview';
+/**
+ * A component's page, addressed like a level: the components drilled into,
+ * then the component itself. `[]` is the overview.
+ */
+type Page = LevelPath;
+const OVERVIEW: Page = [];
 
 interface TocEntry {
   node: DiagramNode;
   depth: number;
+  page: Page;
 }
 
-/** Components in diagram order, nested under the areas that contain them. Text labels are left out. */
-function tableOfContents(d: Diagram): TocEntry[] {
+/**
+ * Components in diagram order, nested under the areas that contain them and
+ * then under the component whose detail diagram they are in. Text labels are left out.
+ */
+function tableOfContents(d: Diagram, level: LevelPath = [], depth0 = 0): TocEntry[] {
   const parents = parentMap(d.nodes);
   const children = new Map<string | undefined, DiagramNode[]>();
   for (const n of d.nodes) {
@@ -35,11 +43,12 @@ function tableOfContents(d: Diagram): TocEntry[] {
     const list = children.get(key) ?? [];
     // Diagram order, which usually follows the flow the author drew.
     for (const n of list) {
-      out.push({ node: n, depth });
+      out.push({ node: n, depth, page: [...level, n.id] });
       walk(n.id, depth + 1);
+      if (n.detail) out.push(...tableOfContents(n.detail, [...level, n.id], depth + 1));
     }
   };
-  walk(undefined, 0);
+  walk(undefined, depth0);
   return out;
 }
 
@@ -49,10 +58,13 @@ function siteTitle(d: Diagram, title?: string): string {
   return t?.text?.split('\n')[0].trim() || 'Architecture';
 }
 
+/** `#/node/<id>`, or `#/node/<id>/<id>…` for a component inside detail diagrams. */
 function readHash(): Page {
   const m = /^#\/(?:node\/)?(.+)$/.exec(window.location.hash);
-  return m ? decodeURIComponent(m[1]) : OVERVIEW;
+  return m ? m[1].split('/').filter(Boolean).map(decodeURIComponent) : OVERVIEW;
 }
+const hashOf = (p: Page) => (p.length ? `#/node/${levelKey(p)}` : '#/');
+const samePage = (a: Page, b: Page) => levelKey(a) === levelKey(b);
 
 /** One-line description of how a connection is drawn and animated. */
 function edgeStyleSummary(e: DiagramEdge): string {
@@ -86,7 +98,6 @@ function ReadOnlyDoc({ markdown, diagram, onNavigate }: { markdown: string; diag
 
 export default function PublishedView({ diagram, title, useHash, resolvedTheme, className, style }: PublishedViewProps) {
   const toc = useMemo(() => tableOfContents(diagram), [diagram]);
-  const byId = useMemo(() => new Map(diagram.nodes.map((n) => [n.id, n])), [diagram.nodes]);
   const [page, setPage] = useState<Page>(() => (useHash ? readHash() : OVERVIEW));
   const [tocOpen, setTocOpen] = useState(false);
   const [focus, setFocus] = useState<DocTarget | null>(null);
@@ -94,7 +105,11 @@ export default function PublishedView({ diagram, title, useHash, resolvedTheme, 
   const mainRef = useRef<HTMLElement>(null);
   const pendingAnchor = useRef<string | null>(null);
   const name = siteTitle(diagram, title);
-  const current = page === OVERVIEW ? undefined : byId.get(page);
+  // The page's component, and the level it is drawn on. A page that no longer exists shows the overview.
+  const level = page.slice(0, -1);
+  const levelDiagram = page.length ? levelAt(diagram, level) : undefined;
+  const current = levelDiagram?.nodes.find((n) => n.id === page[page.length - 1]);
+  const at: LevelPath = current ? level : [];
 
   useEffect(() => {
     if (!useHash) return;
@@ -111,13 +126,13 @@ export default function PublishedView({ diagram, title, useHash, resolvedTheme, 
     pendingAnchor.current = null;
     if (anchor) anchor.scrollIntoView({ block: 'start' });
     else main.scrollTop = 0;
-  }, [page]);
+  }, [levelKey(page)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = (p: Page, anchor?: string) => {
     pendingAnchor.current = anchor ?? null;
     setTocOpen(false);
     if (useHash) {
-      const hash = p === OVERVIEW ? '#/' : `#/node/${encodeURIComponent(p)}`;
+      const hash = hashOf(p);
       if (window.location.hash !== hash) window.location.hash = hash;
       else setPage(p);
     } else {
@@ -125,20 +140,22 @@ export default function PublishedView({ diagram, title, useHash, resolvedTheme, 
     }
   };
 
-  const navigate = (t: DocTarget) => {
-    if (t.kind === 'diagram') go(OVERVIEW);
-    else if (t.kind === 'node') go(byId.has(t.id) ? t.id : OVERVIEW);
+  /** Follow a mention in a doc on level `lv`: mentions name items on their own level. */
+  const navigate = (lv: LevelPath) => (t: DocTarget) => {
+    const d = levelAt(diagram, lv);
+    if (!d || t.kind === 'diagram') go(lv.length ? lv : OVERVIEW);
+    else if (t.kind === 'node') go(d.nodes.some((n) => n.id === t.id) ? [...lv, t.id] : OVERVIEW);
     else {
-      const e = diagram.edges.find((x) => x.id === t.id);
-      if (e) go(e.from, `edge-${e.id}`);
+      const e = d.edges.find((x) => x.id === t.id);
+      if (e) go([...lv, e.from], `edge-${e.id}`);
     }
   };
 
-  const order = [OVERVIEW, ...toc.map((t) => t.node.id)];
-  const idx = order.indexOf(current ? current.id : OVERVIEW);
+  const order = [OVERVIEW, ...toc.map((t) => t.page)];
+  const idx = current ? order.findIndex((p) => samePage(p, page)) : 0;
   const prev = idx > 0 ? order[idx - 1] : undefined;
   const next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : undefined;
-  const pageTitle = (p: Page) => (p === OVERVIEW ? 'Overview' : nodeTitle(byId.get(p)!));
+  const pageTitle = (p: Page) => (p.length ? nodeTitle(levelAt(diagram, p.slice(0, -1))!.nodes.find((n) => n.id === p[p.length - 1])!) : 'Overview');
 
   return (
     <ThemeContext.Provider value={resolvedTheme}>
@@ -157,16 +174,21 @@ export default function PublishedView({ diagram, title, useHash, resolvedTheme, 
             Overview
           </a>
           <div className="isd-pub-toc-label">Components</div>
-          {toc.map(({ node, depth }) => (
+          {toc.map(({ node, depth, page: p }) => (
             <a
-              key={node.id}
-              href={useHash ? `#/node/${encodeURIComponent(node.id)}` : undefined}
-              className={`${current?.id === node.id ? 'is-active' : ''} ${hasDoc(node.doc) ? '' : 'is-undocumented'} ${isContainer(node) ? 'is-area' : ''}`}
+              key={levelKey(p)}
+              href={useHash ? hashOf(p) : undefined}
+              className={`${current && samePage(p, page) ? 'is-active' : ''} ${hasDoc(node.doc) ? '' : 'is-undocumented'} ${isContainer(node) ? 'is-area' : ''} ${p.length > 1 ? 'is-inside' : ''}`}
               style={{ paddingLeft: 12 + depth * 14 }}
-              onClick={(e) => (e.preventDefault(), go(node.id))}
+              onClick={(e) => (e.preventDefault(), go(p))}
               title={hasDoc(node.doc) ? undefined : 'No documentation yet'}
             >
               {nodeTitle(node)}
+              {node.detail && (
+                <span className="isd-pub-toc-detail" title="Has a detail diagram">
+                  <Icon name="layers" size={11} />
+                </span>
+              )}
             </a>
           ))}
         </nav>
@@ -176,12 +198,12 @@ export default function PublishedView({ diagram, title, useHash, resolvedTheme, 
         <button type="button" className="isd-pub-toc-toggle" onClick={() => setTocOpen(!tocOpen)} aria-expanded={tocOpen}>
           ☰ Contents
         </button>
-        <article className="isd-pub-page" key={page}>
+        <article className="isd-pub-page" key={levelKey(page)}>
           <FocusContext.Provider value={focusValue}>
             {!current ? (
-              <OverviewPage diagram={diagram} name={name} toc={toc} onOpen={go} onNavigate={navigate} />
+              <OverviewPage diagram={diagram} name={name} toc={toc} onOpen={go} onNavigate={navigate([])} />
             ) : (
-              <ComponentPage diagram={diagram} node={current} onOpen={go} onNavigate={navigate} />
+              <ComponentPage root={diagram} level={at} diagram={levelDiagram!} node={current} onOpen={go} onNavigate={navigate(at)} />
             )}
           </FocusContext.Provider>
           <nav className="isd-pub-pager" aria-label="Pages">
@@ -250,7 +272,7 @@ function OverviewPage({
         </p>
       </header>
       <figure className="isd-pub-figure">
-        <StaticDiagram diagram={diagram} focus={focus} maxHeight={560} onNodeClick={(id) => onOpen(id)} label={`${name} architecture diagram`} />
+        <StaticDiagram diagram={diagram} focus={focus} maxHeight={560} onNodeClick={(id) => onOpen([id])} label={`${name} architecture diagram`} />
         <figcaption>Click a component to open its page.</figcaption>
       </figure>
       {hasDoc(diagram.doc) && (
@@ -263,9 +285,9 @@ function OverviewPage({
         <ul className="isd-pub-index">
           {toc
             .filter((t) => t.depth === 0 || hasDoc(t.node.doc))
-            .map(({ node }) => (
-              <li key={node.id}>
-                <a href="#" onClick={(e) => (e.preventDefault(), onOpen(node.id))}>
+            .map(({ node, page }) => (
+              <li key={levelKey(page)}>
+                <a href="#" onClick={(e) => (e.preventDefault(), onOpen(page))}>
                   {nodeTitle(node)}
                 </a>
                 <small>{kindLabel(node)}</small>
@@ -279,11 +301,17 @@ function OverviewPage({
 }
 
 function ComponentPage({
+  root,
+  level,
   diagram,
   node,
   onOpen,
   onNavigate,
 }: {
+  root: Diagram;
+  /** The components drilled into to reach `diagram`. */
+  level: LevelPath;
+  /** The diagram the component is drawn in. */
   diagram: Diagram;
   node: DiagramNode;
   onOpen: (p: Page, anchor?: string) => void;
@@ -295,6 +323,11 @@ function ComponentPage({
   const { focus } = useContext(FocusContext);
   const children = diagram.nodes.filter((n) => n.kind !== 'text' && containerOf(n, diagram.nodes)?.id === node.id);
   const edges = diagram.edges.filter((e) => e.from === node.id || e.to === node.id);
+  /** The page of another item on this level. */
+  const here = (id: string): Page => [...level, id];
+  const outer = levelNodes(root, level);
+  /** What the detail diagram holds, for links into it. */
+  const inside = node.detail ? tableOfContents(node.detail, [...level, node.id]).filter((t) => t.depth === 0) : [];
   const nameOf = (id: string) => {
     const n = diagram.nodes.find((x) => x.id === id);
     return n ? nodeTitle(n) : 'Unknown';
@@ -306,10 +339,19 @@ function ComponentPage({
         <a href="#" onClick={(e) => (e.preventDefault(), onOpen(OVERVIEW))}>
           Overview
         </a>
+        {/* The components this one is inside, level by level, then its areas on its own level. */}
+        {outer.map((c, i) => (
+          <span key={`level-${c.id}`}>
+            <span aria-hidden>›</span>
+            <a href="#" onClick={(e) => (e.preventDefault(), onOpen(level.slice(0, i + 1)))}>
+              {nodeTitle(c)}
+            </a>
+          </span>
+        ))}
         {chain.map((c) => (
           <span key={c.id}>
             <span aria-hidden>›</span>
-            <a href="#" onClick={(e) => (e.preventDefault(), onOpen(c.id))}>
+            <a href="#" onClick={(e) => (e.preventDefault(), onOpen(here(c.id)))}>
               {nodeTitle(c)}
             </a>
           </span>
@@ -319,7 +361,11 @@ function ComponentPage({
         <h1>{nodeTitle(node)}</h1>
         <p className="isd-pub-meta">
           <span className="isd-pub-pill">{kindLabel(node)}</span>
-          {chain.length > 0 && <span>in {nodeTitle(chain[chain.length - 1])}</span>}
+          {chain.length > 0 ? (
+            <span>in {nodeTitle(chain[chain.length - 1])}</span>
+          ) : (
+            outer.length > 0 && <span>inside {nodeTitle(outer[outer.length - 1])}</span>
+          )}
         </p>
       </header>
 
@@ -328,7 +374,7 @@ function ComponentPage({
           <StaticDiagram diagram={scene} focus={focus} maxHeight={isContainer(node) ? 320 : 190} label={nodeTitle(node)} />
         </figure>
         <figure className="isd-pub-figure is-context" title="Where it sits in the overall architecture">
-          <StaticDiagram diagram={diagram} highlight={node.id} focus={focus} animate={false} maxHeight={180} onNodeClick={(id) => onOpen(id)} label="Context" />
+          <StaticDiagram diagram={diagram} highlight={node.id} focus={focus} animate={false} maxHeight={180} onNodeClick={(id) => onOpen(here(id))} label="Context" />
           <figcaption>Where it sits</figcaption>
         </figure>
       </div>
@@ -338,9 +384,15 @@ function ComponentPage({
         <section>
           <h2 className="isd-pub-h2">Detail</h2>
           <figure className="isd-pub-figure">
-            <StaticDiagram diagram={node.detail} focus={null} maxHeight={360} label={`${nodeTitle(node)} detail`} />
+            <StaticDiagram
+              diagram={node.detail}
+              focus={null}
+              maxHeight={360}
+              onNodeClick={(id) => onOpen([...level, node.id, id])}
+              label={`${nodeTitle(node)} detail`}
+            />
             <figcaption>
-              {detailSize(node.detail)} item{detailSize(node.detail) === 1 ? '' : 's'} inside {nodeTitle(node)}
+              {detailSize(node.detail)} item{detailSize(node.detail) === 1 ? '' : 's'} inside {nodeTitle(node)}. Click one to open its page.
             </figcaption>
           </figure>
         </section>
@@ -348,7 +400,7 @@ function ComponentPage({
 
       <section className="isd-pub-doc">
         {hasDoc(node.doc) ? (
-          <DetailContext.Provider value={{ diagram: node.detail }}>
+          <DetailContext.Provider value={{ diagram: node.detail, onItemClick: (id) => onOpen([...level, node.id, id]) }}>
             <ReadOnlyDoc markdown={node.doc!} diagram={diagram} onNavigate={onNavigate} />
           </DetailContext.Provider>
         ) : (
@@ -356,13 +408,29 @@ function ComponentPage({
         )}
       </section>
 
+      {inside.length > 0 && (
+        <section>
+          <h2 className="isd-pub-h2">Inside {nodeTitle(node)}</h2>
+          <ul className="isd-pub-index is-compact">
+            {inside.map(({ node: c, page }) => (
+              <li key={c.id}>
+                <a href="#" onClick={(e) => (e.preventDefault(), onOpen(page))}>
+                  {nodeTitle(c)}
+                </a>
+                <small>{kindLabel(c)}</small>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {children.length > 0 && (
         <section>
           <h2 className="isd-pub-h2">Contains</h2>
           <ul className="isd-pub-index is-compact">
             {children.map((c) => (
               <li key={c.id}>
-                <a href="#" onClick={(e) => (e.preventDefault(), onOpen(c.id))}>
+                <a href="#" onClick={(e) => (e.preventDefault(), onOpen(here(c.id)))}>
                   {nodeTitle(c)}
                 </a>
                 <small>{kindLabel(c)}</small>
@@ -395,7 +463,7 @@ function ComponentPage({
                     <tr key={e.id}>
                       <td>{out ? '→ Outgoing' : '← Incoming'}</td>
                       <td>
-                        <a href="#" onClick={(ev) => (ev.preventDefault(), onOpen(other))}>
+                        <a href="#" onClick={(ev) => (ev.preventDefault(), onOpen(here(other)))}>
                           {nameOf(other)}
                         </a>
                       </td>

@@ -36,6 +36,8 @@ export interface DocDetail {
   onOpen?: () => void;
   /** Give the component a detail diagram; absent when it has one or the doc is read-only. */
   onAdd?: () => void;
+  /** An item in the detail diagram was clicked. */
+  onItemClick?: (id: string) => void;
 }
 
 /** Lets a doc's detail block show the detail diagram of the component the doc belongs to. */
@@ -237,7 +239,7 @@ function DetailBlockView({ selected, editor }: NodeViewProps) {
       </div>
       {d?.nodes.length ? (
         <div className="isd-embed-canvas" onDoubleClick={detail?.onOpen}>
-          <StaticDiagram diagram={d} maxHeight={360} label="Detail diagram" />
+          <StaticDiagram diagram={d} maxHeight={360} label="Detail diagram" onNodeClick={detail?.onItemClick} />
         </div>
       ) : (
         <div className="isd-embed-empty">

@@ -451,3 +451,4 @@ textarea.isd-input { resize: vertical; }
 /* Outline of the item whose doc mention is hovered. */
 .isd-target-highlight { animation: isd-target-in 0.15s ease-out; }
 @keyframes isd-target-in { from { opacity: 0; } to { opacity: 1; } }
+.isd-pub-toc-detail { display: inline-flex; vertical-align: -1px; margin-left: 5px; color: var(--isd-accent); opacity: 0.8; }

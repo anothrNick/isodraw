@@ -861,6 +861,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           diagram: docsNode.detail,
           // Already inside it: nothing to open.
           onOpen: docsNode.detail && !inDocsNode ? () => goLevel([...docsLevel, docsNode.id]) : undefined,
+          // Clicking an item in the doc's picture of the detail goes in with it selected.
+          onItemClick: docsNode.detail
+            ? (id: string) => goLevel([...docsLevel, docsNode.id], { select: { kind: 'node', id } })
+            : undefined,
           // Without a detail, the page is on the level showing.
           onAdd: readOnly || docsNode.detail ? undefined : () => addDetail(docsNode.id),
         }
