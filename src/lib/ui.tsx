@@ -24,6 +24,8 @@ const paths: Record<string, ReactNode> = {
   doc: <path d="M6 2h9l5 5v15H6V2Zm2 2v16h10V8h-4V4H8Zm2 7h6v2h-6v-2Zm0 4h6v2h-6v-2Z" />,
   play: <path d="M8 5v14l11-7L8 5Z" />,
   pause: <path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z" />,
+  layers: <path d="m12 2 10 5-10 5L2 7l10-5Zm0 2.2L6.5 7 12 9.8 17.5 7 12 4.2ZM4.2 10.9 12 14.8l7.8-3.9 2.2 1.1-10 5-10-5 2.2-1.1Zm0 5L12 19.8l7.8-3.9 2.2 1.1-10 5-10-5 2.2-1.1Z" />,
+  up: <path d="M11 20V7.8l-5.3 5.3-1.4-1.4L12 4l7.7 7.7-1.4 1.4L13 7.8V20h-2Z" />,
   image: <path d="M3 4h18v16H3V4Zm2 2v9.6l4-4 4 4 2-2 4 4V6H5Zm10 2.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" />,
 };
 

@@ -221,6 +221,91 @@ test.describe('published docs', () => {
   });
 });
 
+test.describe('detail diagrams', () => {
+  const levels = (page: Page) => page.locator('.isd-levels');
+  const center = async (page: Page, selector: string) => {
+    const b = (await canvas(page).locator(selector).first().boundingBox())!;
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await page.getByLabel('Load an example diagram').selectOption('serverless');
+    await expect(status(page)).toContainText('12 nodes');
+  });
+
+  test('double-click goes into a component; Esc, crumbs and Back come out', async ({ page }) => {
+    await expect(canvas(page).locator('[data-detail-badge="orders"]')).toBeVisible();
+    const p = await center(page, '[data-node-id="orders"]');
+    await page.mouse.dblclick(p.x, p.y);
+    await expect(levels(page)).toContainText('Diagram›orders-api');
+    await expect(status(page)).toContainText('6 nodes · 5 connections');
+    expect(new URL(page.url()).hash).toBe('#in/orders');
+
+    // Esc with nothing selected goes up and selects the component you came from.
+    await page.keyboard.press('Escape');
+    await expect(levels(page)).toHaveCount(0);
+    await expect(status(page)).toContainText('12 nodes');
+    await expect(page.locator('.isd-inspector input').first()).toHaveValue('orders-api');
+
+    // Enter on the selected component goes back in; the browser's Back button comes out.
+    await page.keyboard.press('Enter');
+    await expect(levels(page)).toBeVisible();
+    await page.goBack();
+    await expect(levels(page)).toHaveCount(0);
+    await page.goForward();
+    await expect(status(page)).toContainText('6 nodes');
+    await levels(page).getByRole('button', { name: 'Diagram' }).click();
+    await expect(levels(page)).toHaveCount(0);
+  });
+
+  test("the docs show the component's doc as the overview inside it", async ({ page }) => {
+    await page.getByRole('button', { name: 'Show docs (D)' }).click();
+    await canvas(page).locator('[data-detail-badge="orders"]').click();
+    const docs = page.locator('.isd-docs');
+    await expect(docs.locator('.isd-docs-title h2')).toHaveText('orders-api');
+    await expect(docs.locator('.isd-docs-title small')).toContainText('Overview · Image in Serverless backend');
+    // Already inside: the doc shows the detail diagram without an Open button.
+    await expect(docs.locator('.isd-embed.is-detail')).toContainText('Detail diagram · 6 items');
+    await expect(docs.locator('.isd-docs-detail')).toHaveCount(0);
+    // The crumb goes up to the top diagram's overview.
+    await docs.locator('.isd-docs-crumbs').getByRole('button', { name: 'Diagram' }).click();
+    await expect(levels(page)).toHaveCount(0);
+    await expect(docs.locator('.isd-docs-title h2')).toHaveText('Diagram overview');
+  });
+
+  test('add one from the inspector; undo goes back to where each change happened', async ({ page }) => {
+    const p = await center(page, '[data-node-id="cognito"]');
+    await page.mouse.click(p.x, p.y);
+    await page.getByRole('button', { name: 'Add detail diagram' }).click();
+    await expect(levels(page)).toContainText('Diagram›Cognito');
+    await expect(page.locator('.isd-level-empty')).toBeVisible();
+    await page.getByRole('button', { name: /^Cylinder/ }).click();
+    await expect(status(page)).toContainText('1 nodes');
+
+    await page.keyboard.press('Escape'); // deselect
+    await page.keyboard.press('Escape'); // up
+    await expect(levels(page)).toHaveCount(0);
+    await expect(canvas(page).locator('[data-detail-badge="cognito"]')).toBeVisible();
+
+    const undo = page.getByRole('button', { name: 'Undo (⌘Z)' });
+    await undo.click();
+    await expect(levels(page)).toContainText('Cognito');
+    await expect(status(page)).toContainText('0 nodes');
+    await undo.click();
+    await expect(levels(page)).toHaveCount(0);
+    await expect(canvas(page).locator('[data-detail-badge="cognito"]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Redo (⇧⌘Z)' }).click();
+    await expect(canvas(page).locator('[data-detail-badge="cognito"]')).toBeVisible();
+  });
+
+  test('published pages show a component’s detail diagram', async ({ page }) => {
+    await page.getByRole('radio', { name: 'Published' }).click();
+    await page.locator('.isd-pub-toc').getByRole('link', { name: 'orders-api' }).click();
+    await expect(page.getByRole('img', { name: 'Detail diagram' })).toBeVisible();
+    await expect(page.locator('.isd-pub-doc .isd-embed.is-detail')).toContainText('Detail diagram · 6 items');
+  });
+});
+
 test.describe('Terraform import', () => {
   const openInput = (page: Page) => page.locator('input[type="file"][accept*=".tfstate"]');
 

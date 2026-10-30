@@ -128,7 +128,18 @@ export function parseDiagram(json: unknown): Diagram {
   const ids = new Set(obj.nodes.map((n) => n.id));
   return {
     version: 1,
-    nodes: obj.nodes.map((n) => ({ ...n, z: n.z ?? 0, h: n.h ?? 0 })),
+    nodes: obj.nodes.map((n) => {
+      const { detail, ...rest } = n;
+      const node: DiagramNode = { ...rest, z: n.z ?? 0, h: n.h ?? 0 };
+      if (detail) {
+        try {
+          node.detail = parseDiagram(detail);
+        } catch {
+          /* drop a malformed detail diagram */
+        }
+      }
+      return node;
+    }),
     edges: obj.edges.filter((e) => ids.has(e.from) && ids.has(e.to)).map(migrateEdge),
     ...(typeof obj.doc === 'string' ? { doc: obj.doc } : {}),
     ...(obj.view === '2d' || obj.view === '3d' ? { view: obj.view } : {}),

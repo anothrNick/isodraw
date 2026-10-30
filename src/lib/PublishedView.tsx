@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { containerOf, isContainer, parentMap } from './containers';
-import { DocEditor } from './DocsPanel';
+import { DetailContext, DocEditor } from './DocsPanel';
+import { DETAIL_BLOCK, detailSize } from './levels';
 import { componentScene, edgeTitle, hasDoc, mentionables, nodeTitle } from './docs';
 import type { PublishedViewProps } from './Published';
 import { ThemeContext } from './theme';
@@ -332,9 +333,24 @@ function ComponentPage({
         </figure>
       </div>
 
+      {/* A doc places the detail diagram itself with a detail block; otherwise it comes first. */}
+      {node.detail && !node.doc?.includes(DETAIL_BLOCK) && (
+        <section>
+          <h2 className="isd-pub-h2">Detail</h2>
+          <figure className="isd-pub-figure">
+            <StaticDiagram diagram={node.detail} focus={null} maxHeight={360} label={`${nodeTitle(node)} detail`} />
+            <figcaption>
+              {detailSize(node.detail)} item{detailSize(node.detail) === 1 ? '' : 's'} inside {nodeTitle(node)}
+            </figcaption>
+          </figure>
+        </section>
+      )}
+
       <section className="isd-pub-doc">
         {hasDoc(node.doc) ? (
-          <ReadOnlyDoc markdown={node.doc!} diagram={diagram} onNavigate={onNavigate} />
+          <DetailContext.Provider value={{ diagram: node.detail }}>
+            <ReadOnlyDoc markdown={node.doc!} diagram={diagram} onNavigate={onNavigate} />
+          </DetailContext.Provider>
         ) : (
           <p className="isd-pub-empty">No documentation for this component yet.</p>
         )}

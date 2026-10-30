@@ -43,6 +43,13 @@ GitHub Actions runs the typecheck, both test suites and the library build on eve
   - *Animation:* marching dashes (flow), data packets, a travelling pulse, or a breathing glow. Each has a direction setting (forward, reverse or both ways), a speed, and a highlight color. The toolbar has a play/pause button, and exported SVGs keep the animations.
 - **Editing:** drag to move (snaps to a 0.5 grid; hold `Alt` to move freely), drag the corner handle to resize, drag the blue dot to change height, `Shift+drag` for box select, copy/paste/duplicate, nudge with the arrow keys, lock, and undo/redo.
 - **Containers:** areas hold whatever sits inside them. Moving an area moves its contents, including nested subnets and the bends on connections between them. Dragging a node into an area adds it, and the area is highlighted while you drag. Press `⌘G` to wrap the selection in a new area, and `⇧⌘G` to ungroup it. Deleting an area also deletes its contents; *Ungroup* keeps them. Membership comes purely from position, so it always matches what you see.
+- **Detail diagrams:** any component can have its own diagram of what's inside it (`node.detail`), nested as deep as you like. Add one with *Add detail diagram* in the inspector or the docs panel.
+  - A component with a detail diagram has a small layers badge. Double-click it, click the badge, or select it and press `Enter` to go in. The canvas zooms in, and a breadcrumb bar at the top left (*Diagram › orders-api*) shows where you are. Press `Esc` (with nothing selected) or `⌥↑`, or click a crumb, to go back up. Going up selects the component you came out of, and each level remembers where you were looking.
+  - Inside a detail diagram, the docs panel's overview is the component's own doc, so a component never has two docs to keep in step. Type `/Detail diagram` in a component's doc to show its detail diagram at that point; published pages show it there too.
+  - Undo and redo cover every level. Undoing a change made on another level takes you to that level first, so nothing changes out of sight.
+  - The level is a prop (`level` / `onLevelChange`), so a host can keep it in the URL. The demo uses `#in/<component>`, so links work and the browser's Back button goes up.
+  - *Open* imports into the level on screen, so you can import a Terraform file as one component's detail diagram.
+  - Diagrams embedded in a component's doc by earlier versions become its detail diagram when the diagram is loaded.
 - **Readable at any angle:** text on the ground, area labels and image tiles turn to stay upright as you rotate the 2.5D view.
 - **Responsive:** below 1000px wide, the side panels become drawers you open from the toolbar, and the inspector opens when you select something.
 - **Resizable panels:** drag the inner border of the shapes panel, the properties panel or the docs panel to widen it. Their default widths are the minimums. Widths are remembered in the browser, and double-clicking a border resets it.
@@ -97,6 +104,7 @@ function App() {
 | `userIcons` / `onUserIconsChange` | Images the user imported, so the host app can save them |
 | `readOnly` | Hides the side panels and turns off editing |
 | `theme` | `'light'` (default), `'dark'` or `'system'`. Colors are CSS variables (`--isd-bg`, `--isd-accent`, …) you can override |
+| `level` / `onLevelChange` | The detail diagram on screen, as the ids of the components drilled into (`[]` is the top). The editor follows changes to `level` |
 
 Docs are Markdown strings on `node.doc`, `edge.doc` and `diagram.doc`. The library is built as ES and CommonJS modules. React, React DOM, `@tiptap/*` and `tiptap-markdown` are dependencies of the package rather than bundled into it.
 
@@ -104,7 +112,7 @@ Lower-level exports: `StaticDiagram` (a responsive, non-interactive render), `Is
 
 ### Data model
 
-Coordinates are grid units on the ground plane: `x` points east, `y` points south and `z` (elevation) points up. Each node has a footprint (`w` × `d`) and a height `h`. Edges refer to node ids. See `src/lib/types.ts`.
+Coordinates are grid units on the ground plane: `x` points east, `y` points south and `z` (elevation) points up. Each node has a footprint (`w` × `d`) and a height `h`. Edges refer to node ids. A node's `detail` is a whole diagram of its own, whose ids only need to be unique within it. `levelAt(diagram, path)` and `withLevel(diagram, path, fn)` read and update one level. See `src/lib/types.ts`.
 
 ## Layout
 

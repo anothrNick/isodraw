@@ -152,7 +152,8 @@ Idempotency-Key: 0b7e6c1a-2f44-4d1e-9a51-6cbe8f3d2a90
 
 Each request goes through these steps. An order that fails validation returns `400` before anything is written.
 
-<!-- embed:ordersInternals -->
+```isodraw-detail
+```
 
 ```ts
 export const handler = async (event) => {
