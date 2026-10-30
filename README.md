@@ -28,6 +28,7 @@ A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run dep
 - **Containers:** areas hold whatever sits inside them. Moving an area moves its contents, including nested subnets and the bends on connections between them. Dragging a node into an area adds it, and the area is highlighted while you drag. Press `⌘G` to wrap the selection in a new area, and `⇧⌘G` to ungroup it. Deleting an area also deletes its contents; *Ungroup* keeps them. Membership comes purely from position, so it always matches what you see.
 - **Readable at any angle:** text on the ground, area labels and image tiles turn to stay upright as you rotate the 2.5D view.
 - **Responsive:** below 1000px wide, the side panels become drawers you open from the toolbar, and the inspector opens when you select something.
+- **Resizable panels:** drag the inner border of the shapes panel, the properties panel or the docs panel to widen it. Their default widths are the minimums. Widths are remembered in the browser, and double-clicking a border resets it.
 - **Documentation:** every node, connection and area can have its own doc, and the diagram has an overview page.
   - Open the Docs panel with `D`, the toolbar *Docs* button, the inspector, a double-click, or a node's doc badge. The panel follows your selection, and breadcrumbs (*Diagram › VPC › App subnet*) lead to parent docs.
   - The editor is Tiptap-based and stores Markdown. It has headings, lists, task lists, quotes, code blocks, tables and links, a formatting menu that appears over selected text, and `/` commands.
