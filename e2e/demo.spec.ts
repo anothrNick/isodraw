@@ -197,18 +197,18 @@ test.describe('cloud icon tabs', () => {
 test.describe('published docs', () => {
   test('have a page per component, linked by URL', async ({ page }) => {
     await page.getByRole('radio', { name: 'Published' }).click();
-    const toc = page.getByRole('complementary', { name: 'Table of contents' });
+    const toc = page.getByRole('navigation', { name: 'Table of contents' });
     await expect(page.locator('.isd-pub-page h1')).toBeVisible();
 
     await toc.getByRole('link', { name: 'RDS primary' }).click();
     await expect(page).toHaveURL(/#\/node\/rds$/);
     await expect(page.locator('.isd-pub-page h1')).toHaveText('RDS primary');
-    await expect(page.locator('.isd-pub-figure.is-component svg')).toBeVisible();
+    await expect(page.locator('.isd-pub-figure svg')).toBeVisible();
 
     // A shared link opens straight into that page.
     await page.reload();
     await expect(page.locator('.isd-pub-page h1')).toHaveText('RDS primary');
-    await toc.getByRole('link', { name: 'Overview' }).click();
+    await toc.locator('.isd-pub-site').click();
     await expect(page).toHaveURL(/#\/$/);
   });
 
@@ -313,20 +313,27 @@ test.describe('detail diagrams', () => {
   test('published pages reach components at every level', async ({ page }) => {
     await page.getByRole('radio', { name: 'Published' }).click();
     const toc = page.locator('.isd-pub-toc');
-    // Two levels down: orders-api › validate() › stock levels.
+    // Two levels down: orders-api › validate() › stock levels, opened in the contents.
+    await expect(toc.getByRole('link', { name: 'stock levels' })).toHaveCount(0);
+    await toc.getByRole('button', { name: 'Expand orders-api' }).click();
+    await toc.getByRole('button', { name: 'Expand validate()' }).click();
     await toc.getByRole('link', { name: 'stock levels' }).click();
     expect(new URL(page.url()).hash).toBe('#/node/orders/validate/stock');
-    await expect(page.locator('.isd-pub-crumbs')).toHaveText('Overview›orders-api›validate()');
-    await expect(page.locator('.isd-pub-head')).toContainText('inside validate()');
-    await expect(page.locator('.isd-pub-pager')).toContainText('PreviousJSON schema');
+    await expect(page.locator('.isd-pub-crumbs')).toHaveText('Serverless order API/orders-api/validate()');
+    await expect(toc.locator('a[aria-current="page"]')).toHaveText('stock levels');
+
+    // A shared link opens the contents down to its page.
+    await page.reload();
+    await expect(toc.locator('a[aria-current="page"]')).toHaveText('stock levels');
 
     // Up a level by crumb, then down again by clicking the detail diagram.
+    const h1 = page.locator('.isd-pub-page h1');
     await page.locator('.isd-pub-crumbs').getByRole('link', { name: 'validate()' }).click();
-    await expect(page.locator('.isd-pub-head h1')).toHaveText('validate()');
+    await expect(h1).toHaveText('validate()');
     await page.locator('.isd-pub-doc .isd-embed.is-detail [data-node-id="price"]').click();
-    await expect(page.locator('.isd-pub-head h1')).toHaveText('price & tax');
+    await expect(h1).toHaveText('price & tax');
     await page.goBack();
-    await expect(page.locator('.isd-pub-head h1')).toHaveText('validate()');
+    await expect(h1).toHaveText('validate()');
   });
 });
 
@@ -348,7 +355,7 @@ test.describe('Terraform import', () => {
     await page.getByRole('button', { name: 'Redo (⇧⌘Z)' }).click();
 
     await page.getByRole('radio', { name: 'Published' }).click();
-    await page.getByRole('complementary', { name: 'Table of contents' }).getByRole('link', { name: 'shop-fulfil' }).click();
+    await page.getByRole('navigation', { name: 'Table of contents' }).getByRole('link', { name: 'shop-fulfil' }).click();
     await expect(page.locator('.isd-pub-doc')).toContainText('Lambda function, managed by Terraform as aws_lambda_function.fulfil.');
     await expect(page.locator('.isd-pub-doc')).toContainText('nodejs20.x');
   });
