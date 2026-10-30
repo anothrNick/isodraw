@@ -18,9 +18,8 @@ export interface IsoDiagramPublishedProps {
 const PublishedView = lazy(() => import('./PublishedView'));
 
 /**
- * A read-only, docs-site style view of a diagram: an overview page with the
- * full diagram, then one page per component with the component drawn at the
- * top, its documentation, and its connections at the bottom.
+ * A read-only reading view of a diagram and its docs: a page per component,
+ * at every level of detail diagrams, with a nested table of contents beside it.
  */
 export function IsoDiagramPublished(props: IsoDiagramPublishedProps) {
   const theme = useResolvedTheme(props.theme);
