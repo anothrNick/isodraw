@@ -16,6 +16,18 @@ function load<T>(key: string, fallback: T): T {
   }
 }
 
+const SunIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </svg>
+);
+const MoonIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </svg>
+);
+
 export function App() {
   const [diagram, setDiagram] = useState<Diagram>(() => load(KEY, sampleDiagram));
   const [icons, setIcons] = useState<IconDef[]>(() => load(ICONS_KEY, []));
@@ -94,19 +106,6 @@ export function App() {
               </button>
             ))}
           </div>
-          <div className="demo-modes" role="radiogroup" aria-label="Theme">
-            {(
-              [
-                ['light', 'Light', 'Light theme'],
-                ['dark', 'Dark', 'Dark theme'],
-                ['system', 'Auto', 'Match the operating system'],
-              ] as const
-            ).map(([t, label, hint]) => (
-              <button key={t} type="button" role="radio" aria-checked={theme === t} className={theme === t ? 'is-on' : ''} title={hint} onClick={() => setTheme(t)}>
-                {label}
-              </button>
-            ))}
-          </div>
           <label className="demo-select" title="Load an example diagram (replaces the current one)">
             <span>Examples</span>
             <select
@@ -129,6 +128,15 @@ export function App() {
           </label>
           <button type="button" onClick={() => reset(emptyDiagram())}>New blank</button>
         </div>
+        <button
+          type="button"
+          className="demo-theme"
+          onClick={() => setTheme(resolved === 'dark' ? 'light' : 'dark')}
+          aria-label={resolved === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          title={resolved === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
+          {resolved === 'dark' ? <SunIcon /> : <MoonIcon />}
+        </button>
       </header>
       <main className="demo-main">
         {mode === 'published' ? (

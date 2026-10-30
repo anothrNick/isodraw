@@ -11,8 +11,8 @@
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--demo-bg); font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--demo-text); }
 .demo { display: flex; flex-direction: column; height: 100%; }
-.demo-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; gap: 12px; flex-wrap: wrap; }
-.demo-brand { display: flex; align-items: center; gap: 8px; }
+.demo-header { display: flex; align-items: center; padding: 10px 16px; gap: 12px; flex-wrap: wrap; }
+.demo-brand { display: flex; align-items: center; gap: 8px; margin-right: auto; }
 .demo-brand strong { font-size: 16px; }
 .demo-brand span { color: var(--demo-muted); font-size: 13px; }
 .demo-actions { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -32,3 +32,13 @@ body { background: var(--demo-bg); font-family: Inter, system-ui, -apple-system,
 .demo-modes { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--demo-border); border-radius: 7px; background: var(--demo-control); }
 .demo-modes button { border: 0 !important; padding: 4px 10px !important; border-radius: 5px !important; }
 .demo-modes button.is-on { background: var(--demo-accent); color: var(--demo-on-accent); }
+.demo-theme {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+  border: 1px solid var(--demo-border); border-radius: 6px; background: var(--demo-control); color: var(--demo-text); cursor: pointer;
+}
+.demo-theme:hover { border-color: var(--demo-accent); color: var(--demo-accent); }
+/* When the header wraps, the toggle stays top right and the actions take the next row. */
+@media (max-width: 1000px) {
+  .demo-theme { order: 1; }
+  .demo-actions { order: 2; width: 100%; }
+}
