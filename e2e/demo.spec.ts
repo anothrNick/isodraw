@@ -234,8 +234,11 @@ test.describe('detail diagrams', () => {
   });
 
   test('double-click goes into a component; Esc, crumbs and Back come out', async ({ page }) => {
-    await expect(canvas(page).locator('[data-detail-badge="orders"]')).toBeVisible();
+    // The badge shows on hover, like the doc badge.
+    await expect(canvas(page).locator('[data-detail-badge="orders"]')).toHaveCount(0);
     const p = await center(page, '[data-node-id="orders"]');
+    await page.mouse.move(p.x, p.y);
+    await expect(canvas(page).locator('[data-detail-badge="orders"]')).toBeVisible();
     await page.mouse.dblclick(p.x, p.y);
     await expect(levels(page)).toContainText('Diagram›orders-api');
     await expect(status(page)).toContainText('6 nodes · 5 connections');
@@ -260,6 +263,8 @@ test.describe('detail diagrams', () => {
 
   test("the docs show the component's doc as the overview inside it", async ({ page }) => {
     await page.getByRole('button', { name: 'Show docs (D)' }).click();
+    const p = await center(page, '[data-node-id="orders"]');
+    await page.mouse.move(p.x, p.y);
     await canvas(page).locator('[data-detail-badge="orders"]').click();
     const docs = page.locator('.isd-docs');
     await expect(docs.locator('.isd-docs-title h2')).toHaveText('orders-api');

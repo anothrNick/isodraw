@@ -49,8 +49,8 @@ export interface IsoCanvasProps {
   onDropPayload?: (payload: string, world: Pt) => void;
   svgRef?: Ref<SVGSVGElement>;
   /**
-   * When to show the small doc marker on documented items: on hover or
-   * selection (default), always, or never.
+   * When to show the small doc and detail-diagram markers on items: on hover
+   * or selection (default), always, or never.
    */
   showDocBadges?: 'hover' | 'always' | 'never';
   /** A doc badge was clicked, or an item without a detail diagram was double-clicked. */
@@ -338,8 +338,12 @@ export function IsoCanvas(props: IsoCanvasProps) {
       }
       const nodeId = closestAttr(e.target, 'data-node-id');
       const edgeId = closestAttr(e.target, 'data-edge-id');
-      // Keep the marker while the pointer moves onto it.
-      setHoverItem(closestAttr(e.target, 'data-doc-badge') ?? (nodeId ? `node:${nodeId}` : edgeId ? `edge:${edgeId}` : null));
+      const detailBadge = closestAttr(e.target, 'data-detail-badge');
+      // Keep the markers while the pointer moves onto one.
+      setHoverItem(
+        closestAttr(e.target, 'data-doc-badge') ??
+          (detailBadge ? `node:${detailBadge}` : nodeId ? `node:${nodeId}` : edgeId ? `edge:${edgeId}` : null),
+      );
       return;
     }
     const free = e.altKey;
@@ -830,9 +834,9 @@ export function IsoCanvas(props: IsoCanvasProps) {
             }),
         ];
 
-  // Detail badges are how you find the way in, so they always show.
+  // Detail badges follow the same rule as doc badges: on hover or selection by default.
   const detailBadges = diagram.nodes
-    .filter((n) => n.detail)
+    .filter((n) => n.detail && badgeVisible(`node:${n.id}`))
     .map((n) => {
       const flat = isFlat(n) || n.kind === 'sphere';
       const top = flat ? n.z : n.z + n.h;
