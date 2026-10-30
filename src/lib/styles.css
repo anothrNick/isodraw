@@ -175,7 +175,8 @@ textarea.isd-input { resize: vertical; }
 .isd-swatch.is-active { outline: 2px solid var(--isd-accent); outline-offset: 1px; }
 .isd-color { width: 28px; height: 22px; padding: 0; border: 1px solid var(--isd-border); border-radius: 5px; background: none; cursor: pointer; }
 .isd-image-preview { display: flex; justify-content: center; padding: 8px; background: var(--isd-bg); border: 1px solid var(--isd-border); border-radius: 8px; }
-.isd-image-preview img { max-width: 72px; max-height: 72px; }
+/* Fixed box: some icon sets declare a tiny intrinsic size (Azure SVGs are 18px). */
+.isd-image-preview img { width: 72px; height: 72px; object-fit: contain; }
 .isd-keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; font-size: 12px; }
 .isd-keys dt { font-weight: 600; white-space: nowrap; }
 .isd-keys dd { margin: 0; color: var(--isd-muted); }

@@ -6,7 +6,7 @@ import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } fro
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
-import { loadAwsIconLibrary } from './icons';
+import { loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary } from './icons';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
 import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
@@ -22,8 +22,12 @@ export interface IsoDiagramEditorProps {
   defaultView?: ViewMode;
   /** Extra icon libraries to show in the palette. */
   iconLibraries?: IconLibrary[];
-  /** Load the AWS architecture icons from the jsDelivr CDN (default true). */
+  /** Offer the AWS architecture icons, loaded from the jsDelivr CDN (default true). */
   awsIcons?: boolean;
+  /** Offer the Google Cloud icons, loaded from the jsDelivr CDN when the tab is first opened (default true). */
+  gcpIcons?: boolean;
+  /** Offer Microsoft's Azure architecture icons, loaded from the jsDelivr CDN when the tab is first opened (default true). */
+  azureIcons?: boolean;
   /** Icons the user imported; persisted by the host if desired. */
   userIcons?: IconDef[];
   onUserIconsChange?: (icons: IconDef[]) => void;
@@ -46,6 +50,18 @@ interface History {
 const DocsPanel = lazy(() => import('./DocsPanel'));
 
 const HISTORY_LIMIT = 200;
+
+/** Most icons the palette lists at once; images load lazily as they scroll into view. */
+const ICON_LIMIT = 1000;
+
+type CloudId = 'aws' | 'gcp' | 'azure';
+type CloudLib = { status: 'loading' | 'ready' | 'error'; lib?: IconLibrary; error?: string };
+/** Built-in cloud icon sets, in palette tab order. */
+const CLOUDS: { id: CloudId; name: string; load: () => Promise<IconLibrary> }[] = [
+  { id: 'aws', name: 'AWS', load: () => loadAwsIconLibrary() },
+  { id: 'gcp', name: 'GCP', load: () => loadGcpIconLibrary() },
+  { id: 'azure', name: 'Azure', load: () => loadAzureIconLibrary() },
+];
 
 /** Side panel widths. Today's sizes are the minimums; dragging a panel's inner border widens it. */
 type Panel = 'palette' | 'inspector' | 'docs';
@@ -77,7 +93,7 @@ interface PalettePayload {
 }
 
 export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
-  const { readOnly, awsIcons = true } = props;
+  const { readOnly, awsIcons = true, gcpIcons = true, azureIcons = true } = props;
   const theme = useResolvedTheme(props.theme);
   const [hist, setHist] = useState<History>(() => ({
     d: props.value ?? props.defaultValue ?? emptyDiagram(),
@@ -97,8 +113,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const [edgeStyle, setEdgeStyle] = useState<Partial<DiagramEdge>>({});
   const [paletteTab, setPaletteTab] = useState('shapes');
   const [search, setSearch] = useState('');
-  const [aws, setAws] = useState<IconLibrary | null>(null);
-  const [awsError, setAwsError] = useState<string | null>(null);
+  const [cloudLibs, setCloudLibs] = useState<Partial<Record<CloudId, CloudLib>>>({});
   const [localIcons, setLocalIcons] = useState<IconDef[]>(props.userIcons ?? []);
   const [toast, setToast] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -142,14 +157,23 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hist.d]);
 
+  // Cloud icon sets load the first time their tab is opened (AWS, the default set, loads right away).
+  const enabledClouds = CLOUDS.filter((c) => ({ aws: awsIcons, gcp: gcpIcons, azure: azureIcons })[c.id]);
+  const loadCloud = useCallback((id: CloudId) => {
+    const cloud = CLOUDS.find((c) => c.id === id)!;
+    setCloudLibs((cur) => ({ ...cur, [id]: { status: 'loading' } }));
+    cloud
+      .load()
+      .then((lib) => setCloudLibs((cur) => ({ ...cur, [id]: { status: 'ready', lib } })))
+      .catch((e) => setCloudLibs((cur) => ({ ...cur, [id]: { status: 'error', error: String(e?.message ?? e) } })));
+  }, []);
   useEffect(() => {
-    if (!awsIcons) return;
-    const ctl = new AbortController();
-    loadAwsIconLibrary({ signal: ctl.signal })
-      .then(setAws)
-      .catch((e) => !ctl.signal.aborted && setAwsError(String(e.message ?? e)));
-    return () => ctl.abort();
-  }, [awsIcons]);
+    if (awsIcons) loadCloud('aws');
+  }, [awsIcons, loadCloud]);
+  useEffect(() => {
+    const cloud = CLOUDS.find((c) => c.id === paletteTab);
+    if (cloud && !cloudLibs[cloud.id]) loadCloud(cloud.id);
+  }, [paletteTab, cloudLibs, loadCloud]);
 
   useEffect(() => {
     if (!toast) return;
@@ -566,18 +590,19 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
   // ----- palette -----
   const libraries: IconLibrary[] = [
-    ...(aws ? [aws] : []),
+    ...enabledClouds.map((c) => cloudLibs[c.id]?.lib ?? { id: c.id, name: c.name, icons: [] }),
     ...(props.iconLibraries ?? []),
     { id: 'mine', name: 'My images', icons: userIcons },
   ];
   const activeLib = libraries.find((l) => l.id === paletteTab);
+  const activeCloud = cloudLibs[paletteTab as CloudId];
   const q = search.trim().toLowerCase();
   const visibleIcons = activeLib
     ? activeLib.icons.filter((i) => !q || i.name.toLowerCase().includes(q) || i.category?.toLowerCase().includes(q))
     : [];
   const grouped = useMemo(() => {
     const m = new Map<string, IconDef[]>();
-    for (const i of visibleIcons.slice(0, 400)) {
+    for (const i of visibleIcons.slice(0, ICON_LIMIT)) {
       const c = i.category ?? '';
       if (!m.has(c)) m.set(c, []);
       m.get(c)!.push(i);
@@ -794,7 +819,6 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                   {t.name}
                 </button>
               ))}
-              {awsIcons && !aws && <span className="isd-tab-note">{awsError ? 'AWS icons unavailable' : 'Loading AWS…'}</span>}
             </div>
 
             {paletteTab === 'shapes' ? (
@@ -857,14 +881,25 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                             onClick={() => placePayload({ type: 'icon', src: i.src, name: i.name }, viewCenter())}
                           >
                             <img src={i.src} alt="" loading="lazy" draggable={false} />
-                            <span>{i.name.replace(/^(Amazon|AWS) /, '')}</span>
+                            <span>{i.name.replace(/^(Amazon|AWS|Azure|Google Cloud) /, '')}</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   ))}
-                  {visibleIcons.length > 400 && <p className="isd-hint">Showing 400 of {visibleIcons.length}. Refine your search.</p>}
-                  {!visibleIcons.length && <p className="isd-hint">{paletteTab === 'mine' ? 'No images yet. Upload PNG/SVG logos to use them as nodes.' : 'No matches.'}</p>}
+                  {visibleIcons.length > ICON_LIMIT && <p className="isd-hint">Showing {ICON_LIMIT} of {visibleIcons.length}. Refine your search.</p>}
+                  {activeCloud?.status === 'loading' && <p className="isd-hint">Loading {activeLib?.name} icons…</p>}
+                  {activeCloud?.status === 'error' && (
+                    <div className="isd-hint">
+                      <p>Couldn't load {activeLib?.name} icons: {activeCloud.error}</p>
+                      <button type="button" className="isd-btn" onClick={() => loadCloud(paletteTab as CloudId)}>
+                        Try again
+                      </button>
+                    </div>
+                  )}
+                  {!visibleIcons.length && (!activeCloud || activeCloud.status === 'ready') && (
+                    <p className="isd-hint">{paletteTab === 'mine' ? 'No images yet. Upload PNG/SVG logos to use them as nodes.' : 'No matches.'}</p>
+                  )}
                 </div>
               </>
             )}
