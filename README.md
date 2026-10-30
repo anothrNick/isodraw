@@ -18,7 +18,11 @@ A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run dep
 - **Two views:** flat top-down and 2.5D isometric. The 2.5D view rotates in 90° steps. Press `Tab` to switch views and `R` / `Shift+R` to rotate. The 2D/2.5D choice is saved on the diagram (`diagram.view`), so read-only, published and embedded copies are drawn the same way.
 - **Shapes:** block, cylinder, hexagon, pyramid, cone, sphere, rectangular area, circular area and ground text. Every shape has a color, size, height, elevation, opacity and label.
 - **Images and logos:** upload PNG/SVG/JPG files (or drop them on the editor), or add one by URL. Images can be drawn as a *tile* (an icon on a block, like Cloudcraft), *flat* on the ground, or *standing* upright.
-- **AWS icons:** the official AWS architecture icon set (about 800 icons: services, resources, groups and categories). They load at runtime from the jsDelivr CDN through the MIT-licensed [`aws-icons`](https://www.npmjs.com/package/aws-icons) npm package, and you can search them.
+- **Cloud icons:** AWS, Google Cloud and Azure tabs in the palette, all searchable and loaded at runtime from the jsDelivr CDN (nothing is bundled):
+  - *AWS:* the official AWS architecture icon set (about 800 services, resources, groups and categories), from the MIT-licensed [`aws-icons`](https://www.npmjs.com/package/aws-icons) package.
+  - *Google Cloud:* Google's current core-product and category icons ([`gcp-icons`](https://www.npmjs.com/package/gcp-icons), MIT) plus the full set of 216 product icons ([`@f5-sales-demo/icons-gcp`](https://www.npmjs.com/package/@f5-sales-demo/icons-gcp), Apache-2.0).
+  - *Azure:* Microsoft's Azure architecture icons, release V24, 636 icons in Microsoft's categories ([`@squinch/pack-azure`](https://www.npmjs.com/package/@squinch/pack-azure)). They're redistributed unmodified, and Microsoft permits their use in architecture diagrams, training material and documentation.
+  - GCP and Azure load the first time you open their tab. Turn any set off with `awsIcons`, `gcpIcons` or `azureIcons` set to `false`.
 - **Connections:**
   - *Draw the route:* drag from a node (Connect tool, or one of the side dots on a selected node) and trace the path you want. IsoDraw turns your trail into straight horizontal and vertical runs, snaps them to the grid, and puts the bends where you turned. It also picks the side to leave from and the side to enter by.
   - *Edit the route:* drag a segment's square handle to slide it. Drag an end dot onto any side of a node to re-attach it there. For straight and curved lines, drag the small dots to add bends, and double-click a bend to remove it. *Reset route* goes back to automatic routing.
@@ -68,7 +72,7 @@ function App() {
 | `value` / `onChange` | Controlled diagram |
 | `defaultValue` | Starting diagram when uncontrolled |
 | `defaultView` | `'3d'` (default) or `'2d'`, for diagrams without a saved `view` |
-| `awsIcons` | Load AWS icons from the CDN (default `true`) |
+| `awsIcons` / `gcpIcons` / `azureIcons` | Offer that cloud's icon set in the palette (default `true`) |
 | `iconLibraries` | Extra `IconLibrary[]` tabs for the palette |
 | `userIcons` / `onUserIconsChange` | Images the user imported, so the host app can save them |
 | `readOnly` | Hides the side panels and turns off editing |
@@ -76,7 +80,7 @@ function App() {
 
 Docs are Markdown strings on `node.doc`, `edge.doc` and `diagram.doc`. The library is built as ES and CommonJS modules. React, React DOM, `@tiptap/*` and `tiptap-markdown` are dependencies of the package rather than bundled into it.
 
-Lower-level exports: `StaticDiagram` (a responsive, non-interactive render), `IsoCanvas` (just the canvas, without the toolbar and panels), `SceneContent`, `Projector`, `loadAwsIconLibrary`, `exportSvg`, `exportPng`, `exportDocsMarkdown`, `createShape`, `createEdge`, `parseDiagram`.
+Lower-level exports: `StaticDiagram` (a responsive, non-interactive render), `IsoCanvas` (just the canvas, without the toolbar and panels), `SceneContent`, `Projector`, `loadAwsIconLibrary`, `loadGcpIconLibrary`, `loadAzureIconLibrary`, `exportSvg`, `exportPng`, `exportDocsMarkdown`, `createShape`, `createEdge`, `parseDiagram`.
 
 ### Data model
 
