@@ -23,13 +23,17 @@
     "build:demo": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "deploy": "npm run build:demo && gh-pages -d demo-dist -m \"Deploy demo\""
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "deploy": "npm run typecheck && npm test && npm run build:demo && gh-pages -d demo-dist -m \"Deploy demo\""
   },
   "peerDependencies": {
     "react": ">=18",
     "react-dom": ">=18"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
@@ -38,7 +42,8 @@
     "react-dom": "^18.3.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
-    "vite-plugin-dts": "^4.3.0"
+    "vite-plugin-dts": "^4.3.0",
+    "vitest": "^3.2.7"
   },
   "homepage": "https://sjostrom.io/isodraw/",
   "dependencies": {

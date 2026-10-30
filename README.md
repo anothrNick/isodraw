@@ -11,7 +11,20 @@ npm run dev
 
 Then open http://localhost:5173. Use the *Examples* menu to load a three-tier web app, a serverless API, a streaming IoT pipeline, or a Kubernetes cluster. Every example includes docs on its components. The demo saves your diagram and imported images to `localStorage`.
 
-A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run deploy`. That builds the demo and pushes it to the `gh-pages` branch.
+A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run deploy`. That typechecks, runs the unit tests, builds the demo and pushes it to the `gh-pages` branch.
+
+## Tests
+
+```bash
+npm test            # unit tests (Vitest)
+npm run test:e2e    # browser tests (Playwright), against a fresh build of the demo
+```
+
+The unit tests sit next to the code they cover (`src/**/*.test.ts`). They cover diagram parsing, containers, routing, docs export, theme colors, the icon loaders and the example docs. The example-docs tests check that every `<!-- node:id -->` section and @ mention points at a real item.
+
+The browser tests in `e2e/` use the demo the way a person would. They load the examples, drag and undo, switch the view and the theme, hover mentions, resize panels, open the cloud icon tabs and browse the published docs. They serve the GCP and Azure icon sets locally, so they don't depend on the CDN. Run `npx playwright install chromium` once before the first run.
+
+GitHub Actions runs the typecheck, both test suites and the library build on every push to `main` and on pull requests (`.github/workflows/ci.yml`). When the browser tests fail, the run uploads the Playwright report.
 
 ## Features
 
@@ -89,6 +102,7 @@ Coordinates are grid units on the ground plane: `x` points east, `y` points sout
 ## Layout
 
 ```
-src/lib/      component library (geometry, rendering, canvas, editor UI)
+src/lib/      component library (geometry, rendering, canvas, editor UI) and its unit tests
 src/demo/     demo site
+e2e/          browser tests
 ```

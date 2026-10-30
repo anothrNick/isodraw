@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 
 // Library build (npm run build)
 export default defineConfig({
-  plugins: [react(), dts({ include: ['src/lib'], rollupTypes: true })],
+  plugins: [react(), dts({ include: ['src/lib'], exclude: ['src/**/*.test.ts'], rollupTypes: true })],
   build: {
     lib: {
       entry: resolve(__dirname, 'src/lib/index.ts'),
