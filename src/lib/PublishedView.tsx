@@ -216,7 +216,9 @@ function firstSentence(md?: string): string {
     .replace(/\[@([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/^[#>\-*|].*$/gm, (l) => (l.startsWith('#') || l.startsWith('|') ? '' : l.replace(/^[>\-*]\s*(\[[ x]\]\s*)?/, '')))
-    .replace(/[*_`]/g, '')
+    .replace(/[*`]/g, '')
+    // Emphasis underscores only, so identifiers like aws_vpc keep theirs.
+    .replace(/\b_+|_+\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   const m = /^(.{0,160}?[.!?])(\s|$)/.exec(text);

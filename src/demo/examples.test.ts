@@ -47,7 +47,8 @@ describe.each(EXAMPLES.map((e) => [e.id, e] as const))('example %s', (id, exampl
     expect(new Set(d.nodes.map((n) => n.id)).size).toBe(d.nodes.length);
   });
 
-  it('documents only items that exist', () => {
+  // Hand-written docs only; the Terraform example's docs are generated.
+  it.skipIf(!SOURCES[id])('documents only items that exist', () => {
     const markers = [...SOURCES[id].matchAll(/^<!-- ((?:node|edge):[\w-]+) -->$/gm)].map((m) => m[1]);
     expect(markers.length).toBeGreaterThan(0);
     for (const m of markers) {

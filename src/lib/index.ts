@@ -11,6 +11,8 @@ export type { IsoDiagramPublishedProps } from './Published';
 export { Projector, TILE, shade } from './geometry';
 export { SHAPES, SWATCHES, createShape, createImageNode, createEdge, emptyDiagram, parseDiagram } from './shapes';
 export { loadAwsIconLibrary, loadGcpIconLibrary, loadAzureIconLibrary, humanizeIconName } from './icons';
+export { importTerraform, terraformToDiagram, isTerraformJson } from './terraform';
+export type { TerraformImportResult, TerraformImportSummary, TerraformImportOptions, TerraformSource } from './terraform';
 export { exportSvg, exportPng, exportJson, downloadBlob } from './export';
 export { exportDocsMarkdown, docOf, withDoc, hasDoc, titleOf, mentionHref, parseMentionHref, componentScene } from './docs';
 export type * from './types';
