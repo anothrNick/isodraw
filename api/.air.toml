@@ -1,0 +1,13 @@
+# Live reload for `npm run dev`: rebuilds and restarts the API when Go or SQL files change.
+root = "."
+tmp_dir = ".air"
+
+[build]
+  cmd = "go build -o .air/isodraw ./cmd/isodraw"
+  bin = ".air/isodraw"
+  include_ext = ["go", "sql"]
+  exclude_regex = ["_test\\.go$"]
+  delay = 300
+
+[misc]
+  clean_on_exit = true

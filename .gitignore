@@ -4,3 +4,6 @@ demo-dist
 .DS_Store
 test-results
 playwright-report
+.env
+.data
+.air

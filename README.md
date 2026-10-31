@@ -1,30 +1,65 @@
 # IsoDraw
 
-A React component for drawing Cloudcraft-style architecture diagrams, with a flat (2D) view and an isometric (2.5D) view. It only draws diagrams. It does not sync with any cloud account.
+A React component for drawing Cloudcraft-style architecture diagrams, with a flat (2D) view and an isometric (2.5D) view, and a platform around it: a Go API and a web app where people sign in and keep their diagrams.
 
-## Run the demo
+## Run the platform locally
+
+You need Docker, Go and Node.
 
 ```bash
 npm install
 npm run dev
 ```
 
+Then open http://localhost:5190 and sign in as `dev@isodraw.local` with the password `password` (a second user, `alex@isodraw.local`, has the same password).
+
+`npm run dev` starts Postgres and [Dex](https://dexidp.io) in Docker (`compose.yaml`), then runs the Go API with live reload on :8080 and the web app's Vite server on :5190 in one terminal. Vite forwards `/api` and `/auth` to the API, so the app and the API share an origin and the session cookie just works. The first run copies `.env.example` to `.env`. Ctrl+C stops the API and the app; the containers keep running. `npm run dev:reset` removes them and their data.
+
+- **Postgres** runs on host port 5433, so it can sit next to another local Postgres. The API applies its migrations on startup.
+- **Sign-in:** Dex is a small OIDC server that stands in for Cognito. The API only speaks standard OIDC, so the same code signs people in through Cognito in production, or through a self-hoster's own provider; only `OIDC_ISSUER` and the client settings change. Its test users are in `dev/dex.yaml`.
+- **Saving:** the editor autosaves after a short pause. Each save names the version it started from. If someone else saved in between, the API answers `409` with their version, the app merges the two edits item by item (`mergeDiagrams` in the library) and saves the result.
+
+### API
+
+All routes sit under `/api`, as a namespace (not a version). Requests are signed in with the session cookie, and changing requests must come from the app's own origin.
+
+| Route | |
+| --- | --- |
+| `GET /api/me` | The signed-in user and their organizations. The first sign-in creates a personal organization. |
+| `GET /api/orgs/{org}/diagrams` | An organization's diagrams, newest first, without content |
+| `POST /api/orgs/{org}/diagrams` | Create one: `{ title?, content? }` |
+| `GET /api/diagrams/{id}` | A diagram with its content. `ETag` is its version. |
+| `PUT /api/diagrams/{id}/content` | Save content. Send `If-Match: "<version>"`; a stale version gets `409` with the current diagram. |
+| `PATCH /api/diagrams/{id}` | Rename: `{ title }` |
+| `DELETE /api/diagrams/{id}` | Delete (soft) |
+
+Sign-in lives at `/auth/login`, `/auth/callback` and `POST /auth/logout`. People outside an organization get `404` for its diagrams, so ids don't leak; viewers get `403` when they try to change something.
+
+## Run the demo
+
+```bash
+npm run demo
+```
+
 Then open http://localhost:5173. Use the *Examples* menu to load a three-tier web app, a serverless API, a streaming IoT pipeline, or a Kubernetes cluster. Every example includes docs on its components. The demo saves your diagram and imported images to `localStorage`.
 
-A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run deploy`. That typechecks, runs the unit tests, builds the demo and pushes it to the `gh-pages` branch.
+A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run deploy:demo`. That typechecks, runs the unit tests, builds the demo and pushes it to the `gh-pages` branch.
 
 ## Tests
 
 ```bash
-npm test            # unit tests (Vitest)
+npm test            # library unit tests (Vitest), then the API tests (Go)
+npm run test:api    # just the API tests
 npm run test:e2e    # browser tests (Playwright), against a fresh build of the demo
 ```
 
-The unit tests sit next to the code they cover (`src/**/*.test.ts`). They cover diagram parsing, containers, routing, docs export, theme colors, the icon loaders and the example docs. The example-docs tests check that every `<!-- node:id -->` section and @ mention points at a real item.
+The API tests run against the compose Postgres, each in a fresh database that is dropped afterwards, and the sign-in tests walk through Dex's real login form. Without the containers they skip (in CI they fail instead).
+
+The library's unit tests sit next to the code they cover (`packages/isodraw/src/**/*.test.ts`). They cover diagram parsing, containers, routing, docs export, theme colors, the icon loaders and the example docs. The example-docs tests check that every `<!-- node:id -->` section and @ mention points at a real item.
 
 The browser tests in `e2e/` use the demo the way a person would. They load the examples, drag and undo, switch the view and the theme, hover mentions, resize panels, open the cloud icon tabs and browse the published docs. They serve the GCP and Azure icon sets locally, so they don't depend on the CDN. Run `npx playwright install chromium` once before the first run.
 
-GitHub Actions runs the typecheck, both test suites and the library build on every push to `main` and on pull requests (`.github/workflows/ci.yml`). When the browser tests fail, the run uploads the Playwright report.
+GitHub Actions runs the typecheck, the unit and browser tests, the library and web app builds, and the API tests (with the compose services) on every push to `main` and on pull requests (`.github/workflows/ci.yml`). When the browser tests fail, the run uploads the Playwright report.
 
 ## Features
 
@@ -67,7 +102,7 @@ GitHub Actions runs the typecheck, both test suites and the library build on eve
 - **Light and dark themes:** pass `theme="light" | "dark" | "system"` to the editor or the published view (`system` follows the OS). Every part of the UI switches, including the docs editor, embedded diagrams and the embed editor. Dark gray diagram ink, such as default text, slate connections and area labels, turns light in dark mode. Saturated colors stay exactly as picked. Exports from the dark theme get the dark canvas as their background so they stay readable.
 - **Export:** PNG, SVG (images are embedded in the file) and JSON. Open a saved diagram from JSON.
 - **Terraform import:** use *Open*, or drop a file onto the editor, to turn Terraform into a laid-out diagram. It reads a state file (`terraform.tfstate`, or `terraform state pull` output), `terraform show -json` output, or a plan (`terraform plan -out plan.out && terraform show -json plan.out`). It all runs in the browser, and the file never leaves it. The demo's *Imported from Terraform (AWS)* example is a sample state file imported as is.
-  - *Components* get their AWS, Google Cloud or Azure icon. About 40 AWS, 35 Google Cloud and 45 Azure component types are mapped, along with the network areas and the supporting resources that link components (see `src/lib/terraformCatalog.ts`). Unmapped types become plain blocks, and the overview doc lists them.
+  - *Components* get their AWS, Google Cloud or Azure icon. About 40 AWS, 35 Google Cloud and 45 Azure component types are mapped, along with the network areas and the supporting resources that link components (see `packages/isodraw/src/lib/terraformCatalog.ts`). Unmapped types become plain blocks, and the overview doc lists them.
   - *Areas:* VPCs and subnets (AWS), VPC networks and subnets (GCP), and resource groups, virtual networks and subnets (Azure) become nested areas. Components go in the area they're attached to, directly or through a subnet group, VPC connector or network interface. A component spread over sibling subnets (two availability zones) is drawn in the first, and its doc lists the rest. Areas with no components are left out.
   - *Connections:* in a plan, connections come from the references in the configuration, followed through module inputs and outputs. In state, they come from attribute values that contain another resource's ID, ARN, URL, hostname or name, such as a Lambda environment variable naming a table or an ECS task definition pointing at a database host. Supporting resources aren't drawn, but their links are: an event source mapping becomes *queue → function*, an SNS subscription *topic → queue*, a listener and target group *load balancer → service*, a DNS alias record *zone → distribution*, and a Pub/Sub push subscription *topic → service*. Each connection's doc says which references it came from.
   - *Layout:* components are placed in columns that follow the flow, left to right, inside their areas. Components with no connections go in a row underneath, so no line runs through them. It's a starting point to rearrange.
@@ -114,12 +149,14 @@ Lower-level exports: `StaticDiagram` (a responsive, non-interactive render), `Is
 
 ### Data model
 
-Coordinates are grid units on the ground plane: `x` points east, `y` points south and `z` (elevation) points up. Each node has a footprint (`w` × `d`) and a height `h`. Edges refer to node ids. A node's `detail` is a whole diagram of its own, whose ids only need to be unique within it. `levelAt(diagram, path)` and `withLevel(diagram, path, fn)` read and update one level. See `src/lib/types.ts`.
+Coordinates are grid units on the ground plane: `x` points east, `y` points south and `z` (elevation) points up. Each node has a footprint (`w` × `d`) and a height `h`. Edges refer to node ids. A node's `detail` is a whole diagram of its own, whose ids only need to be unique within it. `levelAt(diagram, path)` and `withLevel(diagram, path, fn)` read and update one level. See `packages/isodraw/src/lib/types.ts`.
 
 ## Layout
 
 ```
-src/lib/      component library (geometry, rendering, canvas, editor UI) and its unit tests
-src/demo/     demo site
-e2e/          browser tests
+packages/isodraw/   the component library (src/lib), the demo site (src/demo) and its browser tests (e2e)
+web/                the platform web app: sign-in, diagram list, editor with autosave
+api/                the Go API: cmd/isodraw, internal/{auth,config,db,httpapi,store}, migrations
+dev/                local development: Dex config and the npm run dev script
+compose.yaml        Postgres and Dex for local development
 ```

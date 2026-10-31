@@ -1,0 +1,259 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/store"
+)
+
+// MaxContentBytes caps a diagram's JSON. Uploaded images will move out of the
+// content into asset storage, so real diagrams stay far below this.
+const MaxContentBytes = 5 << 20
+
+const maxTitle = 200
+
+var emptyContent = json.RawMessage(`{"version":1,"nodes":[],"edges":[]}`)
+
+func (s *Server) me(w http.ResponseWriter, r *http.Request) {
+	u := auth.User(r.Context())
+	orgs, err := s.store.UserOrgs(r.Context(), u.ID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs})
+}
+
+// orgRole checks that the signed-in user belongs to the organization. Non-members get 404, so ids don't leak.
+func (s *Server) orgRole(w http.ResponseWriter, r *http.Request, orgID string) (store.Role, bool) {
+	if !isUUID(orgID) {
+		writeError(w, http.StatusNotFound, "not_found", "No such organization.")
+		return "", false
+	}
+	role, err := s.store.RoleIn(r.Context(), orgID, auth.User(r.Context()).ID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "No such organization.")
+		return "", false
+	}
+	if err != nil {
+		internalError(w, err)
+		return "", false
+	}
+	return role, true
+}
+
+// diagramAccess loads a diagram's metadata and the user's role in its organization.
+// With `edit`, viewers get 403.
+func (s *Server) diagramAccess(w http.ResponseWriter, r *http.Request, edit bool) (store.Diagram, bool) {
+	id := r.PathValue("id")
+	if !isUUID(id) {
+		writeError(w, http.StatusNotFound, "not_found", "No such diagram.")
+		return store.Diagram{}, false
+	}
+	d, err := s.store.GetDiagram(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "No such diagram.")
+		return d, false
+	}
+	if err != nil {
+		internalError(w, err)
+		return d, false
+	}
+	role, err := s.store.RoleIn(r.Context(), d.OrgID, auth.User(r.Context()).ID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "No such diagram.")
+		return d, false
+	}
+	if err != nil {
+		internalError(w, err)
+		return d, false
+	}
+	if edit && !role.CanEdit() {
+		writeError(w, http.StatusForbidden, "forbidden", "You can view this diagram but not change it.")
+		return d, false
+	}
+	return d, true
+}
+
+func (s *Server) listDiagrams(w http.ResponseWriter, r *http.Request) {
+	org := r.PathValue("org")
+	if _, ok := s.orgRole(w, r, org); !ok {
+		return
+	}
+	list, err := s.store.ListDiagrams(r.Context(), org)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"diagrams": list})
+}
+
+func (s *Server) createDiagram(w http.ResponseWriter, r *http.Request) {
+	org := r.PathValue("org")
+	role, ok := s.orgRole(w, r, org)
+	if !ok {
+		return
+	}
+	if !role.CanEdit() {
+		writeError(w, http.StatusForbidden, "forbidden", "You can't create diagrams in this organization.")
+		return
+	}
+	var body struct {
+		Title   string          `json:"title"`
+		Content json.RawMessage `json:"content"`
+	}
+	if !decode(w, r, MaxContentBytes+4096, &body) {
+		return
+	}
+	title, msg := cleanTitle(body.Title, "Untitled diagram")
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, "invalid_title", msg)
+		return
+	}
+	content := body.Content
+	if len(content) == 0 {
+		content = emptyContent
+	} else if msg := checkContent(content); msg != "" {
+		writeError(w, http.StatusBadRequest, "invalid_content", msg)
+		return
+	}
+	d, err := s.store.CreateDiagram(r.Context(), org, auth.User(r.Context()).ID, title, content)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	w.Header().Set("ETag", etag(d.Version))
+	writeJSON(w, http.StatusCreated, d)
+}
+
+func (s *Server) getDiagram(w http.ResponseWriter, r *http.Request) {
+	d, ok := s.diagramAccess(w, r, false)
+	if !ok {
+		return
+	}
+	w.Header().Set("ETag", etag(d.Version))
+	writeJSON(w, http.StatusOK, d)
+}
+
+// saveContent replaces the content. The If-Match header names the version the
+// edit started from; if someone saved in between, the answer is 409 with the
+// current diagram, so the client can merge and try again.
+func (s *Server) saveContent(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.diagramAccess(w, r, true); !ok {
+		return
+	}
+	from, ok := parseIfMatch(r.Header.Get("If-Match"))
+	if !ok {
+		writeError(w, http.StatusPreconditionRequired, "version_required", `Send If-Match with the version you edited, like If-Match: "3".`)
+		return
+	}
+	var content json.RawMessage
+	if !decode(w, r, MaxContentBytes, &content) {
+		return
+	}
+	if msg := checkContent(content); msg != "" {
+		writeError(w, http.StatusBadRequest, "invalid_content", msg)
+		return
+	}
+	m, err := s.store.SaveContent(r.Context(), r.PathValue("id"), auth.User(r.Context()).ID, from, content)
+	var conflict *store.ConflictError
+	if errors.As(err, &conflict) {
+		w.Header().Set("ETag", etag(conflict.Current.Version))
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":   apiError{Code: "version_conflict", Message: "Someone else saved this diagram since you opened it."},
+			"current": conflict.Current,
+		})
+		return
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "No such diagram.")
+		return
+	}
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	w.Header().Set("ETag", etag(m.Version))
+	writeJSON(w, http.StatusOK, m)
+}
+
+func (s *Server) updateDiagram(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.diagramAccess(w, r, true); !ok {
+		return
+	}
+	var body struct {
+		Title *string `json:"title"`
+	}
+	if !decode(w, r, 4096, &body) {
+		return
+	}
+	if body.Title == nil {
+		writeError(w, http.StatusBadRequest, "nothing_to_change", "Send a title.")
+		return
+	}
+	title, msg := cleanTitle(*body.Title, "")
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, "invalid_title", msg)
+		return
+	}
+	m, err := s.store.Rename(r.Context(), r.PathValue("id"), title)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, m)
+}
+
+func (s *Server) deleteDiagram(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.diagramAccess(w, r, true); !ok {
+		return
+	}
+	if err := s.store.DeleteDiagram(r.Context(), r.PathValue("id")); err != nil && !errors.Is(err, store.ErrNotFound) {
+		internalError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---------- validation ----------
+
+func cleanTitle(t, fallback string) (string, string) {
+	t = strings.TrimSpace(t)
+	if t == "" {
+		t = fallback
+	}
+	if t == "" {
+		return "", "The title can't be empty."
+	}
+	if len([]rune(t)) > maxTitle {
+		return "", fmt.Sprintf("Keep the title under %d characters.", maxTitle)
+	}
+	return t, ""
+}
+
+// checkContent makes sure the content is an IsoDraw diagram at heart: an
+// object with node and connection arrays. The editor's own parser checks the rest.
+func checkContent(raw json.RawMessage) string {
+	var d struct {
+		Nodes []json.RawMessage `json:"nodes"`
+		Edges []json.RawMessage `json:"edges"`
+	}
+	if err := json.Unmarshal(raw, &d); err != nil || d.Nodes == nil || d.Edges == nil {
+		return "The content must be an IsoDraw diagram: an object with nodes and edges arrays."
+	}
+	return ""
+}
+
+func etag(v int64) string { return `"` + strconv.FormatInt(v, 10) + `"` }
+
+func parseIfMatch(h string) (int64, bool) {
+	h = strings.TrimPrefix(strings.TrimSpace(h), "W/")
+	v, err := strconv.ParseInt(strings.Trim(h, `"`), 10, 64)
+	return v, err == nil && v > 0
+}
