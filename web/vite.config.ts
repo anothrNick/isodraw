@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
@@ -9,8 +9,30 @@ import { fileURLToPath } from 'node:url';
 // it hot-reload here too.
 const API = process.env.ISODRAW_API ?? 'http://localhost:8080';
 
+// In production a Pages Function draws preview links' pictures (/p/{id}.svg);
+// here the dev server does, with the same code.
+function previews(): Plugin {
+  return {
+    name: 'isodraw-previews',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.method !== 'GET' || !req.url?.startsWith('/p/')) return next();
+        try {
+          const { previewSvg, previewHeaders } = await server.ssrLoadModule('/preview/render.ts');
+          const url = new URL(req.url, `http://${req.headers.host}`);
+          const out = await previewSvg(url, API);
+          res.writeHead(out.status, previewHeaders(out.cacheable));
+          res.end(out.svg);
+        } catch (e) {
+          next(e);
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), previews()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

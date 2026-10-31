@@ -53,6 +53,18 @@ stays tidy. Items a person moved stay where they are. \`isodraw layout <diagram>
 lays out a whole level, moving everything on it, so only use it when the user
 asks for a tidy-up or the level is clearly a mess.
 
+## Show the user what you made
+After changing a diagram, run \`isodraw preview <diagram> [--level a/b]\` and
+give the user both links it prints, in Markdown, so chat apps show the
+picture inline and it links to the editor:
+
+    [![Payments](https://…/p/<id>.svg?…)](https://…/<workspace>/d/<id>)
+
+The picture is an SVG anyone with the link can see, for a week by default
+(\`--expires 30d\`, up to a year). It always shows the diagram as it is now,
+without docs. The editor link needs sign-in. Don't post preview links
+anywhere public unless the user asks.
+
 ## Good habits
 - Describe, change, then describe again to check.
 - Prefer apply for related changes: one save, one entry in history.
