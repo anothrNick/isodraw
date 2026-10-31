@@ -46,6 +46,14 @@ resource "aws_cognito_user_pool" "isodraw" {
     }
   }
 
+  # The code IsoDraw's own sign-up page asks for. (Password reset emails use
+  # Cognito's default wording; changing that needs a Lambda trigger.)
+  verification_message_template {
+    default_email_option = "CONFIRM_WITH_CODE"
+    email_subject        = "Your IsoDraw verification code"
+    email_message        = "Welcome to IsoDraw. Your verification code is {####}. It expires in 24 hours."
+  }
+
   deletion_protection = "ACTIVE"
 }
 
@@ -68,7 +76,9 @@ resource "aws_cognito_user_pool_client" "isodraw" {
   callback_urls                        = concat(["${local.app_url}/auth/callback"], var.extra_callback_urls)
   logout_urls                          = [local.app_url]
 
-  explicit_auth_flows           = ["ALLOW_REFRESH_TOKEN_AUTH"]
+  # USER_PASSWORD_AUTH: the API checks passwords for IsoDraw's own sign-in
+  # page (AUTH_MODE=cognito), over TLS, with the client secret.
+  explicit_auth_flows           = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
   prevent_user_existence_errors = "ENABLED"
   enable_token_revocation       = true
 

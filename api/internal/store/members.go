@@ -34,7 +34,7 @@ func (r Role) CanManage() bool { return r == Owner || r == Admin }
 func (r Role) AtLeast(other Role) bool { return rank[r] >= rank[other] }
 
 // reserved slugs would clash with the app's own routes.
-var reserved = map[string]bool{"api": true, "auth": true, "invite": true, "cli": true, "s": true, "d": true, "new": true, "settings": true, "admin": true, "assets": true, "healthz": true}
+var reserved = map[string]bool{"api": true, "auth": true, "invite": true, "cli": true, "login": true, "signup": true, "verify": true, "forgot": true, "reset": true, "s": true, "d": true, "new": true, "settings": true, "admin": true, "assets": true, "healthz": true}
 
 func slugify(name string) string {
 	s := strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(name), "-"), "-")

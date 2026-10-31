@@ -63,9 +63,13 @@ func serve(ctx context.Context, cfg config.Config) error {
 	}
 	defer pool.Close()
 	s := store.New(pool)
+	a, err := auth.New(cfg, s)
+	if err != nil {
+		return err
+	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, s, auth.New(cfg, s)),
+		Handler:           httpapi.New(cfg, s, a),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)

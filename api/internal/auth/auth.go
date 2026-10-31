@@ -13,6 +13,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -38,9 +39,32 @@ type Auth struct {
 	mu       sync.Mutex
 	verifier *oidc.IDTokenVerifier
 	oauth    *oauth2.Config
+
+	// password runs IsoDraw's own sign-in pages (AUTH_MODE cognito or local); nil means redirect to the OIDC provider.
+	password PasswordProvider
+	limits   *limiter
 }
 
-func New(cfg config.Config, s *store.Store) *Auth { return &Auth{cfg: cfg, store: s} }
+func New(cfg config.Config, s *store.Store) (*Auth, error) {
+	a := &Auth{cfg: cfg, store: s, limits: newLimiter(10, 10*time.Minute)}
+	switch cfg.AuthMode {
+	case "cognito":
+		c, err := newCognito(cfg.OIDCIssuer, cfg.OIDCClientID, cfg.OIDCClientSecret, func(ctx context.Context, raw string) (*oidc.IDToken, error) {
+			_, v, err := a.provider(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return v.Verify(ctx, raw)
+		})
+		if err != nil {
+			return nil, err
+		}
+		a.password = c
+	case "local":
+		a.password = newLocal(s)
+	}
+	return a, nil
+}
 
 func (a *Auth) provider(ctx context.Context) (*oauth2.Config, *oidc.IDTokenVerifier, error) {
 	a.mu.Lock()
@@ -72,7 +96,12 @@ type loginState struct {
 }
 
 // Login sends the browser to the provider. `?return=/path` is where to land afterwards.
+// With IsoDraw's own pages, it sends the browser to the app's sign-in page instead.
 func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
+	if a.password != nil {
+		http.Redirect(w, r, "/login?return="+url.QueryEscape(safeReturn(r.URL.Query().Get("return"))), http.StatusFound)
+		return
+	}
 	oauth, _, err := a.provider(r.Context())
 	if err != nil {
 		slog.Error("oidc provider unavailable", "issuer", a.cfg.OIDCIssuer, "err", err)
@@ -132,7 +161,19 @@ func (a *Auth) Callback(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = claims.Username
 	}
-	u, err := a.store.UpsertUser(ctx, idt.Issuer, idt.Subject, claims.Email, name)
+	if !a.startSession(w, r, Identity{Issuer: idt.Issuer, Subject: idt.Subject, Email: claims.Email, Name: name}) {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: loginCookie, Path: "/auth", MaxAge: -1})
+	http.Redirect(w, r, st.Return, http.StatusFound)
+}
+
+// startSession records the sign-in (creating the user and a personal
+// workspace the first time) and sets the session cookie. Both the OIDC
+// redirect and the password pages end here.
+func (a *Auth) startSession(w http.ResponseWriter, r *http.Request, id Identity) bool {
+	ctx := r.Context()
+	u, err := a.store.UpsertUser(ctx, id.Issuer, id.Subject, id.Email, id.Name)
 	if err == nil {
 		err = a.store.EnsurePersonalOrg(ctx, u)
 	}
@@ -142,12 +183,11 @@ func (a *Auth) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.Error("start session", "err", err)
-		http.Error(w, "Sign-in failed.", http.StatusInternalServerError)
-		return
+		http.Error(w, `{"error":{"code":"internal","message":"Sign-in failed."}}`, http.StatusInternalServerError)
+		return false
 	}
-	http.SetCookie(w, &http.Cookie{Name: loginCookie, Path: "/auth", MaxAge: -1})
 	a.setSession(w, token)
-	http.Redirect(w, r, st.Return, http.StatusFound)
+	return true
 }
 
 // Logout ends the session. It is a POST, so another site cannot sign people out with a link.
@@ -180,7 +220,9 @@ func User(ctx context.Context) store.User {
 }
 
 // WithUser puts a user in a context, for handlers called without RequireUser (tests).
-func WithUser(ctx context.Context, u store.User) context.Context { return context.WithValue(ctx, ctxKey{}, u) }
+func WithUser(ctx context.Context, u store.User) context.Context {
+	return context.WithValue(ctx, ctxKey{}, u)
+}
 
 // Token is the API token the request was made with, or nil for a browser session.
 func Token(ctx context.Context) *store.Token {

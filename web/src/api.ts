@@ -103,6 +103,18 @@ async function request<T>(method: string, path: string, body?: unknown, headers:
   return data as T;
 }
 
+/** The endpoints behind IsoDraw's own sign-in pages (AuthPages). */
+export const authApi = {
+  config: () => request<{ mode: 'password' | 'redirect' }>('GET', '/auth/config'),
+  signUp: (email: string, password: string, name: string) =>
+    request<{ next: 'verify'; sentTo: string }>('POST', '/auth/signup', { email, password, name }),
+  verify: (email: string, code: string) => request<{ ok: true }>('POST', '/auth/verify', { email, code }),
+  resend: (email: string) => request<{ sentTo: string }>('POST', '/auth/resend', { email }),
+  signIn: (email: string, password: string) => request<{ ok: true }>('POST', '/auth/signin', { email, password }),
+  forgot: (email: string) => request<{ ok: true }>('POST', '/auth/forgot', { email }),
+  reset: (email: string, code: string, password: string) => request<{ ok: true }>('POST', '/auth/reset', { email, code, password }),
+};
+
 export const api = {
   me: () => request<{ user: User; orgs: Org[] }>('GET', '/api/me'),
   listDiagrams: (orgId: string) => request<{ diagrams: DiagramMeta[] }>('GET', `/api/orgs/${orgId}/diagrams`),

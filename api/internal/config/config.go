@@ -18,6 +18,11 @@ type Config struct {
 	// PublicURL is where browsers reach the app. Login redirects back to
 	// PublicURL + "/auth/callback", and changing requests must come from this origin.
 	PublicURL string
+	// AuthMode is how people sign in:
+	//   oidc     redirect to an OIDC provider's own pages (Dex, Okta, a self-hoster's IdP)
+	//   cognito  IsoDraw's own pages, with accounts and emails in Cognito (OIDC_* name the pool's app client)
+	//   local    IsoDraw's own pages, with accounts in Postgres and codes in the log (development, simple self-hosting)
+	AuthMode string
 	// OIDC provider: Cognito in production, Dex locally, or a self-hoster's own.
 	OIDCIssuer       string
 	OIDCClientID     string
@@ -34,6 +39,7 @@ type Config struct {
 func FromEnv() (Config, error) {
 	c := Config{
 		Addr:             env("ADDR", ":8080"),
+		AuthMode:         env("AUTH_MODE", "oidc"),
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		PublicURL:        strings.TrimRight(os.Getenv("PUBLIC_URL"), "/"),
 		OIDCIssuer:       os.Getenv("OIDC_ISSUER"),
@@ -49,12 +55,17 @@ func FromEnv() (Config, error) {
 		errs = append(errs, fmt.Errorf("SESSION_TTL: %w", err))
 	}
 	c.SessionTTL = ttl
-	for name, v := range map[string]string{
-		"DATABASE_URL":   c.DatabaseURL,
-		"PUBLIC_URL":     c.PublicURL,
-		"OIDC_ISSUER":    c.OIDCIssuer,
-		"OIDC_CLIENT_ID": c.OIDCClientID,
-	} {
+	required := map[string]string{"DATABASE_URL": c.DatabaseURL, "PUBLIC_URL": c.PublicURL}
+	switch c.AuthMode {
+	case "oidc":
+		required["OIDC_ISSUER"], required["OIDC_CLIENT_ID"] = c.OIDCIssuer, c.OIDCClientID
+	case "cognito":
+		required["OIDC_ISSUER"], required["OIDC_CLIENT_ID"], required["OIDC_CLIENT_SECRET"] = c.OIDCIssuer, c.OIDCClientID, c.OIDCClientSecret
+	case "local":
+	default:
+		errs = append(errs, fmt.Errorf("AUTH_MODE must be oidc, cognito or local, not %q", c.AuthMode))
+	}
+	for name, v := range required {
 		if v == "" {
 			errs = append(errs, fmt.Errorf("%s is required", name))
 		}

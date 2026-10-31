@@ -51,7 +51,11 @@ func server(t *testing.T, issuer string) (*httptest.Server, *store.Store) {
 		SessionTTL:       time.Hour,
 	}
 	s := store.New(pool)
-	srv := httptest.NewServer(httpapi.New(cfg, s, auth.New(cfg, s)))
+	a, err := auth.New(cfg, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(httpapi.New(cfg, s, a))
 	t.Cleanup(srv.Close)
 	return srv, s
 }
