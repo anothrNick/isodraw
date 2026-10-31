@@ -35,6 +35,8 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 	mux.HandleFunc("GET /auth/callback", a.Callback)
 	mux.Handle("POST /auth/logout", srv.sameOrigin(http.HandlerFunc(a.Logout)))
 	mux.HandleFunc("GET /auth/config", a.Config)
+	// Anyone with a signed preview link; the web app's /p/{id}.svg calls it.
+	mux.HandleFunc("GET /public/previews/{id}", srv.publicPreview)
 	if a.HasPasswordPages() {
 		for pattern, h := range map[string]http.HandlerFunc{
 			"POST /auth/signup": a.SignUp,
@@ -56,6 +58,7 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 	api.HandleFunc("PUT /api/diagrams/{id}/content", srv.saveContent)
 	api.HandleFunc("PATCH /api/diagrams/{id}", srv.updateDiagram)
 	api.HandleFunc("DELETE /api/diagrams/{id}", srv.deleteDiagram)
+	api.HandleFunc("GET /api/diagrams/{id}/preview", srv.previewLink)
 	srv.memberRoutes(api)
 	srv.tokenRoutes(api)
 	api.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

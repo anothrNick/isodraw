@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p functions/tsconfig.json",
+    "build": "npm run build:preview && tsc -p tsconfig.json --noEmit && vite build",
+    "build:preview": "esbuild preview/render.ts --bundle --format=esm --platform=browser --conditions=workerd,worker --target=es2022 --minify --define:process.env.NODE_ENV='\"production\"' --outfile=functions-lib/preview.gen.js --log-level=warning",
+    "typecheck": "npm run build:preview && tsc -p tsconfig.json --noEmit && tsc -p functions/tsconfig.json",
     "deploy": "npm run build && npx --yes wrangler@4.156.0 pages deploy",
-    "preview:pages": "npm run build && npx --yes wrangler@4.156.0 pages dev --port 5190 --binding API_ORIGIN=http://localhost:8080"
+    "preview:pages": "npm run build && npx --yes wrangler@4.156.0 pages dev --port 5190 --binding API_ORIGIN=http://localhost:8080",
+    "test": "vitest run preview"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
