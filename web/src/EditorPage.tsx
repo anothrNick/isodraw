@@ -118,6 +118,8 @@ function Editor({ org, initial, readOnly }: { org: Org; initial: StoredDiagram; 
         level={level}
         onLevelChange={changeLevel}
         theme={resolved}
+        // The top bar links to the docs page; writing docs happens in the sidebar's Docs tab.
+        docsButton={false}
         className="min-h-0 flex-1 rounded-none border-0"
       />
     </div>
