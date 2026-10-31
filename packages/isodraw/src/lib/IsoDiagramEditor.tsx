@@ -36,6 +36,11 @@ export interface IsoDiagramEditorProps {
   readOnly?: boolean;
   /** When to show doc markers on documented items (default: on hover or selection). */
   docBadges?: 'hover' | 'always' | 'never';
+  /**
+   * Show the toolbar's Docs button (default true). Docs stay reachable from
+   * the sidebar's Docs tab and the D key; hosts with their own Docs link can hide it.
+   */
+  docsButton?: boolean;
   /** Color theme. Defaults to the enclosing IsoDraw component's theme, or light. */
   theme?: Theme;
   /**
@@ -947,9 +952,11 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           </div>
         )}
         <div className="isd-group">
-          <ToolButton icon="doc" label={docsOpen ? 'Hide docs (D)' : 'Show docs (D)'} active={docsOpen} onClick={() => (docsOpen ? setSideOpen(false) : openDocs())}>
-            Docs
-          </ToolButton>
+          {props.docsButton !== false && (
+            <ToolButton icon="doc" label={docsOpen ? 'Hide docs (D)' : 'Show docs (D)'} active={docsOpen} onClick={() => (docsOpen ? setSideOpen(false) : openDocs())}>
+              Docs
+            </ToolButton>
+          )}
           <ToolButton icon="help" label="Help and shortcuts (?)" active={helpOpen} onClick={() => setHelpOpen(true)} />
         </div>
         <div className="isd-group">

@@ -141,6 +141,7 @@ function App() {
 | `userIcons` / `onUserIconsChange` | Images the user imported, so the host app can save them |
 | `readOnly` | Hides the side panels and turns off editing |
 | `theme` | `'light'` (default), `'dark'` or `'system'`. Colors are CSS variables (`--isd-bg`, `--isd-accent`, …) you can override |
+| `docsButton` | Show the toolbar's *Docs* button (default `true`). The sidebar's *Docs* tab and the `D` key still open the docs |
 | `level` / `onLevelChange` | The detail diagram on screen, as the ids of the components drilled into (`[]` is the top). The editor follows changes to `level` |
 
 Docs are Markdown strings on `node.doc`, `edge.doc` and `diagram.doc`. The library is built as ES and CommonJS modules. React, React DOM, `@tiptap/*` and `tiptap-markdown` are dependencies of the package rather than bundled into it.
