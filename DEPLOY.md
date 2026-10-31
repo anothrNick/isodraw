@@ -4,7 +4,7 @@
 browser ──▶ Cloudflare Pages  (the web app, your domain)
                │  /api/* and /auth/* are forwarded by Pages Functions (web/functions)
                ▼
-            Fly.io app  (the Go API, api/)  ──▶ Fly Managed Postgres
+            Fly.io app  (the Go API, api/)  ──▶ Postgres on Fly (its own small app)
                │                             └─▶ Tigris on Fly (S3, for uploaded images)
                └──▶ AWS Cognito (sign-in, infra/terraform)
 ```
@@ -39,9 +39,10 @@ terraform output -raw oidc_client_secret
 fly auth login
 fly apps create isodraw-api
 
-# Postgres: a managed cluster, attached to the app (sets DATABASE_URL).
-fly mpg create --name isodraw-db --region iad --plan development   # or production
-fly mpg attach <cluster-id> -a isodraw-api
+# Postgres: one small machine with a 1 GB volume, about $3/month (see "Postgres" below).
+# Attaching creates a database and user for the API and sets its DATABASE_URL.
+fly postgres create --name isodraw-db --region iad --initial-cluster-size 1 --vm-size shared-cpu-1x --volume-size 1
+fly postgres attach isodraw-db -a isodraw-api --superuser=false
 
 # Object storage for uploaded images (sets AWS_* and BUCKET_NAME). Used once image storage lands.
 fly storage create -a isodraw-api
@@ -74,6 +75,26 @@ Then in the Cloudflare dashboard, add your domain to the Pages project (*Custom 
 1. Open your domain: you're sent to Cognito's sign-in page; sign up, and you land on your diagrams.
 2. Create a diagram, reload, and it's still there.
 3. From a terminal: `npx isodraw login --server https://isodraw.example.com`.
+
+## Postgres
+
+For now the database is Fly's unmanaged Postgres: Postgres running as its own Fly app on one machine, about $2–4/month. Fly no longer supports it as a product, so it's ours to look after:
+
+- **Backups:** Fly snapshots the volume daily (`fly volumes list -a isodraw-db`, then `fly volumes snapshots list <volume-id>`). For a copy you control, run `pg_dump` through `fly proxy 15432:5432 -a isodraw-db`.
+- **Getting in:** `fly postgres connect -a isodraw-db`.
+- **Upgrades and failover:** none automatic. A single machine means a restart is a short outage.
+
+When real people depend on it, move to Fly Managed Postgres (from $38/month on the Basic plan, with high availability, backups and pooling included):
+
+```bash
+fly mpg create --name isodraw-pg --region iad --plan basic
+fly proxy 15432:5432 -a isodraw-db &   # dump the old database
+pg_dump --no-owner --no-privileges "postgres://…@localhost:15432/isodraw_api" > isodraw.sql
+fly mpg proxy <cluster-id> &           # load it into the new cluster on localhost:16380
+psql "postgres://…@localhost:16380/…" < isodraw.sql
+fly secrets unset DATABASE_URL -a isodraw-api
+fly mpg attach <cluster-id> -a isodraw-api   # sets the new DATABASE_URL and restarts the API
+```
 
 ## Later deploys
 
