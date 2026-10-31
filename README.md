@@ -54,12 +54,13 @@ Roles are owner, admin, editor and viewer. Owners and admins manage members and 
 
 ```bash
 npm run build -w @isodraw/cli
-npx isodraw login          # opens the browser to authorize this machine
+npx isodraw login          # opens the browser to authorize this machine (on https://isodraw.sjostrom.io)
 npx isodraw diagrams list
 npx isodraw describe "Payments service"
 npx isodraw guide          # how agents should use it
 ```
 
+- **Server:** the hosted app at https://isodraw.sjostrom.io by default. Against the local stack, pass `--server http://localhost:5190` to `login` (it's saved with the token) or set `ISODRAW_SERVER`.
 - **Sign-in:** `isodraw login` opens the app's *Authorize the CLI* page, where you pick a workspace, read-only or read-and-write access, and an expiry; the app hands the token back to the CLI on a localhost port (`--no-browser` just prints the link). The token is saved in `~/.config/isodraw/config.json` (mode 600). Agents, scripts and CI can pass a token as `ISODRAW_TOKEN` instead; create and revoke tokens under *API tokens* in the account menu.
 - **Reading:** `describe` prints a compact outline of a level (components, areas, connections, docs) that fits in a prompt; `docs get` prints a doc as Markdown. Diagrams are named by id or title, items by id or label, levels by path (`--level orders/validate`).
 - **Changing:** `nodes add|update|remove`, `edges add|update|remove`, `docs set`, and `apply` for a batch of changes as JSON (with `--dry-run`). New items are placed automatically, inside the right area, without overlapping; `--icon` takes a Terraform resource type such as `aws_lambda_function` (`isodraw icons` lists them). Saves name the version they started from; if someone saved in between, the CLI merges item by item, like the app.

@@ -8,12 +8,13 @@ app = "isodraw-api"
 primary_region = "iad"
 
 [deploy]
-  # Runs in a one-off machine before each release.
-  release_command = "/isodraw migrate"
+  # Runs in a one-off machine before each release. Fly passes it as arguments
+  # to the image's entrypoint (/isodraw), so this runs `/isodraw migrate`.
+  release_command = "migrate"
 
 [env]
   ADDR = ":8080"
-  PUBLIC_URL = "https://isodraw.example.com"
+  PUBLIC_URL = "https://isodraw.sjostrom.io"
   OIDC_SCOPES = "openid email profile"
 
 [http_service]
