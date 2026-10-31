@@ -1,7 +1,23 @@
 # Hosting
 
-**Status:** idea · **Priority:** next
+**Status:** shipped · **Priority:** next
 **Summary:** Run the platform for real: one container on Fly.io, Postgres, S3, and Cognito for sign-in, all in Terraform, plus email for invites. Self-hosting uses the same container.
+
+## Where it stands
+
+Live at https://isodraw.sjostrom.io since 2026-10-31:
+
+- **Web app** on Cloudflare Pages (project `isodraw`), deployed with `npm run deploy:web`. Pages Functions forward `/api` and `/auth` to the API, so the browser sees one origin.
+- **API** on Fly.io (`isodraw-api`, Personal org, `iad`), deployed with `npm run deploy:api`; migrations run as the release command.
+- **Postgres** on Fly as unmanaged Postgres (`isodraw-db`, one machine, 1 GB), about $3/month. Move to Managed Postgres when people depend on it (DEPLOY.md has the steps).
+- **Storage:** Tigris bucket `isodraw-assets`, attached but unused until image storage lands.
+- **Sign-in:** Cognito pool `isodraw` in AWS account 397979615590 (us-east-1), from `infra/terraform`. The Terraform state is local, in `infra/terraform`; move it to an S3 backend before anyone else changes it.
+
+Still to do:
+
+- **Email for invites:** invites are links to copy; sending them needs SES (or similar) and a mailer in the API.
+- **Automatic deploys** of the API and web app from CI on push to `main` (the demo already deploys this way). Needs a Fly deploy token and a Cloudflare API token as repository secrets.
+- **Self-hosting:** `docker-compose.selfhost.yml` and a guide to connecting an identity provider.
 
 ## How it could work
 

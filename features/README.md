@@ -9,7 +9,7 @@ Start each file with a short header, then whichever of these sections help:
 ```markdown
 # Feature name
 
-**Status:** idea · planned · in progress · shipped · **Priority:** high · next · later
+**Status:** idea · planned · in progress · shipped · **Priority:** high · next · later (the index shows status for shipped items)
 **Summary:** one or two sentences.
 
 ## Why
@@ -30,7 +30,7 @@ Keep the status and priority current, and record decisions in the file as they'r
 | next | [Version history](version-history.md) | Snapshots as autosave runs, a History panel, and restore. |
 | next | [Share links](share-links.md) | Read-only public links to a diagram's docs page, with expiry and revoke. |
 | next | [Image storage](image-storage.md) | Uploaded images move out of the diagram JSON into an asset store. |
-| next | [Hosting](hosting.md) | One container on Fly.io with Postgres, S3, Cognito in Terraform and email; the same image for self-hosting. |
+| shipped | [Hosting](hosting.md) | One container on Fly.io with Postgres, S3, Cognito in Terraform and email; the same image for self-hosting. |
 | next | [Search across diagrams](search.md) | Find components, docs and Terraform addresses across a workspace, from an items index. |
 | next | [Comments](comments.md) | Threads on components and connections, with @mentions and resolving. |
 | next | [Cost estimates](cost-estimates.md) | Monthly cost per component and totals, from public cloud price lists. |

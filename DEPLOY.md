@@ -58,7 +58,7 @@ npm run deploy:api        # fly deploy from api/: builds the image, runs migrati
 fly logs -a isodraw-api
 ```
 
-The release command (`/isodraw migrate`) applies database migrations before the new version starts. `GET /healthz` is the health check.
+The release command (`migrate`, run as `/isodraw migrate`) applies database migrations before the new version starts. `GET /healthz` is the health check.
 
 ## 3. The web app (Cloudflare Pages)
 
