@@ -54,6 +54,11 @@ export interface DiagramNode {
   doc?: string;
   /** The component's own diagram, opened by drilling into it. Its overview doc is this node's doc. */
   detail?: Diagram;
+  /**
+   * 'auto' when the platform placed it (an import, the CLI). Moving it by hand
+   * clears this, and automatic layout never moves items a person placed.
+   */
+  placed?: 'auto';
 }
 
 export type EdgeRouting = 'straight' | 'orthogonal' | 'curved';

@@ -8,6 +8,7 @@ import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
 import { loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary } from './icons';
 import { importTerraform, isTerraformJson } from './terraform';
+import { layoutLevel, markMoved, movesItem } from './layout';
 import { canHaveDetail, detailSize, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
@@ -510,10 +511,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     if (p.type === 'icon' && p.src) addNode(createImageNode(p.src, p.name ?? '', at.x, at.y));
   };
 
+  // Moving or resizing by hand makes an item manual: automatic layout won't move it again.
+  const manual = (patch: Partial<DiagramNode>): Partial<DiagramNode> => (movesItem(patch) ? { ...patch, placed: undefined } : patch);
   const updateNode = (id: string, patch: Partial<DiagramNode>, key?: string) =>
-    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) }), 'push', key && `${id}:${key}`);
+    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? { ...n, ...manual(patch) } : n)) }), 'push', key && `${id}:${key}`);
   const updateNodes = (ids: string[], patch: Partial<DiagramNode>) =>
-    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (ids.includes(n.id) ? { ...n, ...patch } : n)) }));
+    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (ids.includes(n.id) ? { ...n, ...manual(patch) } : n)) }));
   const updateEdge = (id: string, patch: Partial<DiagramEdge>, key?: string) => {
     const style = Object.fromEntries(Object.entries(patch).filter(([k]) => (EDGE_STYLE_KEYS as readonly string[]).includes(k)));
     if (Object.keys(style).length) setEdgeStyle((s) => ({ ...s, ...style }));
@@ -552,7 +555,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     const nodes = clip.nodes.map((n) => {
       const id = uid('n');
       map.set(n.id, id);
-      return { ...n, id, x: n.x + offset, y: n.y + offset };
+      // A pasted copy is placed by the person pasting it.
+      return { ...n, id, x: n.x + offset, y: n.y + offset, placed: undefined };
     });
     const edges = clip.edges.map((e) => ({
       ...e,
@@ -681,7 +685,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       const v = dirs[k];
       const ids = withContents(selection.nodes.filter((id) => !diagram.nodes.find((n) => n.id === id)?.locked));
       commit(
-        (d) => ({ ...d, nodes: d.nodes.map((n) => (ids.has(n.id) && !n.locked ? { ...n, x: n.x + v.x * step, y: n.y + v.y * step } : n)) }),
+        (d) => ({ ...d, nodes: d.nodes.map((n) => (ids.has(n.id) && !n.locked ? { ...n, x: n.x + v.x * step, y: n.y + v.y * step, placed: undefined } : n)) }),
         'push',
         'nudge',
       );
@@ -940,6 +944,19 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         </div>
         <div className="isd-group">
           <ToolButton icon="fit" label="Fit to content" onClick={() => fitTo(diagram, proj)} />
+          {!readOnly && (
+            <ToolButton
+              icon="tidy"
+              label="Tidy up: lay out this level in columns by flow (undo with ⌘Z)"
+              disabled={!diagram.nodes.some((n) => n.kind !== 'text')}
+              onClick={() => {
+                const next = layoutLevel(diagram);
+                commit(next);
+                fitTo(next, proj);
+                setToast('Tidied up. ⌘Z undoes it.');
+              }}
+            />
+          )}
           <ToolButton icon="grid" label="Toggle grid" active={showGrid} onClick={() => setShowGrid(!showGrid)} />
           <ToolButton icon={animate ? 'pause' : 'play'} label={animate ? 'Pause connection animations' : 'Play connection animations'} onClick={() => setAnimate(!animate)} />
         </div>
@@ -1127,7 +1144,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             showDocBadges={props.docBadges}
             newEdgeStyle={{ routing: 'orthogonal', rounded: true, ...edgeStyle }}
             onBeginChange={beginChange}
-            onChange={(d) => commit(d, 'replace')}
+            onChange={(d) => commit((cur) => markMoved(cur, d), 'replace')}
             onConnect={(from, to, route) => {
               const edge = createEdge(from, to, { ...edgeStyle, ...route });
               commit((d) => ({ ...d, edges: [...d.edges, edge] }));

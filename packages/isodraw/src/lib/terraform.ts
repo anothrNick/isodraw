@@ -1,4 +1,5 @@
 import { cloudIconUrl, loadGcpIconLibrary } from './icons';
+import { layeredLayout } from './layout';
 import { catalogEntry, DOC_SETTINGS, type CatalogEntry } from './terraformCatalog';
 import type { Diagram, DiagramEdge, DiagramNode, IconLibrary } from './types';
 
@@ -94,7 +95,6 @@ export function terraformToDiagram(json: unknown, opts: TerraformImportOptions =
   if (!nodes.length) throw new Error(`Found ${resources.length} Terraform resources, but none that are drawn as components`);
   const edges = inferEdges(resources, byAddr, refsOf);
   const { parents, spans } = placeInAreas(resources, byAddr, refsOf);
-  const rank = rankNodes(nodes, edges);
 
   // ---- diagram items ----
   const ids = new Map<Resource, string>();
@@ -133,7 +133,7 @@ export function terraformToDiagram(json: unknown, opts: TerraformImportOptions =
     if (across) n.doc = n.doc!.replace(/^.*$/m, (first) => `${first} Spans ${across.map(labelOf).join(', ')}.`);
     pos.set(r, n);
   }
-  layout(children, rank, edges, pos);
+  layout(children, edges, pos);
   // Areas first so they draw beneath, outer before inner.
   const depth = (r: Resource) => {
     let d = 0;
@@ -482,29 +482,6 @@ function placeInAreas(
 }
 
 /** Column for each component: longest path from the components nothing points at. */
-function rankNodes(nodes: Resource[], links: Link[]): Map<Resource, number> {
-  const out = new Map<Resource, Link[]>();
-  for (const l of links) out.set(l.from, [...(out.get(l.from) ?? []), l]);
-  const state = new Map<Resource, 'active' | 'done'>();
-  const back = new Set<Link>();
-  const order: Resource[] = [];
-  const dfs = (n: Resource) => {
-    state.set(n, 'active');
-    for (const l of out.get(n) ?? []) {
-      const s = state.get(l.to);
-      if (s === 'active') back.add(l);
-      else if (!s) dfs(l.to);
-    }
-    state.set(n, 'done');
-    order.push(n);
-  };
-  nodes.forEach((n) => state.has(n) || dfs(n));
-  const rank = new Map(nodes.map((n) => [n, 0]));
-  for (const n of order.reverse()) {
-    for (const l of out.get(n) ?? []) if (!back.has(l)) rank.set(l.to, Math.max(rank.get(l.to)!, rank.get(n)! + 1));
-  }
-  return rank;
-}
 
 // ---------------------------------------------------------------------------
 // Diagram nodes and layout
@@ -587,106 +564,23 @@ function overviewDoc(s: TerraformImportSummary): string {
   return lines.join('\n');
 }
 
-const PAD = 1;
-const PAD_TOP = 1.5;
-const COL_GAP = 3;
-const ROW_GAP = 2;
-const MAX_COLUMN = 16;
-const half = (v: number) => Math.round(v * 2) / 2;
-
-/** Lay out areas and components in columns by rank, nesting areas so containment matches the diagram's geometry. */
-function layout(children: Map<Resource | undefined, Resource[]>, rank: Map<Resource, number>, links: Link[], pos: Map<Resource, DiagramNode>) {
-  const size = new Map<Resource, { w: number; d: number }>();
-  // An area sits in the column of its earliest connected component, so unconnected
-  // things inside it (NAT and internet gateways) don't drag it to the left.
-  const connected = new Set(links.flatMap((l) => [l.from, l.to]));
-  const descendants = (r: Resource): Resource[] => (children.get(r) ?? []).flatMap((c) => (c.entry.role === 'area' ? descendants(c) : [c]));
-  const minRank = (r: Resource): number => {
-    if (r.entry.role !== 'area') return rank.get(r) ?? 0;
-    const all = descendants(r);
-    const linked = all.filter((n) => connected.has(n));
-    return Math.min(...(linked.length ? linked : all).map((n) => rank.get(n) ?? 0));
-  };
-
-  const columns = (items: Resource[]) => {
-    const sorted = [...items].sort(
-      (a, b) =>
-        minRank(a) - minRank(b) ||
-        Number(a.entry.role === 'area') - Number(b.entry.role === 'area') ||
-        pos.get(a)!.label!.localeCompare(pos.get(b)!.label!),
-    );
-    // Long columns wrap, but never below the tallest area plus a couple of components.
-    const limit = Math.max(MAX_COLUMN, ...items.map((i) => measure(i).d + 8));
-    const cols: { items: Resource[]; w: number; d: number }[] = [];
-    let current: (typeof cols)[number] | null = null;
-    let currentRank = -1;
-    for (const item of sorted) {
-      const s = measure(item);
-      const r = minRank(item);
-      if (!current || r !== currentRank || current.d + ROW_GAP + s.d > limit) {
-        current = { items: [], w: 0, d: -ROW_GAP };
-        cols.push(current);
-        currentRank = r;
-      }
-      current.items.push(item);
-      current.w = Math.max(current.w, s.w);
-      current.d += ROW_GAP + s.d;
-    }
-    return cols;
-  };
-  /**
-   * A group is the flow (areas and connected components) in columns, with
-   * unconnected components in a row underneath so no line runs through them.
-   */
-  const split = (items: Resource[]) => {
-    const loose = items.filter((i) => i.entry.role !== 'area' && !connected.has(i));
-    const flow = items.filter((i) => !loose.includes(i));
-    return flow.length ? { flow, loose } : { flow: loose, loose: [] };
-  };
-  const rowWidth = (items: Resource[]) => items.reduce((t, i) => t + measure(i).w, 0) + COL_GAP * (items.length - 1);
-  const groupSize = (items: Resource[]) => {
-    const { flow, loose } = split(items);
-    const cols = columns(flow);
-    const w = cols.reduce((t, c) => t + c.w, 0) + COL_GAP * (cols.length - 1);
-    const d = Math.max(...cols.map((c) => c.d));
-    return loose.length ? { w: Math.max(w, rowWidth(loose)), d: d + ROW_GAP + 2 } : { w, d };
-  };
-  function measure(r: Resource): { w: number; d: number } {
-    let s = size.get(r);
-    if (!s) {
-      if (r.entry.role === 'area') {
-        const inner = groupSize(children.get(r) ?? []);
-        s = { w: inner.w + 2 * PAD, d: inner.d + PAD_TOP + PAD };
-      } else s = { w: pos.get(r)!.w, d: pos.get(r)!.d };
-      size.set(r, s);
-    }
-    return s;
+/**
+ * Lay out areas and components with the shared layered layout, nesting areas
+ * so containment matches the diagram's geometry. Everything is marked as
+ * placed by the platform, so later automatic edits keep it tidy.
+ */
+function layout(children: Map<Resource | undefined, Resource[]>, links: Link[], pos: Map<Resource, DiagramNode>) {
+  const id = (r: Resource) => pos.get(r)!.id;
+  const byId = new Map([...pos].map(([r, n]) => [n.id, r]));
+  const placed = layeredLayout({
+    children: new Map([...children].map(([k, v]) => [k ? id(k) : undefined, v.map(id)])),
+    isArea: (i) => byId.get(i)!.entry.role === 'area',
+    size: (i) => ({ w: pos.get(byId.get(i)!)!.w, d: pos.get(byId.get(i)!)!.d }),
+    label: (i) => pos.get(byId.get(i)!)!.label ?? i,
+    links: links.map((l) => [id(l.from), id(l.to)]),
+  });
+  for (const n of pos.values()) {
+    const p = placed.get(n.id);
+    if (p) Object.assign(n, p, { placed: 'auto' });
   }
-  const placeGroup = (items: Resource[], x0: number, y0: number) => {
-    const { flow, loose } = split(items);
-    const cols = columns(flow);
-    const height = Math.max(...cols.map((c) => c.d));
-    let x = x0;
-    for (const c of cols) {
-      let y = y0 + half((height - c.d) / 2);
-      for (const item of c.items) {
-        const s = measure(item);
-        place(item, x, y);
-        y += s.d + ROW_GAP;
-      }
-      x += c.w + COL_GAP;
-    }
-    x = x0;
-    for (const item of loose) {
-      place(item, x, y0 + height + ROW_GAP);
-      x += measure(item).w + COL_GAP;
-    }
-  };
-  const place = (r: Resource, x: number, y: number) => {
-    const n = pos.get(r)!;
-    const s = measure(r);
-    Object.assign(n, { x, y, w: s.w, d: s.d });
-    if (r.entry.role === 'area') placeGroup(children.get(r) ?? [], x + PAD, y + PAD_TOP);
-  };
-  placeGroup(children.get(undefined) ?? [], 0, 0);
 }

@@ -10,6 +10,7 @@ import {
   levelAt,
   levelNodes,
   nodeTitle,
+  settleLevel,
   SHAPES,
   withLevel,
   type Diagram,
@@ -143,14 +144,15 @@ const overlaps = (a: Rect, b: Rect, gap = 1) =>
  * everything), on the first free spot, never overlapping another item or an
  * area it isn't in. An area grows to fit it.
  */
-export function place(d: Diagram, node: DiagramNode, near?: DiagramNode, area?: DiagramNode): Diagram {
+export function place(d: Diagram, node: DiagramNode, near?: DiagramNode, area?: DiagramNode, side: 'right' | 'left' = 'right'): Diagram {
   const container = area ?? (near ? containerOf(near, d.nodes) : undefined);
   const insideContainer = (n: DiagramNode) => !!container && (n.id === container.id || isAncestor(d, n, container));
   const obstacles = d.nodes.filter((n) => !insideContainer(n) && (!isContainer(n) || !container || n.id !== container.id));
   const fits = (r: Rect) => obstacles.every((o) => !overlaps(r, o));
 
   let ax: number, ay: number;
-  if (near) [ax, ay] = [near.x + near.w + GAP, near.y];
+  const dir = side === 'left' ? -1 : 1;
+  if (near) [ax, ay] = [side === 'left' ? near.x - node.w - GAP : near.x + near.w + GAP, near.y];
   else if (container) [ax, ay] = [container.x + 1, container.y + 1.5];
   else {
     const top = d.nodes.filter((n) => !containerOf(n, d.nodes));
@@ -165,7 +167,7 @@ export function place(d: Diagram, node: DiagramNode, near?: DiagramNode, area?: 
         [ring, row],
         [row, ring],
       ]) {
-        const r = { x: ax + dx * (node.w + GAP), y: ay + dy * (node.d + GAP), w: node.w, d: node.d };
+        const r = { x: ax + dir * dx * (node.w + GAP), y: ay + dy * (node.d + GAP), w: node.w, d: node.d };
         if (fits(r)) {
           spot = r;
           break;
@@ -208,9 +210,14 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
   let diagram = root;
   const changes: string[] = [];
   const added: string[] = [];
+  /** Levels changed by this batch, to tidy afterwards. */
+  const touched = new Map<string, LevelPath>();
+  /** New items placed without --near, to move beside what they end up connected to. */
+  const loose: { level: LevelPath; id: string }[] = [];
   for (const [i, op] of ops.entries()) {
     try {
       const level = op.level !== undefined ? resolveLevel(diagram, parseLevel(op.level)) : defaultLevel;
+      touched.set(level.join('/'), level);
       const where = level.length ? ` in ${levelNodes(diagram, level).map(nodeTitle).join(' › ')}` : '';
       if (!levelAt(diagram, level)) throw new OpError(`No such level: ${level.join('/')}`, 'not_found');
 
@@ -231,11 +238,13 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
             if (!KINDS.has(kind)) throw new OpError(`Unknown kind "${kind}". Use one of: ${[...KINDS].join(', ')}.`);
             const id = op.id ? (d.nodes.some((n) => n.id === op.id) ? fail(`An item with id "${op.id}" already exists.`) : op.id) : freeId(d, slug(op.label));
             const base = op.icon ? createImageNode(iconUrl(op.icon), op.label, 0, 0) : createShape(kind, 0, 0, { label: op.label });
-            const node: DiagramNode = { ...base, id, label: op.label, ...(op.color ? { color: op.color } : {}), ...(op.doc ? { doc: op.doc } : {}) };
+            // Placed by the platform: automatic layout may move it until a person does.
+            const node: DiagramNode = { ...base, id, label: op.label, placed: 'auto', ...(op.color ? { color: op.color } : {}), ...(op.doc ? { doc: op.doc } : {}) };
             const area = op.in ? findNode(d, op.in) : undefined;
             if (area && !isContainer(area)) throw new OpError(`${nodeTitle(area)} isn't an area, so nothing can go in it.`);
             const near = op.near ? findNode(d, op.near) : undefined;
             added.push(id);
+            if (!near) loose.push({ level, id });
             changes.push(`added ${id} (${op.label})${area ? ` in ${nodeTitle(area)}` : ''}${where}`);
             return place(d, node, near, area);
           }
@@ -310,7 +319,41 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
       throw e;
     }
   }
+  diagram = arrange(diagram, touched, loose);
   return { diagram, changes, added };
+}
+
+/**
+ * Layout after a batch: a level whose items were all placed by the platform
+ * is laid out again in full. On a level a person arranged, only new items
+ * that weren't put near something move, to sit beside what they connect to:
+ * after something that feeds them, or before something they feed.
+ */
+function arrange(root: Diagram, touched: Map<string, LevelPath>, loose: { level: LevelPath; id: string }[]): Diagram {
+  let diagram = root;
+  for (const level of touched.values()) {
+    const before = levelAt(diagram, level);
+    if (!before) continue;
+    const settled = settleLevel(before);
+    if (settled !== before) {
+      diagram = withLevel(diagram, level, () => settled);
+      continue;
+    }
+    for (const { id } of loose.filter((l) => l.level.join('/') === level.join('/'))) {
+      diagram = withLevel(diagram, level, (d) => {
+        const n = d.nodes.find((x) => x.id === id);
+        if (!n) return d;
+        const into = d.edges.find((e) => e.to === id && e.from !== id);
+        const out = d.edges.find((e) => e.from === id && e.to !== id);
+        const neighbor = d.nodes.find((x) => x.id === (into ? into.from : out?.to));
+        if (!neighbor) return d;
+        const area = containerOf(n, d.nodes);
+        const rest = { ...d, nodes: d.nodes.filter((x) => x.id !== id) };
+        return place(rest, n, neighbor, area, into ? 'right' : 'left');
+      });
+    }
+  }
+  return diagram;
 }
 
 function fail(msg: string): never {

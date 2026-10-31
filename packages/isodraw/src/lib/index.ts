@@ -18,4 +18,5 @@ export { exportDocsMarkdown, docOf, withDoc, hasDoc, titleOf, mentionHref, parse
 export type * from './types';
 export { levelAt, validLevel, withLevel, liftEmbeds } from './levels';
 export { mergeDiagrams } from './merge';
+export { layoutLevel, settleLevel, layeredLayout } from './layout';
 export type { LevelPath } from './levels';
