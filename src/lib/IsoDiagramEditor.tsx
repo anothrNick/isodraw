@@ -79,8 +79,9 @@ const CLOUDS: { id: CloudId; name: string; load: () => Promise<IconLibrary> }[] 
 ];
 
 /** Side panel widths. Today's sizes are the minimums; dragging a panel's inner border widens it. */
-type Panel = 'palette' | 'inspector' | 'docs';
-const PANEL_MIN: Record<Panel, number> = { palette: 260, inspector: 260, docs: 440 };
+/** The sidebar has one width, whichever tab is showing. */
+type Panel = 'palette' | 'sidebar';
+const PANEL_MIN: Record<Panel, number> = { palette: 260, sidebar: 360 };
 const PANEL_WIDTHS_KEY = 'isodraw:panel-widths';
 /** The canvas always keeps at least this much room. */
 const MIN_STAGE = 240;
@@ -152,8 +153,6 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const [sideTab, setSideTab] = useState<'properties' | 'docs'>('properties');
   const tab = readOnly ? 'docs' : sideTab;
   const docsOpen = sideOpen && tab === 'docs';
-  /** Width setting the sidebar uses: docs want more room than properties. */
-  const sidePanel: Panel = tab === 'docs' ? 'docs' : 'inspector';
   const [helpOpen, setHelpOpen] = useState(false);
   /** Item whose @ mention is under the pointer in the docs panel; outlined on the canvas. */
   const [mentionHover, setMentionHover] = useState<DocTarget | null>(null);
@@ -788,7 +787,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   /** Widest a panel may get while leaving the canvas (and the other open panels) room. */
   const maxWidth = (panel: Panel) => {
     const total = rootRef.current?.clientWidth ?? 1200;
-    const other = panel === 'palette' ? (sideOpen ? panelW[sidePanel] : 0) : paletteOpen ? panelW.palette : 0;
+    const other = panel === 'palette' ? (sideOpen ? panelW.sidebar : 0) : paletteOpen ? panelW.palette : 0;
     return Math.max(PANEL_MIN[panel], total - other - MIN_STAGE);
   };
   const saveWidths = (w: Record<Panel, number>) => {
@@ -881,8 +880,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       style={
         {
           '--isd-palette-w': `${panelW.palette}px`,
-          '--isd-inspector-w': `${panelW.inspector}px`,
-          '--isd-docs-w': `${panelW.docs}px`,
+          '--isd-sidebar-w': `${panelW.sidebar}px`,
           ...props.style,
         } as React.CSSProperties
       }
@@ -1171,7 +1169,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         </div>
 
         {/* ---------- sidebar: properties and docs ---------- */}
-        {sideOpen && resizer(sidePanel, -1, 'sidebar')}
+        {sideOpen && resizer('sidebar', -1, 'sidebar')}
         {sideOpen && (
           <aside className={`isd-inspector isd-side is-${tab}`} aria-label="Sidebar">
             <div className="isd-side-head">

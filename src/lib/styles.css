@@ -101,19 +101,19 @@
   width: var(--isd-palette-w, 260px); flex: none; display: flex; flex-direction: column; min-height: 0;
   background: var(--isd-panel); border-right: 1px solid var(--isd-border);
 }
-.isd-inspector { width: var(--isd-inspector-w, 260px); border-right: 0; border-left: 1px solid var(--isd-border); overflow-y: auto; }
-/* The right sidebar: Properties and Docs tabs over one body. Docs get their own (wider) width. */
+.isd-inspector { width: var(--isd-sidebar-w, 360px); border-right: 0; border-left: 1px solid var(--isd-border); overflow-y: auto; }
+/* The right sidebar: Properties and Docs tabs over one body, one width for both. */
 .isd-side { overflow: hidden; }
-.isd-side.is-docs { width: var(--isd-docs-w, 440px); background: var(--isd-bg); }
-.isd-side-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 8px; border-bottom: 1px solid var(--isd-border); background: var(--isd-panel); }
-.isd-side-head > strong { flex: 1; padding-left: 4px; font-size: 13px; }
-.isd-side-tabs { flex: 1; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--isd-border); border-radius: 8px; background: var(--isd-bg); }
+.isd-side.is-docs { background: var(--isd-bg); }
+.isd-side-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; min-height: 36px; border-bottom: 1px solid var(--isd-border); background: var(--isd-panel); }
+.isd-side-head > strong { flex: 1; font-size: 12.5px; }
+.isd-side-tabs { flex: 1; display: flex; align-self: stretch; gap: 16px; }
 .isd-side-tabs button {
-  flex: 1; padding: 4px 10px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: 12.5px; font-weight: 500;
-  color: var(--isd-muted); cursor: pointer;
+  margin-bottom: -1px; padding: 0 1px; border: 0; border-bottom: 2px solid transparent; background: none;
+  font: inherit; font-size: 12.5px; font-weight: 500; color: var(--isd-muted); cursor: pointer;
 }
 .isd-side-tabs button:hover { color: var(--isd-text); }
-.isd-side-tabs button.is-active { background: var(--isd-accent-soft); color: var(--isd-accent); font-weight: 600; }
+.isd-side-tabs button.is-active { border-bottom-color: var(--isd-accent); color: var(--isd-text); font-weight: 600; }
 .isd-side-close {
   flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
   border: 0; border-radius: 6px; background: transparent; color: var(--isd-muted); cursor: pointer;
@@ -368,7 +368,7 @@ textarea.isd-input { resize: vertical; }
 .isd-doc-popup button.is-active, .isd-doc-popup button:hover { background: var(--isd-accent-soft); }
 .isd-doc-popup-empty { padding: 6px 8px; color: var(--isd-muted); font-size: 12px; }
 
-.isd-root.is-compact .isd-side.is-docs { width: 100%; max-width: 100%; }
+.isd-root.is-compact .isd-side { width: min(380px, calc(100% - 40px)); }
 
 /* Doc marker on the canvas: quiet until you point at it. */
 .isd-doc-badge { cursor: pointer; }
