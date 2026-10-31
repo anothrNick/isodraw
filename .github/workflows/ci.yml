@@ -53,3 +53,32 @@ jobs:
         working-directory: api
       - run: go test ./...
         working-directory: api
+
+  deploy-demo:
+    name: Deploy the demo
+    # Every push to main that passes the library, demo and web app checks.
+    needs: web
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: deploy-demo
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the demo
+        run: npm run build:demo -w isodraw
+      - name: Publish to the gh-pages branch
+        run: >
+          npx gh-pages -d packages/isodraw/demo-dist
+          -m "Deploy demo from ${GITHUB_SHA::7}"
+          -u "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          -r "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
