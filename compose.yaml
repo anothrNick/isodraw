@@ -1,0 +1,32 @@
+# Local services for development: Postgres and Dex (an OIDC login server that
+# stands in for Cognito). The API and web app run on the host (npm run dev).
+name: isodraw
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: isodraw
+      POSTGRES_PASSWORD: isodraw
+      POSTGRES_DB: isodraw
+    ports:
+      # 5433 on the host, so it can run next to another local Postgres.
+      - "${ISODRAW_PG_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U isodraw"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  dex:
+    image: ghcr.io/dexidp/dex:v2.41.1
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    ports:
+      - "5556:5556"
+    volumes:
+      - ./dev/dex.yaml:/etc/dex/config.yaml:ro
+
+volumes:
+  pgdata:

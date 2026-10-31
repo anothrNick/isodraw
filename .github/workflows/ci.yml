@@ -10,7 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  web:
+    name: Library, demo and web app
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +21,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
-      - name: Build the library
+      - run: npm test --workspaces --if-present
+      - name: Build the library and the web app
         run: npm run build
       - name: Install Playwright's Chromium
         run: npx playwright install --with-deps chromium
@@ -31,5 +32,24 @@ jobs:
         if: failure()
         with:
           name: playwright-report
-          path: playwright-report
+          path: packages/isodraw/playwright-report
           retention-days: 14
+
+  api:
+    name: API
+    runs-on: ubuntu-latest
+    env:
+      # Database and sign-in tests fail instead of skipping when the services are missing.
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+      - name: Start Postgres and Dex
+        run: docker compose up -d --wait
+      - run: go vet ./...
+        working-directory: api
+      - run: go test ./...
+        working-directory: api
