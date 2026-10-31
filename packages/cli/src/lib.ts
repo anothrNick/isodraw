@@ -8,4 +8,5 @@ export { containerOf, isContainer, parentMap } from '../../isodraw/src/lib/conta
 export { importTerraform, isTerraformJson } from '../../isodraw/src/lib/terraform';
 export { catalogEntry, iconTypes } from '../../isodraw/src/lib/terraformCatalog';
 export { cloudIconUrl } from '../../isodraw/src/lib/icons';
+export { layoutLevel, settleLevel } from '../../isodraw/src/lib/layout';
 export type { Diagram, DiagramNode, DiagramEdge, ShapeKind, LineStyle } from '../../isodraw/src/lib/types';

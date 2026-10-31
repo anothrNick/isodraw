@@ -4,7 +4,7 @@ import { CliError, Client, type DiagramMeta } from './client';
 import { clearConfig, configPath, loadConfig, saveConfig } from './config';
 import { describeText, outline } from './describe';
 import { GUIDE } from './guide';
-import { exportDocsMarkdown, iconTypes, importTerraform, isTerraformJson, levelAt, parseDiagram } from './lib';
+import { exportDocsMarkdown, iconTypes, importTerraform, isTerraformJson, layoutLevel, levelAt, parseDiagram, withLevel } from './lib';
 import { browserLogin } from './login';
 import { applyOps, findNode, OpError, parseLevel, resolveLevel, type Op } from './ops';
 
@@ -33,6 +33,7 @@ Usage: isodraw <command> [options]   (add --json to any command for JSON output)
   edges update <diagram> <from> <to> [--label L] [--style S]
   edges remove <diagram> <from> <to>
   apply <diagram> --file changes.json [--dry-run]
+  layout <diagram> [--level a/b]  Lay out a level in columns by flow (moves everything on it)
 
   import terraform <state-or-plan.json> [--title T]
   export <diagram> --format json|md
@@ -263,6 +264,16 @@ async function main() {
       const ops = readJson(await readInput(opt.file), opt.file ?? 'stdin');
       if (!Array.isArray(ops)) throw new CliError('apply takes a JSON array of changes. See `isodraw guide`.');
       return change(need(sub, 'a diagram'), ops as Op[], opt['dry-run']);
+    }
+
+    case 'layout': {
+      const level = parseLevel(opt.level);
+      const { meta, result } = await client.edit(need(sub, 'a diagram'), (content) => {
+        const at = resolveLevel(content, level);
+        const before = levelAt(content, at)!;
+        return { diagram: withLevel(content, at, layoutLevel), result: before.nodes.filter((n) => n.kind !== 'text').length };
+      });
+      return out({ diagram: meta.id, version: meta.version, items: result }, `Laid out ${result} items. Saved ${meta.title} (version ${meta.version}).`);
     }
 
     case 'import': {

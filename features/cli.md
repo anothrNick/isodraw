@@ -72,8 +72,9 @@ Claude Desktop and ChatGPT reach tools through MCP, not a shell. After the CLI, 
 
 - **Done:** API tokens (hashed, one workspace, read or write, browser-only management); `isodraw login` through the browser with a localhost callback, and a token settings page; read commands (`whoami`, `diagrams`, `describe`, `docs get`, `export`, `icons`); write commands (`diagrams create/rename/delete`, `docs set`, `nodes`, `edges`, `apply --dry-run`, `import terraform`) with automatic placement and merging on conflict; `isodraw guide` and a Claude Code skill in `.claude/skills/isodraw/`.
 - **Seen in use:** an agent built a documented 7-component diagram with icons, an area and labeled connections in two commands.
+- **Layout (done):** layout is the platform's job. Items the CLI or an import places are marked `placed: 'auto'`; a level made only of those is laid out again after every change; moving an item in the editor makes it manual and it is never moved automatically. `isodraw layout` and the editor's *Tidy up* lay out a whole level on request.
 - **Next:**
-  - `isodraw layout <diagram> [--level]`: re-run the import's layered layout on a level. Placing items one by one beside each other puts chains in a row, so a connection can run through the item between its ends.
+  - Layout around manual items: today, once a level has any manual item, automatic layout only places new items beside what they connect to. Laying out all the auto items with the manual ones as fixed points would keep mixed levels tidy too.
   - The open editor doesn't show CLI changes until it saves (merging them) or reloads. Polling for a newer version, or a "changed elsewhere, reload" notice, would close that gap.
   - Publish to npm, and decide the name (see below).
   - Remote MCP for Claude Desktop and ChatGPT.

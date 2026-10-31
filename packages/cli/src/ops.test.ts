@@ -117,6 +117,55 @@ describe('applyOps', () => {
   });
 });
 
+describe('layout after changes', () => {
+  const empty = (): Diagram => ({ version: 1, nodes: [], edges: [] });
+
+  it('keeps a diagram built by an agent tidy: a chain runs left to right with nothing overlapping', () => {
+    const { diagram } = applyOps(empty(), [
+      { op: 'addNode', label: 'VPC', kind: 'area' },
+      { op: 'addNode', label: 'API', in: 'VPC' },
+      { op: 'addNode', label: 'DB', near: 'API' },
+      { op: 'addNode', label: 'Queue', near: 'DB' },
+      { op: 'addNode', label: 'Worker', near: 'Queue' },
+      { op: 'addEdge', from: 'API', to: 'DB' },
+      { op: 'addEdge', from: 'API', to: 'Queue' },
+      { op: 'addEdge', from: 'Queue', to: 'Worker' },
+    ]);
+    const at = (id: string) => diagram.nodes.find((n) => n.id === id)!;
+    // DB and Queue are both fed by the API, so they share a column instead of a row,
+    // and the API → Queue line no longer runs through the DB.
+    expect(at('db').x).toBe(at('queue').x);
+    expect(at('api').x).toBeLessThan(at('db').x);
+    expect(at('queue').x).toBeLessThan(at('worker').x);
+    expect(diagram.nodes.every((n) => n.placed === 'auto')).toBe(true);
+  });
+
+  it('on a level a person arranged, moves only the new item, beside what it connects to', () => {
+    const arranged = base();
+    const { diagram } = applyOps(arranged, [
+      { op: 'addNode', label: 'Redis', kind: 'cylinder' },
+      { op: 'addEdge', from: 'orders-api', to: 'Redis' },
+    ]);
+    for (const n of arranged.nodes) {
+      const after = diagram.nodes.find((x) => x.id === n.id)!;
+      if (n.id !== 'vpc') expect([after.x, after.y], n.id).toEqual([n.x, n.y]);
+    }
+    const api = diagram.nodes.find((n) => n.id === 'api')!;
+    const redis = diagram.nodes.find((n) => n.id === 'redis')!;
+    expect(redis.x).toBeGreaterThan(api.x);
+    expect(Math.abs(redis.y - api.y)).toBeLessThan(8);
+    expect(redis.placed).toBe('auto');
+  });
+
+  it('puts a new source before what it feeds', () => {
+    const { diagram } = applyOps(base(), [
+      { op: 'addNode', label: 'Users' },
+      { op: 'addEdge', from: 'Users', to: 'CDN' },
+    ]);
+    expect(diagram.nodes.find((n) => n.id === 'users')!.x).toBeLessThan(diagram.nodes.find((n) => n.id === 'cdn')!.x);
+  });
+});
+
 describe('describe', () => {
   it('outlines a level for an agent: items, areas, docs, details and connections', () => {
     const o = outline(base(), { title: 'Shop', version: 3 });

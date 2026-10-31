@@ -46,6 +46,13 @@ with a JSON array of ops, and \`--dry-run\` first to see what would change:
 Ops: addNode, updateNode, removeNode, addEdge, updateEdge, removeEdge, setDoc,
 addDetail. Every op may have "level": "a/b".
 
+## Layout is the platform's job
+Never pass coordinates. Items you add are placed for you, and a level made
+only of platform-placed items is laid out again after each change, so it
+stays tidy. Items a person moved stay where they are. \`isodraw layout <diagram>\`
+lays out a whole level, moving everything on it, so only use it when the user
+asks for a tidy-up or the level is clearly a mess.
+
 ## Good habits
 - Describe, change, then describe again to check.
 - Prefer apply for related changes: one save, one entry in history.
