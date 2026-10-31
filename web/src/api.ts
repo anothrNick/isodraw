@@ -57,6 +57,19 @@ export interface InviteDetails extends Invite {
   expired: boolean;
 }
 
+export type Scope = 'read' | 'write';
+
+export interface ApiToken {
+  id: string;
+  orgId: string;
+  orgName: string;
+  name: string;
+  scope: Scope;
+  createdAt: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -114,4 +127,10 @@ export const api = {
   revokeInvite: (orgId: string, inviteId: string) => request<void>('DELETE', `/api/orgs/${orgId}/invites/${inviteId}`),
   getInvite: (token: string) => request<InviteDetails>('GET', `/api/invites/${encodeURIComponent(token)}`),
   acceptInvite: (token: string) => request<Org>('POST', `/api/invites/${encodeURIComponent(token)}/accept`),
+
+  tokens: () => request<{ tokens: ApiToken[] }>('GET', '/api/tokens'),
+  /** The secret is in the answer once; it can't be read again. */
+  createToken: (name: string, orgId: string, scope: Scope, expiresInDays: number) =>
+    request<{ token: ApiToken; secret: string }>('POST', '/api/tokens', { name, orgId, scope, expiresInDays }),
+  deleteToken: (id: string) => request<void>('DELETE', `/api/tokens/${id}`),
 };

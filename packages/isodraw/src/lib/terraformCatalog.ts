@@ -239,6 +239,13 @@ const SUPPORTING =
 /** Providers that never describe infrastructure worth drawing. */
 const UTILITY = /^(random|null|time|tls|local|terraform|archive|external|http|template|cloudinit|kubernetes|helm|tfe|github)_/;
 
+/** Terraform resource types drawn as components with an icon, with what they are. The CLI's --icon takes these. */
+export function iconTypes(): { type: string; what: string; icon: string }[] {
+  return Object.entries(CATALOG).flatMap(([type, e]) =>
+    e.role === 'node' ? [{ type, what: e.what, icon: typeof e.icon === 'string' ? e.icon : e.icon({}) }] : [],
+  );
+}
+
 export function catalogEntry(type: string): CatalogEntry {
   const known = CATALOG[type];
   if (known) return known;

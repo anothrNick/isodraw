@@ -27,7 +27,51 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs})
+	t := auth.Token(r.Context())
+	if t == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs})
+		return
+	}
+	// A token sees only its own organization, with the role it acts as there.
+	visible := []store.Org{}
+	for _, o := range orgs {
+		if o.ID == t.OrgID {
+			if t.Scope != store.ScopeWrite {
+				o.Role = store.Viewer
+			}
+			visible = append(visible, o)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": visible, "token": t})
+}
+
+// roleIn is the role the request acts with in an organization: the user's
+// role, limited by the token when there is one. A token only works in its own
+// organization, and a read-only token acts as a viewer.
+func (s *Server) roleIn(r *http.Request, orgID string) (store.Role, error) {
+	role, err := s.store.RoleIn(r.Context(), orgID, auth.User(r.Context()).ID)
+	if err != nil {
+		return role, err
+	}
+	if t := auth.Token(r.Context()); t != nil {
+		if t.OrgID != orgID {
+			return "", store.ErrNotFound
+		}
+		if t.Scope != store.ScopeWrite {
+			return store.Viewer, nil
+		}
+	}
+	return role, nil
+}
+
+// browserOnly refuses requests made with an API token. Tokens are for working
+// on diagrams; teams, members, invites and tokens are managed in the app.
+func browserOnly(w http.ResponseWriter, r *http.Request) bool {
+	if auth.Token(r.Context()) != nil {
+		writeError(w, http.StatusForbidden, "browser_only", "This can only be done in the IsoDraw app, not with an API token.")
+		return false
+	}
+	return true
 }
 
 // orgRole checks that the signed-in user belongs to the organization. Non-members get 404, so ids don't leak.
@@ -36,7 +80,7 @@ func (s *Server) orgRole(w http.ResponseWriter, r *http.Request, orgID string) (
 		writeError(w, http.StatusNotFound, "not_found", "No such organization.")
 		return "", false
 	}
-	role, err := s.store.RoleIn(r.Context(), orgID, auth.User(r.Context()).ID)
+	role, err := s.roleIn(r, orgID)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found", "No such organization.")
 		return "", false
@@ -65,7 +109,7 @@ func (s *Server) diagramAccess(w http.ResponseWriter, r *http.Request, edit bool
 		internalError(w, err)
 		return d, false
 	}
-	role, err := s.store.RoleIn(r.Context(), d.OrgID, auth.User(r.Context()).ID)
+	role, err := s.roleIn(r, d.OrgID)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found", "No such diagram.")
 		return d, false

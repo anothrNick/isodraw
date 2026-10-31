@@ -17,15 +17,24 @@ const InviteTTL = 7 * 24 * time.Hour
 const maxOrgName = 80
 
 func (s *Server) memberRoutes(api *http.ServeMux) {
-	api.HandleFunc("POST /api/orgs", s.createTeam)
-	api.HandleFunc("PATCH /api/orgs/{org}", s.renameOrg)
+	// Seeing the member list works with a token; changing teams, members and invites is for the app.
 	api.HandleFunc("GET /api/orgs/{org}/members", s.listMembers)
-	api.HandleFunc("PATCH /api/orgs/{org}/members/{user}", s.changeRole)
-	api.HandleFunc("DELETE /api/orgs/{org}/members/{user}", s.removeMember)
-	api.HandleFunc("POST /api/orgs/{org}/invites", s.createInvite)
-	api.HandleFunc("DELETE /api/orgs/{org}/invites/{invite}", s.revokeInvite)
-	api.HandleFunc("GET /api/invites/{token}", s.getInvite)
-	api.HandleFunc("POST /api/invites/{token}/accept", s.acceptInvite)
+	for pattern, h := range map[string]http.HandlerFunc{
+		"POST /api/orgs":                          s.createTeam,
+		"PATCH /api/orgs/{org}":                   s.renameOrg,
+		"PATCH /api/orgs/{org}/members/{user}":    s.changeRole,
+		"DELETE /api/orgs/{org}/members/{user}":   s.removeMember,
+		"POST /api/orgs/{org}/invites":            s.createInvite,
+		"DELETE /api/orgs/{org}/invites/{invite}": s.revokeInvite,
+		"GET /api/invites/{token}":                s.getInvite,
+		"POST /api/invites/{token}/accept":        s.acceptInvite,
+	} {
+		api.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			if browserOnly(w, r) {
+				h(w, r)
+			}
+		})
+	}
 }
 
 // managedOrg loads an organization the signed-in user can manage (owner or admin).

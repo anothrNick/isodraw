@@ -9,6 +9,8 @@ import { useEffect, useState } from 'react';
  *   /:org/d/:id/docs#/node/a/b → a diagram's docs, on component b inside a
  *   /:org/members          → an organization's members and invites
  *   /invite/:token         → an invite to join an organization
+ *   /cli/login?port&state  → authorize the CLI (isodraw login opens this)
+ *   /settings/tokens       → API tokens for the CLI, agents and CI
  */
 export type Route =
   | { page: 'home' }
@@ -17,6 +19,8 @@ export type Route =
   | { page: 'docs'; org: string; id: string }
   | { page: 'members'; org: string }
   | { page: 'invite'; token: string }
+  | { page: 'cli-login' }
+  | { page: 'tokens' }
   | { page: 'missing' };
 
 export function parseRoute(path: string): Route {
@@ -24,6 +28,8 @@ export function parseRoute(path: string): Route {
   if (parts.length === 0) return { page: 'home' };
   // "invite" is a reserved slug, so it never names an organization.
   if (parts.length === 2 && parts[0] === 'invite') return { page: 'invite', token: parts[1] };
+  if (parts.length === 2 && parts[0] === 'cli' && parts[1] === 'login') return { page: 'cli-login' };
+  if (parts.length === 2 && parts[0] === 'settings' && parts[1] === 'tokens') return { page: 'tokens' };
   if (parts.length === 1) return { page: 'diagrams', org: parts[0] };
   if (parts.length === 2 && parts[1] === 'members') return { page: 'members', org: parts[0] };
   if (parts.length === 3 && parts[1] === 'd') return { page: 'diagram', org: parts[0], id: parts[2] };
