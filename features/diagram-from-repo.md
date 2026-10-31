@@ -1,6 +1,6 @@
 # Diagram from a code repo
 
-**Status:** idea
+**Status:** idea · **Priority:** next
 **Summary:** Point IsoDraw at a repository and get a documented architecture diagram: services, datastores, queues and how they connect, with docs that link back to the code. Config files give the facts, AI adds what the code means, and IsoDraw's own layout draws it.
 
 ## Why
