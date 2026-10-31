@@ -20,6 +20,11 @@
   --isd-code-text: #e2e8f0;
   --isd-notice-bg: #fef3c7;
   --isd-notice-text: #92400e;
+  /* Docs: body text a step softer than headings, so headings and bold stand out. */
+  --isd-doc-text: #1e293b;
+  --isd-doc-strong: #020617;
+  --isd-code-inline-bg: #f1f5f9;
+  --isd-code-inline-text: #0f172a;
   /* Shadows: rgb(var(--isd-shadow) / alpha). */
   --isd-shadow: 15 23 42;
   color-scheme: light;
@@ -45,6 +50,10 @@
   --isd-code-text: #e2e8f0;
   --isd-notice-bg: rgb(245 158 11 / 0.15);
   --isd-notice-text: #fbbf24;
+  --isd-doc-text: #cbd5e1;
+  --isd-doc-strong: #f8fafc;
+  --isd-code-inline-bg: rgb(148 163 184 / 0.14);
+  --isd-code-inline-text: #e2e8f0;
   --isd-shadow: 0 0 0;
   color-scheme: dark;
 }
@@ -306,43 +315,103 @@ textarea.isd-input { resize: vertical; }
 .isd-doc-btn code { font-size: 11px; }
 
 .isd-doc-content { flex: 1; min-height: 0; overflow-y: auto; }
-.isd-doc-content .ProseMirror { min-height: 100%; padding: 14px 16px 40px; outline: none; font-size: 14px; line-height: 1.6; color: var(--isd-text); }
-.isd-doc-content .ProseMirror > * + * { margin-top: 0.6em; }
+.isd-doc-content .ProseMirror {
+  min-height: 100%; padding: 16px 18px 48px; outline: none; font-size: 14.5px; line-height: 1.65; color: var(--isd-doc-text);
+  font-feature-settings: 'cv11', 'ss01'; -webkit-font-smoothing: antialiased; overflow-wrap: break-word;
+}
+.isd-doc-content .ProseMirror > * + * { margin-top: 0.75em; }
 .isd-doc-content .ProseMirror :is(p, ul, ol, blockquote, pre, table, h1, h2, h3, h4) { margin-bottom: 0; }
-.isd-doc-content .ProseMirror h1 { font-size: 1.5em; line-height: 1.25; margin-top: 0.8em; }
-.isd-doc-content .ProseMirror h2 { font-size: 1.25em; line-height: 1.3; margin-top: 0.9em; }
-.isd-doc-content .ProseMirror h3 { font-size: 1.05em; margin-top: 0.9em; }
 .isd-doc-content .ProseMirror > :first-child { margin-top: 0; }
-.isd-doc-content .ProseMirror ul, .isd-doc-content .ProseMirror ol { padding-left: 1.4em; }
+
+/* Headings: tight, heavy and in the strongest ink. */
+.isd-doc-content .ProseMirror :is(h1, h2, h3, h4) { color: var(--isd-doc-strong); scroll-margin-top: 12px; }
+.isd-doc-content .ProseMirror h1 { margin-top: 1.1em; font-size: 1.6em; font-weight: 700; line-height: 1.2; letter-spacing: -0.022em; }
+.isd-doc-content .ProseMirror h2 {
+  margin-top: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--isd-border);
+  font-size: 1.28em; font-weight: 650; line-height: 1.3; letter-spacing: -0.015em;
+}
+.isd-doc-content .ProseMirror h3 { margin-top: 1.3em; font-size: 1.07em; font-weight: 650; line-height: 1.35; letter-spacing: -0.01em; }
+.isd-doc-content .ProseMirror h4 { margin-top: 1.2em; font-size: 0.78em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--isd-muted); }
+.isd-doc-content .ProseMirror :is(h1, h2, h3, h4) + * { margin-top: 0.5em; }
+
+/* Emphasis that reads as emphasis. */
+.isd-doc-content .ProseMirror :is(strong, b) { font-weight: 700; color: var(--isd-doc-strong); }
+.isd-doc-content .ProseMirror :is(em, i) { font-style: italic; color: var(--isd-doc-strong); }
+.isd-doc-content .ProseMirror s { color: var(--isd-muted); text-decoration-thickness: 1px; }
+.isd-doc-content .ProseMirror a:not(.isd-mention) {
+  color: var(--isd-accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--isd-accent) 35%, transparent);
+  text-decoration-thickness: 1px; text-underline-offset: 3px; transition: text-decoration-color 0.12s;
+}
+.isd-doc-content .ProseMirror a:not(.isd-mention):hover { text-decoration-color: currentColor; }
+
+/* Lists */
+.isd-doc-content .ProseMirror ul, .isd-doc-content .ProseMirror ol { padding-left: 1.35em; }
+.isd-doc-content .ProseMirror li + li { margin-top: 0.3em; }
+.isd-doc-content .ProseMirror li::marker { color: var(--isd-muted); }
+.isd-doc-content .ProseMirror ol > li::marker { font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Paragraphs nested in lists, task items, cells and quotes sit flush; only siblings get a small gap. */
 .isd-doc-content .ProseMirror :is(li, td, th, blockquote) p { margin: 0; }
-.isd-doc-content .ProseMirror :is(li, td, th, blockquote) p + p { margin-top: 0.4em; }
-.isd-doc-content .ProseMirror blockquote { margin-left: 0; padding-left: 12px; border-left: 3px solid var(--isd-border); color: var(--isd-muted); }
-.isd-doc-content .ProseMirror code { padding: 1px 4px; border-radius: 4px; background: var(--isd-panel); font-size: 0.9em; }
-.isd-doc-content .ProseMirror pre { padding: 10px 12px; border-radius: 8px; background: var(--isd-code-bg); color: var(--isd-code-text); border: 1px solid var(--isd-border); overflow-x: auto; }
-.isd-doc-content .ProseMirror pre code { padding: 0; background: none; color: inherit; }
-.isd-doc-content .ProseMirror a { color: var(--isd-accent); }
-.isd-doc-content .ProseMirror hr { border: 0; border-top: 1px solid var(--isd-border); margin: 1em 0; }
-.isd-doc-content .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
-.isd-doc-content .ProseMirror ul[data-type="taskList"] li { display: flex; gap: 8px; align-items: flex-start; }
+.isd-doc-content .ProseMirror :is(li, td, th, blockquote) p + p { margin-top: 0.45em; }
+
+.isd-doc-content .ProseMirror blockquote {
+  margin-left: 0; margin-right: 0; padding: 8px 14px; border-left: 3px solid var(--isd-accent);
+  border-radius: 0 8px 8px 0; background: var(--isd-panel); color: var(--isd-doc-text);
+}
+
+/* Code */
+.isd-doc-content .ProseMirror code {
+  padding: 0.12em 0.38em; border: 1px solid var(--isd-border); border-radius: 5px; background: var(--isd-code-inline-bg);
+  color: var(--isd-code-inline-text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.84em;
+}
+.isd-doc-content .ProseMirror pre {
+  padding: 12px 14px; border-radius: 10px; background: var(--isd-code-bg); color: var(--isd-code-text); overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.6;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.isd-doc-content .ProseMirror pre code { padding: 0; border: 0; background: none; color: inherit; font-size: inherit; }
+.isd-doc-content .ProseMirror hr { border: 0; border-top: 1px solid var(--isd-border); margin: 1.6em 0; }
+
+/* Task lists */
+.isd-doc-content .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0.1em; }
+.isd-doc-content .ProseMirror ul[data-type="taskList"] li { display: flex; gap: 9px; align-items: flex-start; }
 /* The label is one line tall, so the checkbox centers on the first line of text. */
-.isd-doc-content .ProseMirror ul[data-type="taskList"] li > label { flex: none; display: flex; align-items: center; height: 1.6em; }
-.isd-doc-content .ProseMirror ul[data-type="taskList"] li > label input { margin: 0; cursor: pointer; }
+.isd-doc-content .ProseMirror ul[data-type="taskList"] li > label { flex: none; display: flex; align-items: center; height: 1.65em; }
+.isd-doc-content .ProseMirror ul[data-type="taskList"] li > label input { width: 15px; height: 15px; margin: 0; accent-color: var(--isd-accent); cursor: pointer; }
 .isd-doc-content .ProseMirror ul[data-type="taskList"] li > div { flex: 1; }
 .isd-doc-content .ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--isd-muted); text-decoration: line-through; }
+
+/* Tables: a rounded card with hairline rules and a tinted header. */
 .isd-doc-content .ProseMirror .tableWrapper { overflow-x: auto; }
-.isd-doc-content .ProseMirror table { width: 100%; margin: 0; border-collapse: collapse; table-layout: fixed; font-size: 13px; line-height: 1.45; }
-.isd-doc-content .ProseMirror :is(td, th) { position: relative; border: 1px solid var(--isd-border); padding: 6px 10px; vertical-align: top; }
-.isd-doc-content .ProseMirror th { background: var(--isd-panel); text-align: left; }
-.isd-doc-content .ProseMirror .selectedCell { background: var(--isd-accent-soft); }
+.isd-doc-content .ProseMirror table {
+  width: 100%; margin: 0; border: 1px solid var(--isd-border); border-radius: 10px; border-collapse: separate; border-spacing: 0;
+  table-layout: fixed; font-size: 13px; line-height: 1.5; font-variant-numeric: tabular-nums;
+}
+/* Corner cells follow the rounded border, so header and hover tints stay inside it. */
+.isd-doc-content .ProseMirror tr:first-child > :first-child { border-top-left-radius: 9px; }
+.isd-doc-content .ProseMirror tr:first-child > :last-child { border-top-right-radius: 9px; }
+.isd-doc-content .ProseMirror tr:last-child > :first-child { border-bottom-left-radius: 9px; }
+.isd-doc-content .ProseMirror tr:last-child > :last-child { border-bottom-right-radius: 9px; }
+.isd-doc-content .ProseMirror :is(td, th) {
+  position: relative; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--isd-border); border-right: 1px solid var(--isd-border);
+  vertical-align: top; text-align: left;
+}
+.isd-doc-content .ProseMirror :is(td, th):last-child { border-right: 0; }
+.isd-doc-content .ProseMirror tr:last-child > :is(td, th) { border-bottom: 0; }
+.isd-doc-content .ProseMirror th {
+  background: var(--isd-panel); color: var(--isd-doc-strong); font-size: 11.5px; font-weight: 650; letter-spacing: 0.02em;
+}
+.isd-doc-content .ProseMirror tbody tr:hover > td { background: color-mix(in srgb, var(--isd-panel) 70%, transparent); }
+.isd-doc-content .ProseMirror .selectedCell { background: var(--isd-accent-soft) !important; }
 .isd-doc-content .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder); float: left; height: 0; color: var(--isd-muted); pointer-events: none;
 }
 .isd-mention {
-  padding: 0 5px; border-radius: 999px; background: var(--isd-accent-soft); color: var(--isd-accent) !important;
-  font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap;
+  padding: 0.05em 0.4em; border-radius: 6px; background: var(--isd-accent-soft); color: var(--isd-accent) !important;
+  font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s;
 }
 .isd-mention:hover { background: var(--isd-accent); color: var(--isd-on-accent) !important; }
+/* ProseMirror resets white-space on non-editable inline nodes; a mention never breaks across lines. */
+.isd-doc-content .ProseMirror .isd-mention { white-space: nowrap; }
 
 .isd-doc-bubble {
   position: absolute; z-index: 5; display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--isd-inverse-bg);
