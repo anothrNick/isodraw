@@ -1,0 +1,10 @@
+# Cloudflare Pages project for the IsoDraw web app (`npm run deploy -w isodraw-web`).
+# functions/ forwards /api and /auth to the API on Fly, so the browser only
+# ever talks to this site.
+name = "isodraw"
+pages_build_output_dir = "./dist"
+compatibility_date = "2025-01-01"
+
+[vars]
+# The Fly app that runs the API. Set yours here.
+API_ORIGIN = "https://isodraw-api.fly.dev"

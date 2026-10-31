@@ -2,6 +2,8 @@
 
 A React component for drawing Cloudcraft-style architecture diagrams, with a flat (2D) view and an isometric (2.5D) view, and a platform around it: a Go API and a web app where people sign in and keep their diagrams.
 
+Deploying: see [DEPLOY.md](DEPLOY.md) (web app on Cloudflare Pages, API and Postgres on Fly.io, sign-in with Cognito).
+
 ## Run the platform locally
 
 You need Docker, Go and Node.
@@ -193,5 +195,6 @@ packages/cli/       the isodraw CLI for people and AI agents
 web/                the platform web app (React 19, Tailwind v4, shadcn/ui): diagram list, editor with autosave
 api/                the Go API: cmd/isodraw, internal/{auth,config,db,httpapi,store}, migrations
 dev/                local development: Dex config and the npm run dev script
+infra/terraform/    Cognito for sign-in in production
 compose.yaml        Postgres and Dex for local development
 ```

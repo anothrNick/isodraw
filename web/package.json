@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p functions/tsconfig.json",
+    "deploy": "npm run build && npx --yes wrangler@4.156.0 pages deploy",
+    "preview:pages": "npm run build && npx --yes wrangler@4.156.0 pages dev --port 5190 --binding API_ORIGIN=http://localhost:8080"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

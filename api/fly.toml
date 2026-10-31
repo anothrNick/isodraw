@@ -1,0 +1,35 @@
+# Fly.io app for the IsoDraw API. Browsers never call it directly: the
+# Cloudflare Pages site forwards /api and /auth here, so PUBLIC_URL is the
+# site's address, not this app's.
+#
+# Set the app name and PUBLIC_URL for your deployment; secrets go in with
+# `fly secrets set` (see DEPLOY.md).
+app = "isodraw-api"
+primary_region = "iad"
+
+[deploy]
+  # Runs in a one-off machine before each release.
+  release_command = "/isodraw migrate"
+
+[env]
+  ADDR = ":8080"
+  PUBLIC_URL = "https://isodraw.example.com"
+  OIDC_SCOPES = "openid email profile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
