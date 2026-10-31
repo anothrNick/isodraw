@@ -7,18 +7,25 @@ import { useEffect, useState } from 'react';
  *   /:org                  → an organization's diagrams
  *   /:org/d/:id#in/a/b     → a diagram, inside detail diagrams a › b
  *   /:org/d/:id/docs#/node/a/b → a diagram's docs, on component b inside a
+ *   /:org/members          → an organization's members and invites
+ *   /invite/:token         → an invite to join an organization
  */
 export type Route =
   | { page: 'home' }
   | { page: 'diagrams'; org: string }
   | { page: 'diagram'; org: string; id: string }
   | { page: 'docs'; org: string; id: string }
+  | { page: 'members'; org: string }
+  | { page: 'invite'; token: string }
   | { page: 'missing' };
 
 export function parseRoute(path: string): Route {
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (parts.length === 0) return { page: 'home' };
+  // "invite" is a reserved slug, so it never names an organization.
+  if (parts.length === 2 && parts[0] === 'invite') return { page: 'invite', token: parts[1] };
   if (parts.length === 1) return { page: 'diagrams', org: parts[0] };
+  if (parts.length === 2 && parts[1] === 'members') return { page: 'members', org: parts[0] };
   if (parts.length === 3 && parts[1] === 'd') return { page: 'diagram', org: parts[0], id: parts[2] };
   if (parts.length === 4 && parts[1] === 'd' && parts[3] === 'docs') return { page: 'docs', org: parts[0], id: parts[2] };
   return { page: 'missing' };

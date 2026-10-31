@@ -31,6 +31,32 @@ export interface StoredDiagram extends DiagramMeta {
   content: Diagram;
 }
 
+export interface Member {
+  userId: string;
+  email: string;
+  name: string;
+  role: Role;
+  joinedAt: string;
+}
+
+export interface Invite {
+  id: string;
+  orgId: string;
+  email: string;
+  role: Role;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** What an invite link shows before it is accepted. */
+export interface InviteDetails extends Invite {
+  orgName: string;
+  orgSlug: string;
+  invitedBy: string;
+  accepted: boolean;
+  expired: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -76,4 +102,16 @@ export const api = {
   rename: (id: string, title: string) => request<DiagramMeta>('PATCH', `/api/diagrams/${id}`, { title }),
   deleteDiagram: (id: string) => request<void>('DELETE', `/api/diagrams/${id}`),
   signOut: () => request<void>('POST', '/auth/logout'),
+
+  createTeam: (name: string) => request<Org>('POST', '/api/orgs', { name }),
+  renameOrg: (orgId: string, name: string) => request<Org>('PATCH', `/api/orgs/${orgId}`, { name }),
+  /** Members for anyone in the organization; pending invites only for owners and admins. */
+  members: (orgId: string) => request<{ members: Member[]; invites: Invite[] }>('GET', `/api/orgs/${orgId}/members`),
+  changeRole: (orgId: string, userId: string, role: Role) => request<void>('PATCH', `/api/orgs/${orgId}/members/${userId}`, { role }),
+  removeMember: (orgId: string, userId: string) => request<void>('DELETE', `/api/orgs/${orgId}/members/${userId}`),
+  /** Invite an address. No email is sent yet: the answer has the link to share. */
+  invite: (orgId: string, email: string, role: Role) => request<{ invite: Invite; url: string }>('POST', `/api/orgs/${orgId}/invites`, { email, role }),
+  revokeInvite: (orgId: string, inviteId: string) => request<void>('DELETE', `/api/orgs/${orgId}/invites/${inviteId}`),
+  getInvite: (token: string) => request<InviteDetails>('GET', `/api/invites/${encodeURIComponent(token)}`),
+  acceptInvite: (token: string) => request<Org>('POST', `/api/invites/${encodeURIComponent(token)}/accept`),
 };

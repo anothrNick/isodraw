@@ -123,6 +123,9 @@ func slugBase(email string) string {
 	if s == "" {
 		return "user"
 	}
+	if reserved[s] {
+		s += "-user"
+	}
 	return s
 }
 

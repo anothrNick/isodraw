@@ -43,6 +43,7 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 	api.HandleFunc("PUT /api/diagrams/{id}/content", srv.saveContent)
 	api.HandleFunc("PATCH /api/diagrams/{id}", srv.updateDiagram)
 	api.HandleFunc("DELETE /api/diagrams/{id}", srv.deleteDiagram)
+	srv.memberRoutes(api)
 	api.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "No such API route.")
 	})

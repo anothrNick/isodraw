@@ -32,8 +32,17 @@ All routes sit under `/api`, as a namespace (not a version). Requests are signed
 | `PUT /api/diagrams/{id}/content` | Save content. Send `If-Match: "<version>"`; a stale version gets `409` with the current diagram. |
 | `PATCH /api/diagrams/{id}` | Rename: `{ title }` |
 | `DELETE /api/diagrams/{id}` | Delete (soft) |
+| `POST /api/orgs` | Create a team you own: `{ name }` |
+| `PATCH /api/orgs/{org}` | Rename (owners and admins) |
+| `GET /api/orgs/{org}/members` | Members, plus pending invites for owners and admins |
+| `PATCH` / `DELETE /api/orgs/{org}/members/{user}` | Change a role, or remove someone (anyone can remove themselves to leave) |
+| `POST /api/orgs/{org}/invites` | Invite `{ email, role }`. Returns the link to share; no email is sent yet. |
+| `DELETE /api/orgs/{org}/invites/{invite}` | Revoke an invite |
+| `GET /api/invites/{token}`, `POST …/accept` | See and accept an invite. Accepting needs the invited email. |
 
 Sign-in lives at `/auth/login`, `/auth/callback` and `POST /auth/logout`. People outside an organization get `404` for its diagrams, so ids don't leak; viewers get `403` when they try to change something.
+
+Roles are owner, admin, editor and viewer. Owners and admins manage members and invites; only an owner can make or change another owner, and the last owner can't leave or step down. Personal workspaces are for one person; teams are for sharing. An invite link works once, for 7 days, and only for a signed-in user with the invited email; inviting the same address again replaces the old link.
 
 ## Run the demo
 
