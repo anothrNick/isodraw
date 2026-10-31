@@ -51,10 +51,10 @@ GitHub Actions runs the typecheck, both test suites and the library build on eve
   - *Open* imports into the level on screen, so you can import a Terraform file as one component's detail diagram.
   - Diagrams embedded in a component's doc by earlier versions become its detail diagram when the diagram is loaded.
 - **Readable at any angle:** text on the ground, area labels and image tiles turn to stay upright as you rotate the 2.5D view.
-- **One sidebar:** selecting a component or connection opens the right sidebar, with *Properties* and *Docs* tabs for that item. It stays on whichever tab you last picked, and the docs tab is wider. Viewers (`readOnly`) get the docs only.
+- **One sidebar:** selecting a component or connection opens the right sidebar, with *Properties* and *Docs* tabs for that item. It stays on whichever tab you last picked, and both tabs share one width. Viewers (`readOnly`) get the docs only.
 - **Help:** the *?* button in the toolbar (or the `?` key) opens the keyboard shortcuts.
 - **Responsive:** below 1000px wide, the side panels become drawers over the canvas.
-- **Resizable panels:** drag the inner border of the shapes panel or the sidebar to widen it. The sidebar remembers a width for each tab. Default widths are the minimums. Widths are remembered in the browser, and double-clicking a border resets it.
+- **Resizable panels:** drag the inner border of the shapes panel or the sidebar to widen it. Default widths are the minimums. Widths are remembered in the browser, and double-clicking a border resets it.
 - **Documentation:** every node, connection and area can have its own doc, and the diagram has an overview page.
   - Open the docs with `D`, the toolbar *Docs* button, the sidebar's *Docs* tab, a double-click, or a node's doc badge. The docs follow your selection, and breadcrumbs (*Diagram › VPC › App subnet*) lead to parent docs.
   - The editor is Tiptap-based and stores Markdown. It has headings, lists, task lists, quotes, code blocks, tables and links, a formatting menu that appears over selected text, and `/` commands.
