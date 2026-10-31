@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Box, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, Box, MoreHorizontal, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type DiagramMeta, type Org } from './api';
 import { NewDiagramDialog } from './NewDiagramDialog';
@@ -48,12 +48,22 @@ export function DiagramList({ org }: { org: Org }) {
       <div className="mx-auto w-full max-w-3xl px-6 py-10">
         <div className="mb-6 flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold tracking-tight">{org.personal ? 'Your diagrams' : org.name}</h1>
-          {canEdit(org) && (
-            <Button onClick={() => setCreating(true)}>
-              <Plus />
-              New diagram
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {!org.personal && (
+              <Button variant="outline" asChild>
+                <a {...linkProps(`/${org.slug}/members`)}>
+                  <Users />
+                  Members
+                </a>
+              </Button>
+            )}
+            {canEdit(org) && (
+              <Button onClick={() => setCreating(true)}>
+                <Plus />
+                New diagram
+              </Button>
+            )}
+          </div>
         </div>
 
         {error && <p className="text-destructive">{error}</p>}

@@ -1,13 +1,18 @@
-import { useEffect, useState } from 'react';
-import { ChevronsUpDown, Loader2, LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { ChevronsUpDown, Loader2, LogOut, Monitor, Moon, Plus, Sun, Users } from 'lucide-react';
+import { toast } from 'sonner';
 import { ApiError, api, signIn, type Org, type User } from './api';
 import { DiagramList } from './DiagramList';
 import { DocsPage } from './DocsPage';
 import { EditorPage } from './EditorPage';
+import { InvitePage } from './InvitePage';
+import { MembersPage } from './MembersPage';
 import { linkProps, navigate, useRoute } from './router';
+import { SessionContext, type Session } from './session';
 import { setThemeSetting, useTheme, type ThemeSetting } from './theme';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,8 +26,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-type Session = { user: User; orgs: Org[] };
+import { Input } from '@/components/ui/input';
 
 export function App() {
   const route = useRoute();
@@ -30,15 +34,19 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   useTheme(); // keeps <html class="dark"> in step on every page
 
-  useEffect(() => {
-    api
-      .me()
-      .then(setSession)
-      .catch((err) => {
-        if (err instanceof ApiError && err.status === 401) signIn();
-        else setError(err instanceof Error ? err.message : String(err));
-      });
+  const reload = useCallback(async (): Promise<Session> => {
+    const me = await api.me();
+    const next = { ...me, reload };
+    setSession(next);
+    return next;
   }, []);
+
+  useEffect(() => {
+    reload().catch((err) => {
+      if (err instanceof ApiError && err.status === 401) signIn();
+      else setError(err instanceof Error ? err.message : String(err));
+    });
+  }, [reload]);
 
   // "/" opens the first organization (the personal one).
   useEffect(() => {
@@ -48,26 +56,42 @@ export function App() {
   if (error) return <Message title="Can't reach IsoDraw" body={error} />;
   if (!session) return <Loading />;
 
+  if (route.page === 'invite') {
+    return (
+      <SessionContext.Provider value={session}>
+        <Shell session={session}>
+          <InvitePage token={route.token} />
+        </Shell>
+      </SessionContext.Provider>
+    );
+  }
+
   const org = 'org' in route ? session.orgs.find((o) => o.slug === route.org) : session.orgs[0];
   if (route.page === 'missing' || ('org' in route && !org)) {
     return (
-      <Shell session={session}>
-        <Message title="Not found" body="There's nothing here, or you don't have access to it." />
-      </Shell>
+      <SessionContext.Provider value={session}>
+        <Shell session={session}>
+          <Message title="Not found" body="There's nothing here, or you don't have access to it." />
+        </Shell>
+      </SessionContext.Provider>
     );
   }
   if (!org) return null;
 
   return (
-    <Shell session={session} org={org}>
-      {route.page === 'diagram' ? (
-        <EditorPage key={route.id} org={org} id={route.id} />
-      ) : route.page === 'docs' ? (
-        <DocsPage key={route.id} org={org} id={route.id} />
-      ) : (
-        <DiagramList key={org.id} org={org} />
-      )}
-    </Shell>
+    <SessionContext.Provider value={session}>
+      <Shell session={session} org={org}>
+        {route.page === 'diagram' ? (
+          <EditorPage key={route.id} org={org} id={route.id} />
+        ) : route.page === 'docs' ? (
+          <DocsPage key={route.id} org={org} id={route.id} />
+        ) : route.page === 'members' ? (
+          <MembersPage key={org.id} org={org} />
+        ) : (
+          <DiagramList key={org.id} org={org} />
+        )}
+      </Shell>
+    </SessionContext.Provider>
   );
 }
 
@@ -89,13 +113,9 @@ function Shell({ session, org, children }: { session: Session; org?: Org; childr
           <Logo />
           IsoDraw
         </a>
-        {org && (
-          <>
-            <span className="text-muted-foreground/60">/</span>
-            <OrgSwitcher orgs={session.orgs} current={org} />
-          </>
-        )}
-        {/* The editor puts the diagram's title and save status here. */}
+        <span className="text-muted-foreground/60">/</span>
+        <OrgSwitcher orgs={session.orgs} current={org} />
+        {/* The editor and docs pages put the diagram's title and actions here. */}
         <div id="app-bar-slot" className="flex min-w-0 flex-1 items-center gap-2" />
         <UserMenu user={session.user} />
       </header>
@@ -104,37 +124,99 @@ function Shell({ session, org, children }: { session: Session; org?: Org; childr
   );
 }
 
-function OrgSwitcher({ orgs, current }: { orgs: Org[]; current: Org }) {
-  if (orgs.length < 2) {
-    return (
-      <a className="rounded-md px-1.5 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground" {...linkProps(`/${current.slug}`)}>
-        {current.name}
-      </a>
-    );
-  }
+function OrgSwitcher({ orgs, current }: { orgs: Org[]; current?: Org }) {
+  const [creating, setCreating] = useState(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1 px-1.5 text-muted-foreground">
-          {current.name}
-          <ChevronsUpDown className="size-3.5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel>Organizations</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={current.slug} onValueChange={(slug) => navigate(`/${slug}`)}>
-          {orgs.map((o) => (
-            <DropdownMenuRadioItem key={o.id} value={o.slug}>
-              {o.name}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="gap-1 px-1.5 text-muted-foreground">
+            {current?.name ?? 'Workspaces'}
+            <ChevronsUpDown className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-60">
+          <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={current?.slug ?? ''} onValueChange={(slug) => navigate(`/${slug}`)}>
+            {orgs.map((o) => (
+              <DropdownMenuRadioItem key={o.id} value={o.slug}>
+                <span className="truncate">{o.name}</span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          {current && !current.personal && (
+            <DropdownMenuItem onSelect={() => navigate(`/${current.slug}/members`)}>
+              <Users />
+              Members
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => setCreating(true)}>
+            <Plus />
+            Create team…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <CreateTeamDialog open={creating} onOpenChange={setCreating} />
+    </>
   );
 }
 
-function initials(user: User) {
+function CreateTeamDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const session = useContext(SessionContext);
+  useEffect(() => {
+    if (open) setName('');
+  }, [open]);
+  const create = async () => {
+    setBusy(true);
+    try {
+      const org = await api.createTeam(name);
+      await session?.reload();
+      onOpenChange(false);
+      navigate(`/${org.slug}/members`);
+      toast.success(`Created ${org.name}. Invite people to work on diagrams together.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create a team</DialogTitle>
+          <DialogDescription>A shared workspace: its diagrams belong to the team, and you choose who can edit or just read them.</DialogDescription>
+        </DialogHeader>
+        <form
+          id="create-team"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void create();
+          }}
+        >
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">Name</span>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Platform team" autoFocus />
+          </label>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" form="create-team" disabled={busy || !name.trim()}>
+            {busy && <Loader2 className="animate-spin" />}
+            Create team
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function initials(user: { name: string; email: string }) {
   const source = user.name || user.email;
   const parts = source.split(/[\s@._-]+/).filter(Boolean);
   return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? '')).toUpperCase();
