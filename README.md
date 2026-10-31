@@ -78,7 +78,7 @@ npm run demo
 
 Then open http://localhost:5173. Use the *Examples* menu to load a three-tier web app, a serverless API, a streaming IoT pipeline, or a Kubernetes cluster. Every example includes docs on its components. The demo saves your diagram and imported images to `localStorage`.
 
-A hosted copy is at https://sjostrom.io/isodraw/. To update it, run `npm run deploy:demo`. That typechecks, runs the unit tests, builds the demo and pushes it to the `gh-pages` branch.
+A hosted copy is at https://sjostrom.io/isodraw/. CI deploys it after every push to `main` that passes the checks: it builds the demo and publishes it to the `gh-pages` branch. `npm run deploy:demo` does the same by hand.
 
 ## Tests
 
