@@ -1,0 +1,4 @@
+.air
+*_test.go
+internal/testdb
+fly.toml

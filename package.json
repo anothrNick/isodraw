@@ -16,7 +16,9 @@
     "test:e2e": "npm run test:e2e -w isodraw",
     "build": "npm run build -w isodraw && npm run build -w @isodraw/cli && npm run build -w isodraw-web",
     "deploy:demo": "npm run deploy -w isodraw",
-    "cli": "node packages/cli/dist/isodraw.mjs"
+    "cli": "node packages/cli/dist/isodraw.mjs",
+    "deploy:api": "cd api && fly deploy",
+    "deploy:web": "npm run deploy -w isodraw-web"
   },
   "overrides": {
     "@tiptap/core": "3.32.1",

@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and fill in.
+app_url = "https://isodraw.example.com"
+region  = "us-east-1"
+
+# Reuse an existing pool (one account across products), or leave empty for a new one.
+# existing_user_pool_id = "us-east-1_XXXXXXXXX"
+
+# Only used when creating a pool; must be globally unique.
+# domain_prefix = "isodraw"
