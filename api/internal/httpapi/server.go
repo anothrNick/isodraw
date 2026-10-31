@@ -34,6 +34,19 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 	mux.HandleFunc("GET /auth/login", a.Login)
 	mux.HandleFunc("GET /auth/callback", a.Callback)
 	mux.Handle("POST /auth/logout", srv.sameOrigin(http.HandlerFunc(a.Logout)))
+	mux.HandleFunc("GET /auth/config", a.Config)
+	if a.HasPasswordPages() {
+		for pattern, h := range map[string]http.HandlerFunc{
+			"POST /auth/signup": a.SignUp,
+			"POST /auth/verify": a.Verify,
+			"POST /auth/resend": a.Resend,
+			"POST /auth/signin": a.SignIn,
+			"POST /auth/forgot": a.Forgot,
+			"POST /auth/reset":  a.Reset,
+		} {
+			mux.Handle(pattern, srv.sameOrigin(h))
+		}
+	}
 
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/me", srv.me)

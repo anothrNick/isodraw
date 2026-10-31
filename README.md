@@ -13,12 +13,15 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:5190 and sign in as `dev@isodraw.local` with the password `password` (a second user, `alex@isodraw.local`, has the same password).
+Then open http://localhost:5190 and create an account. No email is sent locally: the verification code (and any password reset code) is printed in the terminal, in the API's log.
 
-`npm run dev` starts Postgres and [Dex](https://dexidp.io) in Docker (`compose.yaml`), then runs the Go API with live reload on :8080 and the web app's Vite server on :5190 in one terminal. Vite forwards `/api` and `/auth` to the API, so the app and the API share an origin and the session cookie just works. The first run copies `.env.example` to `.env`. Ctrl+C stops the API and the app; the containers keep running. `npm run dev:reset` removes them and their data.
+`npm run dev` starts Postgres and Dex in Docker (`compose.yaml`), then runs the Go API with live reload on :8080 and the web app's Vite server on :5190 in one terminal. Vite forwards `/api` and `/auth` to the API, so the app and the API share an origin and the session cookie just works. The first run copies `.env.example` to `.env`. Ctrl+C stops the API and the app; the containers keep running. `npm run dev:reset` removes them and their data.
 
 - **Postgres** runs on host port 5433, so it can sit next to another local Postgres. The API applies its migrations on startup.
-- **Sign-in:** Dex is a small OIDC server that stands in for Cognito. The API only speaks standard OIDC, so the same code signs people in through Cognito in production, or through a self-hoster's own provider; only `OIDC_ISSUER` and the client settings change. Its test users are in `dev/dex.yaml`.
+- **Sign-in:** `AUTH_MODE` picks how people sign in. All three start the same session; only where the password is checked differs.
+  - `local` (the default in `.env.example`): IsoDraw's own sign-up, sign-in and reset pages (`/login`, `/signup`, `/verify`, `/forgot`, `/reset`), with accounts in Postgres. Codes go to the API log; a self-hoster can send them by email through `Auth.OnCode`.
+  - `cognito` (production): the same pages, with the API calling the Cognito user pool's API, so Cognito keeps the passwords and sends the emails. People never see Cognito's hosted pages.
+  - `oidc`: a redirect to any OIDC provider's own login. Locally that's [Dex](https://dexidp.io), in compose: set `AUTH_MODE=oidc` and sign in as `dev@isodraw.local` / `password` (or `alex@isodraw.local`; see `dev/dex.yaml`).
 - **Saving:** the editor autosaves after a short pause. Each save names the version it started from. If someone else saved in between, the API answers `409` with their version, the app merges the two edits item by item (`mergeDiagrams` in the library) and saves the result.
 
 ### API
@@ -89,7 +92,7 @@ npm run test:api    # just the API tests
 npm run test:e2e    # browser tests (Playwright), against a fresh build of the demo
 ```
 
-The API tests run against the compose Postgres, each in a fresh database that is dropped afterwards, and the sign-in tests walk through Dex's real login form. Without the containers they skip (in CI they fail instead).
+The API tests run against the compose Postgres, each in a fresh database that is dropped afterwards, the OIDC sign-in tests walk through Dex's real login form, the password tests run the whole sign-up, verify and reset flow in `local` mode, and the Cognito client is tested against a fake Cognito. Without the containers they skip (in CI they fail instead).
 
 The library's unit tests sit next to the code they cover (`packages/isodraw/src/**/*.test.ts`). They cover diagram parsing, containers, routing, docs export, theme colors, the icon loaders and the example docs. The example-docs tests check that every `<!-- node:id -->` section and @ mention points at a real item.
 

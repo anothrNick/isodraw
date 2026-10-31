@@ -33,6 +33,8 @@ terraform output                               # oidc_issuer, oidc_client_id
 terraform output -raw oidc_client_secret
 ```
 
+The app has its own sign-in pages; the API checks passwords against the pool with the `USER_PASSWORD_AUTH` flow (enabled on the app client) and Cognito emails the verification and reset codes. The hosted UI domain stays configured for `AUTH_MODE=oidc`, but isn't used.
+
 ## 2. The API (Fly.io)
 
 ```bash
@@ -49,6 +51,7 @@ fly storage create -a isodraw-api
 
 # Sign-in and sessions.
 fly secrets set -a isodraw-api \
+  AUTH_MODE=cognito \
   OIDC_ISSUER="$(cd infra/terraform && terraform output -raw oidc_issuer)" \
   OIDC_CLIENT_ID="$(cd infra/terraform && terraform output -raw oidc_client_id)" \
   OIDC_CLIENT_SECRET="$(cd infra/terraform && terraform output -raw oidc_client_secret)" \
@@ -72,7 +75,7 @@ Then in the Cloudflare dashboard, add your domain to the Pages project (*Custom 
 
 ## 4. Check it
 
-1. Open your domain: you're sent to Cognito's sign-in page; sign up, and you land on your diagrams.
+1. Open your domain: you're sent to `/login`. Create an account, enter the code Cognito emails you, and you land on your diagrams.
 2. Create a diagram, reload, and it's still there.
 3. From a terminal: `npx isodraw login --server https://isodraw.example.com`.
 

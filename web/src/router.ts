@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
  *   /invite/:token         → an invite to join an organization
  *   /cli/login?port&state  → authorize the CLI (isodraw login opens this)
  *   /settings/tokens       → API tokens for the CLI, agents and CI
+ *   /login /signup /verify /forgot /reset → sign-in pages, before there's a session
  */
 export type Route =
   | { page: 'home' }
@@ -21,6 +22,7 @@ export type Route =
   | { page: 'invite'; token: string }
   | { page: 'cli-login' }
   | { page: 'tokens' }
+  | { page: 'login' | 'signup' | 'verify' | 'forgot' | 'reset' }
   | { page: 'missing' };
 
 export function parseRoute(path: string): Route {
@@ -30,6 +32,9 @@ export function parseRoute(path: string): Route {
   if (parts.length === 2 && parts[0] === 'invite') return { page: 'invite', token: parts[1] };
   if (parts.length === 2 && parts[0] === 'cli' && parts[1] === 'login') return { page: 'cli-login' };
   if (parts.length === 2 && parts[0] === 'settings' && parts[1] === 'tokens') return { page: 'tokens' };
+  // Also reserved slugs.
+  if (parts.length === 1 && ['login', 'signup', 'verify', 'forgot', 'reset'].includes(parts[0]))
+    return { page: parts[0] as 'login' | 'signup' | 'verify' | 'forgot' | 'reset' };
   if (parts.length === 1) return { page: 'diagrams', org: parts[0] };
   if (parts.length === 2 && parts[1] === 'members') return { page: 'members', org: parts[0] };
   if (parts.length === 3 && parts[1] === 'd') return { page: 'diagram', org: parts[0], id: parts[2] };

@@ -20,7 +20,9 @@ func (f *fixture) token(c *http.Cookie, org, scope string) string {
 	return secret
 }
 
-func bearer(secret string) map[string]string { return map[string]string{"Authorization": "Bearer " + secret} }
+func bearer(secret string) map[string]string {
+	return map[string]string{"Authorization": "Bearer " + secret}
+}
 
 func TestWriteTokenWorksOnDiagrams(t *testing.T) {
 	f := setup(t)

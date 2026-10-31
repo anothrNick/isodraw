@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useState } from 'react';
 import { ChevronsUpDown, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, Sun, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, api, signIn, type Org, type User } from './api';
+import { AuthPages } from './AuthPages';
 import { CliLoginPage } from './CliLoginPage';
 import { DiagramList } from './DiagramList';
 import { DocsPage } from './DocsPage';
@@ -43,18 +44,23 @@ export function App() {
     return next;
   }, []);
 
+  const authPage = route.page === 'login' || route.page === 'signup' || route.page === 'verify' || route.page === 'forgot' || route.page === 'reset';
+
   useEffect(() => {
+    if (authPage) return;
     reload().catch((err) => {
       if (err instanceof ApiError && err.status === 401) signIn();
       else setError(err instanceof Error ? err.message : String(err));
     });
-  }, [reload]);
+  }, [reload, authPage]);
 
   // "/" opens the first organization (the personal one).
   useEffect(() => {
     if (session && route.page === 'home' && session.orgs[0]) navigate(`/${session.orgs[0].slug}`, { replace: true });
   }, [session, route.page]);
 
+  if (route.page === 'login' || route.page === 'signup' || route.page === 'verify' || route.page === 'forgot' || route.page === 'reset')
+    return <AuthPages route={route} />;
   if (error) return <Message title="Can't reach IsoDraw" body={error} />;
   if (!session) return <Loading />;
 
@@ -98,7 +104,7 @@ export function App() {
   );
 }
 
-function Logo() {
+export function Logo() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
       <path d="M12 2 3 7l9 5 9-5-9-5Z" fill="#60a5fa" />

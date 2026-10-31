@@ -34,7 +34,11 @@ func setup(t *testing.T) *fixture {
 		SessionTTL:    time.Hour,
 	}
 	s := store.New(pool)
-	return &fixture{t: t, store: s, h: New(cfg, s, auth.New(cfg, s))}
+	a, err := auth.New(cfg, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &fixture{t: t, store: s, h: New(cfg, s, a)}
 }
 
 // user signs a new user in and returns their session cookie and personal org id.
