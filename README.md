@@ -155,7 +155,7 @@ Coordinates are grid units on the ground plane: `x` points east, `y` points sout
 
 ```
 packages/isodraw/   the component library (src/lib), the demo site (src/demo) and its browser tests (e2e)
-web/                the platform web app: sign-in, diagram list, editor with autosave
+web/                the platform web app (React 19, Tailwind v4, shadcn/ui): diagram list, editor with autosave
 api/                the Go API: cmd/isodraw, internal/{auth,config,db,httpapi,store}, migrations
 dev/                local development: Dex config and the npm run dev script
 compose.yaml        Postgres and Dex for local development

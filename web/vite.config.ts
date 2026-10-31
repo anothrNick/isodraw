@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 
 // The platform app. In development the API runs on :8080 and this server
@@ -9,9 +10,12 @@ import { fileURLToPath } from 'node:url';
 const API = process.env.ISODRAW_API ?? 'http://localhost:8080';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { isodraw: fileURLToPath(new URL('../packages/isodraw/src/lib/index.ts', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      isodraw: fileURLToPath(new URL('../packages/isodraw/src/lib/index.ts', import.meta.url)),
+    },
   },
   server: {
     port: 5190,

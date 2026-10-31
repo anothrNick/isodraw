@@ -665,7 +665,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const selEnds = selEdge && edgeEnds(selEdge);
   if (selEdge && selEnds && !readOnly && tool === 'select' && drag?.type !== 'edgeEnd') {
     const { r: route, screen } = edgeGeometry(selEdge, selEnds[0], selEnds[1], proj);
-    const items: JSX.Element[] = [];
+    const items: React.ReactElement[] = [];
     if (selEdge.routing === 'orthogonal') {
       route.pts.slice(0, -1).forEach((p, i) => {
         const q = route.pts[i + 1];
