@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronsUpDown, Loader2, LogOut, Monitor, Moon, Sun } from 'lucide-react';
 import { ApiError, api, signIn, type Org, type User } from './api';
 import { DiagramList } from './DiagramList';
+import { DocsPage } from './DocsPage';
 import { EditorPage } from './EditorPage';
 import { linkProps, navigate, useRoute } from './router';
 import { setThemeSetting, useTheme, type ThemeSetting } from './theme';
@@ -59,7 +60,13 @@ export function App() {
 
   return (
     <Shell session={session} org={org}>
-      {route.page === 'diagram' ? <EditorPage key={route.id} org={org} id={route.id} /> : <DiagramList key={org.id} org={org} />}
+      {route.page === 'diagram' ? (
+        <EditorPage key={route.id} org={org} id={route.id} />
+      ) : route.page === 'docs' ? (
+        <DocsPage key={route.id} org={org} id={route.id} />
+      ) : (
+        <DiagramList key={org.id} org={org} />
+      )}
     </Shell>
   );
 }

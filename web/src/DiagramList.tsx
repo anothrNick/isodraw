@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Box, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, Box, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type DiagramMeta, type Org } from './api';
 import { NewDiagramDialog } from './NewDiagramDialog';
-import { linkProps } from './router';
+import { linkProps, navigate } from './router';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const canEdit = (org: Org) => org.role !== 'viewer';
@@ -92,21 +92,28 @@ export function DiagramList({ org }: { org: Org }) {
                   {d.title}
                 </a>
                 <span className="text-xs whitespace-nowrap text-muted-foreground">Edited {ago(d.updatedAt)}</span>
-                {canEdit(org) && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="size-8" aria-label={`Actions for ${d.title}`}>
-                        <MoreHorizontal />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(d)}>
-                        <Trash2 />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="size-8" aria-label={`Actions for ${d.title}`}>
+                      <MoreHorizontal />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => navigate(`/${org.slug}/d/${d.id}/docs`)}>
+                      <BookOpen />
+                      Read docs
+                    </DropdownMenuItem>
+                    {canEdit(org) && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(d)}>
+                          <Trash2 />
+                          Delete
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </li>
             ))}
           </ul>

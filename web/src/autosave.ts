@@ -116,12 +116,24 @@ export function useAutosave(initial: StoredDiagram) {
     [schedule],
   );
 
-  // A restored draft still has to reach the server.
+  // A restored draft still has to reach the server. Leaving the editor in the
+  // app (to the list or the docs) sends whatever is still waiting for its pause.
   useEffect(() => {
     if (restored) schedule(0);
-    return () => window.clearTimeout(s.current.timer);
+    return () => {
+      window.clearTimeout(s.current.timer);
+      if (s.current.local !== s.current.base) void flush();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Save now and wait until the server has everything, e.g. before showing it elsewhere. */
+  const saveAndWait = useCallback(async () => {
+    window.clearTimeout(s.current.timer);
+    // Let a save that is already on its way finish (up to a few seconds), then send what's left once.
+    for (let i = 0; i < 100 && s.current.inFlight; i++) await new Promise((r) => setTimeout(r, 50));
+    if (s.current.local !== s.current.base) await flush();
+  }, [flush]);
 
   // Warn before leaving with changes that haven't reached the server.
   useEffect(() => {
@@ -132,5 +144,5 @@ export function useAutosave(initial: StoredDiagram) {
     return () => window.removeEventListener('beforeunload', onLeave);
   }, []);
 
-  return { diagram, change, status, notice, dismissNotice: () => setNotice(null), saveNow: () => schedule(0) };
+  return { diagram, change, status, notice, dismissNotice: () => setNotice(null), saveNow: () => schedule(0), saveAndWait };
 }

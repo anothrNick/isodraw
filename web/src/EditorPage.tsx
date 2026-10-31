@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Check, CloudOff, Loader2 } from 'lucide-react';
+import { AlertCircle, BookOpen, Check, CloudOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IsoDiagramEditor, type LevelPath } from 'isodraw';
 import { ApiError, api, type Org, type StoredDiagram } from './api';
 import { useAutosave, type SaveStatus } from './autosave';
 import { Loading, Message } from './App';
+import { docsHashForLevel, navigate } from './router';
 import { useTheme } from './theme';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +25,7 @@ export function EditorPage({ org, id }: { org: Org; id: string }) {
   }
   if (error) return <Message title="Couldn't open the diagram" body={error.message} />;
   if (!loaded) return <Loading label="Opening…" />;
-  return <Editor initial={loaded} readOnly={org.role === 'viewer'} />;
+  return <Editor org={org} initial={loaded} readOnly={org.role === 'viewer'} />;
 }
 
 /** The level inside detail diagrams lives in the hash: #in/<component>/<component>. */
@@ -33,8 +34,8 @@ function readLevel(): LevelPath {
   return m ? m[1].split('/').filter(Boolean).map(decodeURIComponent) : [];
 }
 
-function Editor({ initial, readOnly }: { initial: StoredDiagram; readOnly: boolean }) {
-  const { diagram, change, status, notice, dismissNotice, saveNow } = useAutosave(initial);
+function Editor({ org, initial, readOnly }: { org: Org; initial: StoredDiagram; readOnly: boolean }) {
+  const { diagram, change, status, notice, dismissNotice, saveNow, saveAndWait } = useAutosave(initial);
   const { resolved } = useTheme();
   const [title, setTitle] = useState(initial.title);
   const [level, setLevel] = useState<LevelPath>(readLevel);
@@ -97,6 +98,16 @@ function Editor({ initial, readOnly }: { initial: StoredDiagram; readOnly: boole
               className="h-8 w-[min(420px,40vw)] border-transparent bg-transparent px-1.5 font-semibold shadow-none hover:border-input focus-visible:bg-card dark:bg-transparent"
             />
             {!readOnly && <SaveIndicator status={status} onRetry={saveNow} />}
+            <span className="flex-1" />
+            {/* Read the docs, starting on the component whose detail diagram is open. */}
+            <Button variant="outline" size="sm" onClick={async () => {
+                // The docs load from the server, so it must have the latest edits first.
+                if (!readOnly) await saveAndWait();
+                navigate(`/${org.slug}/d/${initial.id}/docs${docsHashForLevel(level)}`);
+              }}>
+              <BookOpen />
+              Docs
+            </Button>
           </>,
           slot,
         )}
