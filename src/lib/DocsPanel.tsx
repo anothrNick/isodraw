@@ -57,7 +57,8 @@ export interface DocsPanelProps {
   /** Go to another item (from a breadcrumb or a mention). */
   onNavigate: (target: DocTarget) => void;
   onMentionHover?: (target: DocTarget | null) => void;
-  onClose: () => void;
+  /** Show a close button (the panel on its own); left out inside a sidebar that has one. */
+  onClose?: () => void;
   onExport: () => void;
 }
 
@@ -761,7 +762,7 @@ export default function DocsPanel({
   };
 
   return (
-    <aside className="isd-docs" aria-label="Documentation">
+    <section className="isd-docs" aria-label="Documentation">
       <header className="isd-docs-head">
         <nav className="isd-docs-crumbs" aria-label="Breadcrumbs">
           {levels.map((c, i) => (
@@ -794,12 +795,21 @@ export default function DocsPanel({
               )}
             </small>
           </div>
-          <button type="button" className="isd-drawer-close" aria-label="Export all docs as Markdown" title="Export all docs as Markdown" onClick={onExport} style={{ right: 40 }}>
+          <button
+            type="button"
+            className="isd-drawer-close"
+            aria-label="Export all docs as Markdown"
+            title="Export all docs as Markdown"
+            onClick={onExport}
+            style={onClose ? { right: 40 } : undefined}
+          >
             <Icon name="download" />
           </button>
-          <button type="button" className="isd-drawer-close" aria-label="Close docs" onClick={onClose}>
-            <Icon name="close" />
-          </button>
+          {onClose && (
+            <button type="button" className="isd-drawer-close" aria-label="Close docs" onClick={onClose}>
+              <Icon name="close" />
+            </button>
+          )}
         </div>
       </header>
       {notice && <div className="isd-docs-notice">{notice}</div>}
@@ -838,6 +848,6 @@ export default function DocsPanel({
         />
         </DetailContext.Provider>
       )}
-    </aside>
+    </section>
   );
 }

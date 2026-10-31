@@ -124,6 +124,39 @@ test('hovering an @ mention in the docs outlines the item on the canvas', async 
   await expect(canvas(page).locator('.isd-target-highlight')).toHaveCount(0);
 });
 
+test('one sidebar holds properties and docs as tabs, and opens when an item is selected', async ({ page }) => {
+  const side = page.getByRole('complementary', { name: 'Sidebar' });
+  await side.getByRole('button', { name: 'Close sidebar' }).click();
+  await expect(side).toHaveCount(0);
+
+  // Selecting an item opens it again, on Properties.
+  const b = (await canvas(page).locator('[data-node-id="rds"] path, [data-node-id="rds"] polygon').first().boundingBox())!;
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await expect(side.getByRole('tab', { name: 'Properties' })).toHaveAttribute('aria-selected', 'true');
+  await expect(side.locator('.isd-panel h3')).toBeVisible();
+
+  // The Docs tab shows the same item's doc; the tab sticks as the selection changes.
+  await side.getByRole('tab', { name: 'Docs' }).click();
+  await expect(side.locator('.isd-docs-title h2')).toHaveText('RDS primary');
+  await page.keyboard.press('Escape');
+  await expect(side.locator('.isd-docs-title h2')).toHaveText('Diagram overview');
+  await side.getByRole('tab', { name: 'Properties' }).click();
+  await expect(side.locator('.isd-docs')).toHaveCount(0);
+});
+
+test('the help button opens the shortcuts, and Esc closes them', async ({ page }) => {
+  await page.getByRole('button', { name: 'Help and shortcuts (?)' }).click();
+  const help = page.getByRole('dialog', { name: 'Help and shortcuts' });
+  await expect(help).toContainText('Go into a component');
+  await page.keyboard.press('Escape');
+  await expect(help).toHaveCount(0);
+  await canvas(page).focus();
+  await page.keyboard.press('?');
+  await expect(help).toBeVisible();
+  await help.getByRole('button', { name: 'Close help' }).click();
+  await expect(help).toHaveCount(0);
+});
+
 test('side panels resize by dragging and reset on double-click', async ({ page }) => {
   const palette = page.locator('.isd-palette');
   const handle = page.getByLabel('Resize shapes panel');

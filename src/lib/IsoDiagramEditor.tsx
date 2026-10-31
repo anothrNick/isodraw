@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
 import { DRAG_MIME, IsoCanvas, type Selection, type Tool } from './IsoCanvas';
 import { boundsOf, containerOf, descendantsOf, isContainer } from './containers';
 import { exportDocsMarkdown, hasDoc, nodeTitle, sameTarget, targetKey, withDoc } from './docs';
@@ -147,8 +147,14 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const [panelW, setPanelW] = useState(loadPanelWidths);
   const [resizing, setResizing] = useState<Panel | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(true);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [docsOpen, setDocsOpen] = useState(false);
+  /** The right sidebar: an item's properties and its docs, as tabs. Viewers only get the docs. */
+  const [sideOpen, setSideOpen] = useState(!readOnly);
+  const [sideTab, setSideTab] = useState<'properties' | 'docs'>('properties');
+  const tab = readOnly ? 'docs' : sideTab;
+  const docsOpen = sideOpen && tab === 'docs';
+  /** Width setting the sidebar uses: docs want more room than properties. */
+  const sidePanel: Panel = tab === 'docs' ? 'docs' : 'inspector';
+  const [helpOpen, setHelpOpen] = useState(false);
   /** Item whose @ mention is under the pointer in the docs panel; outlined on the canvas. */
   const [mentionHover, setMentionHover] = useState<DocTarget | null>(null);
   const [docsTarget, setDocsTarget] = useState<DocTarget>({ kind: 'diagram' });
@@ -338,7 +344,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
         const next = w < COMPACT_WIDTH;
         if (next !== was) {
           setPaletteOpen(!next);
-          setInspectorOpen(!next);
+          setSideOpen(!next && !readOnly);
         }
         return next;
       });
@@ -348,10 +354,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     return () => ro.disconnect();
   }, []);
 
-  // In compact mode, open the inspector when something gets selected (unless docs are showing).
+  // Selecting an item opens the sidebar, on whichever tab was showing.
   useEffect(() => {
-    if (compact && !docsOpen && !readOnly && (selection.nodes.length || selection.edges.length)) setInspectorOpen(true);
-  }, [compact, selection]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!selection.nodes.length && !selection.edges.length) return;
+    setSideOpen(true);
+    if (compact) setPaletteOpen(false);
+  }, [selection.nodes.join(' '), selection.edges.join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The docs panel follows the selection: one item → its page; nothing → the diagram.
   const selectionTarget: DocTarget | null =
@@ -365,11 +373,6 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   useEffect(() => {
     if (!selectionTarget) return;
     setDocsTarget((cur) => (sameTarget(cur, selectionTarget) ? cur : selectionTarget));
-    // Viewers: selecting something documented opens its docs.
-    if (readOnly && selectionTarget.kind !== 'diagram') {
-      const item = selectionTarget.kind === 'node' ? diagram.nodes.find((n) => n.id === selectionTarget.id) : diagram.edges.find((e) => e.id === selectionTarget.id);
-      if (hasDoc(item?.doc)) setDocsOpen(true);
-    }
   }, [selectionTarget && targetKey(selectionTarget), levelKey(path)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openDocs = (t?: DocTarget) => {
@@ -377,11 +380,9 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       setDocsTarget(t);
       setSelection(t.kind === 'diagram' ? NO_SELECTION : t.kind === 'node' ? { nodes: [t.id], edges: [] } : { nodes: [], edges: [t.id] });
     }
-    setDocsOpen(true);
-    if (compact) {
-      setInspectorOpen(false);
-      setPaletteOpen(false);
-    }
+    setSideOpen(true);
+    setSideTab('docs');
+    if (compact) setPaletteOpen(false);
   };
 
   /**
@@ -398,7 +399,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       // Another level: show it whole, with the item selected.
       goLevel(level, { select: t.kind === 'diagram' ? undefined : t });
       setDocsTarget(t);
-      setDocsOpen(true);
+      setSideOpen(true);
+      setSideTab('docs');
       return;
     }
     openDocs(t);
@@ -419,9 +421,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     }
     if (!p) return;
     const { w, h } = stageSize();
-    // Keep the item clear of the docs drawer on the right.
-    const visibleW = compact ? w : Math.max(w / 2, w - panelW.docs);
-    setCamera((c) => ({ ...c, x: visibleW / 2 - p!.x * c.zoom, y: h / 2 - p!.y * c.zoom }));
+    setCamera((c) => ({ ...c, x: w / 2 - p!.x * c.zoom, y: h / 2 - p!.y * c.zoom }));
   };
 
   const updateDoc = (t: DocTarget, md: string) => commitAt(docsLevel, (d) => withDoc(d, t, md), 'push', `doc:${targetKey(t)}`);
@@ -624,8 +624,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     } else if (mod && k === 'y') {
       e.preventDefault();
       redo();
+    } else if (e.key === '?') {
+      setHelpOpen(true);
     } else if (k === 'd' && !mod) {
-      if (docsOpen) setDocsOpen(false);
+      if (docsOpen) setSideOpen(false);
       else openDocs();
     } else if (mod && k === 'a') {
       e.preventDefault();
@@ -786,8 +788,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   /** Widest a panel may get while leaving the canvas (and the other open panels) room. */
   const maxWidth = (panel: Panel) => {
     const total = rootRef.current?.clientWidth ?? 1200;
-    if (panel === 'docs') return Math.max(PANEL_MIN.docs, (stageRef.current?.clientWidth ?? total) - 80);
-    const other = panel === 'palette' ? (inspectorOpen ? panelW.inspector : 0) : paletteOpen ? panelW.palette : 0;
+    const other = panel === 'palette' ? (sideOpen ? panelW[sidePanel] : 0) : paletteOpen ? panelW.palette : 0;
     return Math.max(PANEL_MIN[panel], total - other - MIN_STAGE);
   };
   const saveWidths = (w: Record<Panel, number>) => {
@@ -948,20 +949,19 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           </div>
         )}
         <div className="isd-group">
-          <ToolButton icon="doc" label={docsOpen ? 'Hide docs (D)' : 'Show docs (D)'} active={docsOpen} onClick={() => (docsOpen ? setDocsOpen(false) : openDocs())}>
+          <ToolButton icon="doc" label={docsOpen ? 'Hide docs (D)' : 'Show docs (D)'} active={docsOpen} onClick={() => (docsOpen ? setSideOpen(false) : openDocs())}>
             Docs
           </ToolButton>
+          <ToolButton icon="help" label="Help and shortcuts (?)" active={helpOpen} onClick={() => setHelpOpen(true)} />
         </div>
         <div className="isd-group">
           <ToolButton icon="download" label="Export" active={exportOpen} onClick={() => setExportOpen(!exportOpen)}>
             Export
           </ToolButton>
         </div>
-        {!readOnly && (
-          <div className="isd-group">
-            <ToolButton icon="panelR" label={inspectorOpen ? 'Hide inspector' : 'Show inspector'} active={inspectorOpen} onClick={() => setInspectorOpen(!inspectorOpen)} />
-          </div>
-        )}
+        <div className="isd-group">
+          <ToolButton icon="panelR" label={sideOpen ? 'Hide sidebar' : 'Show sidebar'} active={sideOpen} onClick={() => setSideOpen(!sideOpen)} />
+        </div>
         <input
           ref={fileInput}
           type="file"
@@ -1168,35 +1168,50 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             {view === '3d' ? `2.5D · ${['N', 'E', 'S', 'W'][rotation]}` : 'Flat'} · {diagram.nodes.length} nodes · {diagram.edges.length} connections
           </div>
           {toast && <div className="isd-toast">{toast}</div>}
-          {docsOpen && resizer('docs', -1, 'docs panel')}
-          {docsOpen && (
-            <Suspense fallback={<aside className="isd-docs isd-docs-loading">Loading editor…</aside>}>
-              <DocsPanel
-                target={docsPageTarget}
-                diagram={docsDiagram}
-                readOnly={readOnly}
-                levels={docsLevelCrumbs}
-                overview={docsTarget.kind === 'diagram' && path.length > 0}
-                detail={docsDetail}
-                onChange={updateDoc}
-                onNavigate={(t) => navigateTo(t, docsLevel)}
-                onMentionHover={setMentionHover}
-                onClose={() => setDocsOpen(false)}
-                onExport={() => void doExport('docs')}
-              />
-            </Suspense>
-          )}
         </div>
 
-        {/* ---------- inspector ---------- */}
-        {!readOnly && inspectorOpen && resizer('inspector', -1, 'properties panel')}
-        {!readOnly && inspectorOpen && (
-          <aside className="isd-inspector">
-            {compact && (
-              <button type="button" className="isd-drawer-close" aria-label="Close inspector" onClick={() => setInspectorOpen(false)}>
+        {/* ---------- sidebar: properties and docs ---------- */}
+        {sideOpen && resizer(sidePanel, -1, 'sidebar')}
+        {sideOpen && (
+          <aside className={`isd-inspector isd-side is-${tab}`} aria-label="Sidebar">
+            <div className="isd-side-head">
+              {readOnly ? (
+                <strong>Docs</strong>
+              ) : (
+                <div className="isd-side-tabs" role="tablist" aria-label="Sidebar">
+                  {(
+                    [
+                      ['properties', 'Properties'],
+                      ['docs', 'Docs'],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'is-active' : ''} onClick={() => setSideTab(id)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button type="button" className="isd-side-close" aria-label="Close sidebar" title="Close sidebar" onClick={() => setSideOpen(false)}>
                 <Icon name="close" />
               </button>
-            )}
+            </div>
+            {tab === 'docs' ? (
+              <Suspense fallback={<div className="isd-docs isd-docs-loading">Loading editor…</div>}>
+                <DocsPanel
+                  target={docsPageTarget}
+                  diagram={docsDiagram}
+                  readOnly={readOnly}
+                  levels={docsLevelCrumbs}
+                  overview={docsTarget.kind === 'diagram' && path.length > 0}
+                  detail={docsDetail}
+                  onChange={updateDoc}
+                  onNavigate={(t) => navigateTo(t, docsLevel)}
+                  onMentionHover={setMentionHover}
+                  onExport={() => void doExport('docs')}
+                />
+              </Suspense>
+            ) : (
+            <div className="isd-side-body">
             {selNode ? (
               <NodeInspector
                 node={selNode}
@@ -1251,28 +1266,14 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             ) : (
               <div className="isd-panel">
                 <h3>{path.length ? `Inside ${levelCrumbs[levelCrumbs.length - 1]}` : 'Diagram'}</h3>
-                <p className="isd-hint">Click a shape or icon to add it, or drag it onto the canvas. Select a node to edit it.</p>
+                <p className="isd-hint">
+                  Click a shape or icon to add it, or drag it onto the canvas. Select a node to edit it. Press <kbd>?</kbd> for shortcuts.
+                </p>
                 <DocsButton
                   has={hasDoc(path.length ? levelNodes(root, path).pop()?.doc : diagram.doc)}
                   label={path.length ? 'overview' : 'diagram overview'}
                   onClick={() => openDocs({ kind: 'diagram' })}
                 />
-                <dl className="isd-keys">
-                  <dt>Drag empty space</dt><dd>Pan</dd>
-                  <dt>Scroll / pinch</dt><dd>Zoom</dd>
-                  <dt>Shift + drag</dt><dd>Box select</dd>
-                  <dt>C / V</dt><dd>Connect / Select tool</dd>
-                  <dt>Tab</dt><dd>Toggle 2D / 2.5D</dd>
-                  <dt>R / Shift+R</dt><dd>Rotate view</dd>
-                  <dt>Arrows</dt><dd>Nudge</dd>
-                  <dt>Alt + drag</dt><dd>Move without snapping</dd>
-                  <dt>⌘D / ⌘C / ⌘V</dt><dd>Duplicate / copy / paste</dd>
-                  <dt>⌘G / ⇧⌘G</dt><dd>Group into area / ungroup</dd>
-                  <dt>D / double-click</dt><dd>Open docs</dd>
-                  <dt>Enter / double-click</dt><dd>Go into a component's detail diagram</dd>
-                  <dt>Esc / ⌥↑</dt><dd>Up one level</dd>
-                  <dt>⌘Z / ⇧⌘Z</dt><dd>Undo / redo</dd>
-                </dl>
                 {diagram.nodes.length > 0 && (
                   <button
                     type="button"
@@ -1288,11 +1289,97 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 )}
               </div>
             )}
+            </div>
+            )}
           </aside>
         )}
       </div>
+      {helpOpen && <HelpModal readOnly={readOnly} onClose={() => setHelpOpen(false)} />}
     </div>
     </ThemeContext.Provider>
+  );
+}
+
+// ---------- help ----------
+
+/** Shortcuts, grouped. `edit` rows only apply when the diagram can be edited. */
+const HELP: { title: string; edit?: boolean; keys: [string, string][] }[] = [
+  {
+    title: 'Moving around',
+    keys: [
+      ['Drag empty space', 'Pan'],
+      ['Scroll / pinch', 'Zoom'],
+      ['Tab', 'Switch between 2D and 2.5D'],
+      ['R / ⇧R', 'Rotate the 2.5D view'],
+      ['Enter / double-click', "Go into a component's detail diagram"],
+      ['Esc / ⌥↑', 'Up one level'],
+    ],
+  },
+  {
+    title: 'Editing',
+    edit: true,
+    keys: [
+      ['V / C', 'Select tool / connect tool'],
+      ['⇧ + drag', 'Box select'],
+      ['Arrows', 'Nudge (⇧ for a full step)'],
+      ['⌥ + drag', 'Move without snapping'],
+      ['⌘D / ⌘C / ⌘V', 'Duplicate / copy / paste'],
+      ['⌘G / ⇧⌘G', 'Group into an area / ungroup'],
+      ['Delete', 'Delete the selection'],
+      ['⌘Z / ⇧⌘Z', 'Undo / redo'],
+    ],
+  },
+  {
+    title: 'Docs',
+    keys: [
+      ['D', 'Show or hide the docs'],
+      ['@', 'In a doc: link a component'],
+      ['/', 'In a doc: insert a block (heading, table, diagram…)'],
+    ],
+  },
+];
+
+function HelpModal({ readOnly, onClose }: { readOnly?: boolean; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => closeRef.current?.focus(), []);
+  return (
+    <div
+      className="isd-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Help and shortcuts"
+      onClick={onClose}
+      onKeyDown={(e) => {
+        // Keys stay in the dialog; Esc closes it.
+        e.stopPropagation();
+        if (e.key === 'Escape') onClose();
+      }}
+    >
+      <div className="isd-modal-box isd-help" onClick={(e) => e.stopPropagation()}>
+        <header className="isd-modal-head">
+          <strong>Help and shortcuts</strong>
+          <span />
+          <button ref={closeRef} type="button" className="isd-side-close" aria-label="Close help" onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        </header>
+        <div className="isd-help-body">
+          {HELP.filter((g) => !(readOnly && g.edit)).map((g) => (
+            <section key={g.title}>
+              <h4>{g.title}</h4>
+              <dl className="isd-keys">
+                {g.keys.map(([k, v]) => (
+                  <Fragment key={k}>
+                    <dt>{k}</dt>
+                    <dd>{v}</dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
