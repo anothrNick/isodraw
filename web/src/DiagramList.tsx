@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Box, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type DiagramMeta, type Org } from './api';
-import { linkProps, navigate } from './router';
+import { NewDiagramDialog } from './NewDiagramDialog';
+import { linkProps } from './router';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +23,7 @@ const canEdit = (org: Org) => org.role !== 'viewer';
 export function DiagramList({ org }: { org: Org }) {
   const [diagrams, setDiagrams] = useState<DiagramMeta[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<DiagramMeta | null>(null);
 
   useEffect(() => {
@@ -31,17 +32,6 @@ export function DiagramList({ org }: { org: Org }) {
       .then((r) => setDiagrams(r.diagrams))
       .catch((e: Error) => setError(e.message));
   }, [org.id]);
-
-  const create = async () => {
-    setBusy(true);
-    try {
-      const d = await api.createDiagram(org.id);
-      navigate(`/${org.slug}/d/${d.id}`);
-    } catch (e) {
-      toast.error((e as Error).message);
-      setBusy(false);
-    }
-  };
 
   const remove = async (d: DiagramMeta) => {
     try {
@@ -59,7 +49,7 @@ export function DiagramList({ org }: { org: Org }) {
         <div className="mb-6 flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold tracking-tight">{org.personal ? 'Your diagrams' : org.name}</h1>
           {canEdit(org) && (
-            <Button onClick={create} disabled={busy}>
+            <Button onClick={() => setCreating(true)}>
               <Plus />
               New diagram
             </Button>
@@ -85,7 +75,7 @@ export function DiagramList({ org }: { org: Org }) {
             <p className="font-medium">No diagrams yet</p>
             <p className="mt-1 text-sm text-muted-foreground">Draw your architecture and document each part of it.</p>
             {canEdit(org) && (
-              <Button variant="outline" className="mt-5" onClick={create} disabled={busy}>
+              <Button variant="outline" className="mt-5" onClick={() => setCreating(true)}>
                 <Plus />
                 Draw your first diagram
               </Button>
@@ -122,6 +112,8 @@ export function DiagramList({ org }: { org: Org }) {
           </ul>
         ) : null}
       </div>
+
+      <NewDiagramDialog org={org} open={creating} onOpenChange={setCreating} />
 
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>

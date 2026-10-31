@@ -23,6 +23,9 @@
       ],
       "isodraw": [
         "../packages/isodraw/src/lib/index.ts"
+      ],
+      "isodraw-templates": [
+        "../packages/isodraw/src/demo/examples.ts"
       ]
     },
     "baseUrl": "."

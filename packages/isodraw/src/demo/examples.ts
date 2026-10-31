@@ -208,16 +208,44 @@ const kubernetes: Diagram = {
   ],
 };
 
+/** A documented example diagram. The demo's Examples menu and the platform's templates both use these. */
 export interface Example {
   id: string;
   name: string;
+  /** One line on what it shows. */
+  description: string;
   diagram: Diagram;
 }
 
 export const EXAMPLES: Example[] = [
-  { id: 'three-tier', name: 'Three-tier web app', diagram: sampleDiagram },
-  { id: 'serverless', name: 'Serverless order API', diagram: withDocs({ ...serverless, nodes: serverless.nodes.map((n) => (n.id === 'orders' ? { ...n, detail: ordersInternals } : n)) }, serverlessDocs) },
-  { id: 'streaming', name: 'Streaming IoT pipeline', diagram: withDocs(streaming, streamingDocs) },
-  { id: 'kubernetes', name: 'Kubernetes microservices', diagram: withDocs(kubernetes, kubernetesDocs) },
-  { id: 'terraform', name: 'Imported from Terraform (AWS)', diagram: terraformExample },
+  {
+    id: 'three-tier',
+    name: 'Three-tier web app',
+    description: 'A load balancer, app servers in private subnets and a database, across two availability zones.',
+    diagram: sampleDiagram,
+  },
+  {
+    id: 'serverless',
+    name: 'Serverless order API',
+    description: 'API Gateway, Lambda, DynamoDB and a queue, with a detail diagram for the order function.',
+    diagram: withDocs({ ...serverless, nodes: serverless.nodes.map((n) => (n.id === 'orders' ? { ...n, detail: ordersInternals } : n)) }, serverlessDocs),
+  },
+  {
+    id: 'streaming',
+    name: 'Streaming IoT pipeline',
+    description: 'Devices streaming through Kinesis into processing, storage and dashboards.',
+    diagram: withDocs(streaming, streamingDocs),
+  },
+  {
+    id: 'kubernetes',
+    name: 'Kubernetes microservices',
+    description: 'Services in namespaces on EKS, with ingress, a service mesh and GitOps.',
+    diagram: withDocs(kubernetes, kubernetesDocs),
+  },
+  {
+    id: 'terraform',
+    name: 'Imported from Terraform (AWS)',
+    description: 'A small shop on ECS, generated from a Terraform state file with no manual edits.',
+    diagram: terraformExample,
+  },
 ];

@@ -15,6 +15,8 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       isodraw: fileURLToPath(new URL('../packages/isodraw/src/lib/index.ts', import.meta.url)),
+      // The demo's documented examples double as templates for new diagrams.
+      'isodraw-templates': fileURLToPath(new URL('../packages/isodraw/src/demo/examples.ts', import.meta.url)),
     },
   },
   server: {
