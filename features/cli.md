@@ -1,6 +1,6 @@
 # CLI for people and AI agents
 
-**Status:** idea · **Priority:** high
+**Status:** in progress · **Priority:** high
 **Summary:** An `isodraw` command line tool to list, read, create and change diagrams and their docs, designed so AI agents (Claude Code, Codex, ChatGPT through a connector) can work on a user's diagrams as reliably as a person: JSON output, item-level edits, safe concurrent saves.
 
 ## Why
@@ -67,6 +67,16 @@ This needs **API tokens** on the backend: an `api_tokens` table (hashed, like se
 ### Chat apps: an MCP server on the same operations
 
 Claude Desktop and ChatGPT reach tools through MCP, not a shell. After the CLI, the API can expose a remote MCP endpoint (`/mcp`, signed in with OAuth) offering the same operations as tools: `list_diagrams`, `describe_diagram`, `get_docs`, `set_docs`, `add_nodes`, `connect`, `apply_changes`. The CLI and MCP share one operations module, so behavior matches.
+
+## Progress
+
+- **Done:** API tokens (hashed, one workspace, read or write, browser-only management); `isodraw login` through the browser with a localhost callback, and a token settings page; read commands (`whoami`, `diagrams`, `describe`, `docs get`, `export`, `icons`); write commands (`diagrams create/rename/delete`, `docs set`, `nodes`, `edges`, `apply --dry-run`, `import terraform`) with automatic placement and merging on conflict; `isodraw guide` and a Claude Code skill in `.claude/skills/isodraw/`.
+- **Seen in use:** an agent built a documented 7-component diagram with icons, an area and labeled connections in two commands.
+- **Next:**
+  - `isodraw layout <diagram> [--level]`: re-run the import's layered layout on a level. Placing items one by one beside each other puts chains in a row, so a connection can run through the item between its ends.
+  - The open editor doesn't show CLI changes until it saves (merging them) or reloads. Polling for a newer version, or a "changed elsewhere, reload" notice, would close that gap.
+  - Publish to npm, and decide the name (see below).
+  - Remote MCP for Claude Desktop and ChatGPT.
 
 ## Phases
 

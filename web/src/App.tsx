@@ -1,7 +1,8 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { ChevronsUpDown, Loader2, LogOut, Monitor, Moon, Plus, Sun, Users } from 'lucide-react';
+import { ChevronsUpDown, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, Sun, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, api, signIn, type Org, type User } from './api';
+import { CliLoginPage } from './CliLoginPage';
 import { DiagramList } from './DiagramList';
 import { DocsPage } from './DocsPage';
 import { EditorPage } from './EditorPage';
@@ -9,6 +10,7 @@ import { InvitePage } from './InvitePage';
 import { MembersPage } from './MembersPage';
 import { linkProps, navigate, useRoute } from './router';
 import { SessionContext, type Session } from './session';
+import { TokensPage } from './TokensPage';
 import { setThemeSetting, useTheme, type ThemeSetting } from './theme';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -56,11 +58,12 @@ export function App() {
   if (error) return <Message title="Can't reach IsoDraw" body={error} />;
   if (!session) return <Loading />;
 
-  if (route.page === 'invite') {
+  // Account-level pages, outside any workspace.
+  if (route.page === 'invite' || route.page === 'cli-login' || route.page === 'tokens') {
     return (
       <SessionContext.Provider value={session}>
         <Shell session={session}>
-          <InvitePage token={route.token} />
+          {route.page === 'invite' ? <InvitePage token={route.token} /> : route.page === 'cli-login' ? <CliLoginPage /> : <TokensPage />}
         </Shell>
       </SessionContext.Provider>
     );
@@ -256,6 +259,10 @@ function UserMenu({ user }: { user: User }) {
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <DropdownMenuItem onSelect={() => navigate('/settings/tokens')}>
+          <KeyRound />
+          API tokens
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={signOut}>
           <LogOut />

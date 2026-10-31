@@ -171,6 +171,7 @@ func (a *Auth) setSession(w http.ResponseWriter, token string) {
 // ---------- the signed-in user ----------
 
 type ctxKey struct{}
+type tokenKey struct{}
 
 // User is the signed-in user, set by RequireUser.
 func User(ctx context.Context) store.User {
@@ -181,9 +182,47 @@ func User(ctx context.Context) store.User {
 // WithUser puts a user in a context, for handlers called without RequireUser (tests).
 func WithUser(ctx context.Context, u store.User) context.Context { return context.WithValue(ctx, ctxKey{}, u) }
 
-// RequireUser answers 401 unless the request carries a valid session.
+// Token is the API token the request was made with, or nil for a browser session.
+func Token(ctx context.Context) *store.Token {
+	t, _ := ctx.Value(tokenKey{}).(*store.Token)
+	return t
+}
+
+// BearerToken is the token in an Authorization header, if any.
+func BearerToken(r *http.Request) (string, bool) {
+	v, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return strings.TrimSpace(v), ok && strings.TrimSpace(v) != ""
+}
+
+// RequireUser answers 401 unless the request carries a valid session cookie
+// or API token. Read-only tokens may only read.
 func (a *Auth) RequireUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if secret, ok := BearerToken(r); ok {
+			u, t, err := a.store.TokenUser(r.Context(), secret)
+			if errors.Is(err, store.ErrNotFound) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":{"code":"invalid_token","message":"This token is unknown, revoked or expired. Run isodraw login again."}}`))
+				return
+			}
+			if err != nil {
+				slog.Error("load token", "err", err)
+				http.Error(w, `{"error":{"code":"internal","message":"Something went wrong."}}`, http.StatusInternalServerError)
+				return
+			}
+			readOnly := r.Method == http.MethodGet || r.Method == http.MethodHead
+			// A read-only token may still revoke itself (logout).
+			if t.Scope != store.ScopeWrite && !readOnly && !(r.Method == http.MethodDelete && r.URL.Path == "/api/tokens/current") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":{"code":"read_only_token","message":"This token is read-only. Run isodraw login and choose read and write access to make changes."}}`))
+				return
+			}
+			ctx := context.WithValue(WithUser(r.Context(), u), tokenKey{}, &t)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
 		c, err := r.Cookie(SessionCookie)
 		if err != nil {
 			unauthorized(w)

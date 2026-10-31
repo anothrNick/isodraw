@@ -44,6 +44,7 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 	api.HandleFunc("PATCH /api/diagrams/{id}", srv.updateDiagram)
 	api.HandleFunc("DELETE /api/diagrams/{id}", srv.deleteDiagram)
 	srv.memberRoutes(api)
+	srv.tokenRoutes(api)
 	api.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "No such API route.")
 	})
@@ -62,7 +63,9 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 func (s *Server) sameOrigin(next http.Handler) http.Handler {
 	own := origin(s.cfg.PublicURL)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		// Only cookies ride along on cross-site requests; a bearer token has to be added on purpose.
+		_, bearer := auth.BearerToken(r)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && !bearer {
 			if o := r.Header.Get("Origin"); o != "" && o != own {
 				writeError(w, http.StatusForbidden, "cross_origin", "Requests must come from the app itself.")
 				return

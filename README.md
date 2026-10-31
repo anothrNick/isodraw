@@ -39,10 +39,33 @@ All routes sit under `/api`, as a namespace (not a version). Requests are signed
 | `POST /api/orgs/{org}/invites` | Invite `{ email, role }`. Returns the link to share; no email is sent yet. |
 | `DELETE /api/orgs/{org}/invites/{invite}` | Revoke an invite |
 | `GET /api/invites/{token}`, `POST …/accept` | See and accept an invite. Accepting needs the invited email. |
+| `GET /api/tokens`, `POST /api/tokens`, `DELETE /api/tokens/{id}` | API tokens: list, create `{ name, orgId, scope, expiresInDays }` (the secret is in the answer once), revoke. In the app only. |
+| `DELETE /api/tokens/current` | A token revokes itself (`isodraw logout`) |
 
 Sign-in lives at `/auth/login`, `/auth/callback` and `POST /auth/logout`. People outside an organization get `404` for its diagrams, so ids don't leak; viewers get `403` when they try to change something.
 
 Roles are owner, admin, editor and viewer. Owners and admins manage members and invites; only an owner can make or change another owner, and the last owner can't leave or step down. Personal workspaces are for one person; teams are for sharing. An invite link works once, for 7 days, and only for a signed-in user with the invited email; inviting the same address again replaces the old link.
+
+## CLI (for people and AI agents)
+
+`packages/cli` is the `isodraw` command: list, read and change diagrams and their docs from a terminal, built so AI agents like Claude Code can work on your diagrams reliably.
+
+```bash
+npm run build -w @isodraw/cli
+npx isodraw login          # opens the browser to authorize this machine
+npx isodraw diagrams list
+npx isodraw describe "Payments service"
+npx isodraw guide          # how agents should use it
+```
+
+- **Sign-in:** `isodraw login` opens the app's *Authorize the CLI* page, where you pick a workspace, read-only or read-and-write access, and an expiry; the app hands the token back to the CLI on a localhost port (`--no-browser` just prints the link). The token is saved in `~/.config/isodraw/config.json` (mode 600). Agents, scripts and CI can pass a token as `ISODRAW_TOKEN` instead; create and revoke tokens under *API tokens* in the account menu.
+- **Reading:** `describe` prints a compact outline of a level (components, areas, connections, docs) that fits in a prompt; `docs get` prints a doc as Markdown. Diagrams are named by id or title, items by id or label, levels by path (`--level orders/validate`).
+- **Changing:** `nodes add|update|remove`, `edges add|update|remove`, `docs set`, and `apply` for a batch of changes as JSON (with `--dry-run`). New items are placed automatically, inside the right area, without overlapping; `--icon` takes a Terraform resource type such as `aws_lambda_function` (`isodraw icons` lists them). Saves name the version they started from; if someone saved in between, the CLI merges item by item, like the app.
+- **For agents:** `--json` on every command, stable exit codes (0 ok, 1 usage, 2 not found, 3 conflict, 4 not signed in or not allowed), and a Claude Code skill in `.claude/skills/isodraw/` that tells Claude when and how to use it. Copy that folder to `~/.claude/skills/` to use it outside this repo.
+
+### Tokens
+
+Tokens look like `isd_…` and are stored hashed. A token acts as its user, in one workspace only; a read-only token acts as a viewer there and can only make `GET` requests. Tokens can't create teams, change members, accept invites or make other tokens; those stay in the app. Send one as `Authorization: Bearer isd_…`.
 
 ## Run the demo
 
@@ -165,6 +188,7 @@ Coordinates are grid units on the ground plane: `x` points east, `y` points sout
 
 ```
 packages/isodraw/   the component library (src/lib), the demo site (src/demo) and its browser tests (e2e)
+packages/cli/       the isodraw CLI for people and AI agents
 web/                the platform web app (React 19, Tailwind v4, shadcn/ui): diagram list, editor with autosave
 api/                the Go API: cmd/isodraw, internal/{auth,config,db,httpapi,store}, migrations
 dev/                local development: Dex config and the npm run dev script
