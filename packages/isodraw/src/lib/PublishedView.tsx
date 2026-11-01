@@ -7,6 +7,7 @@ import type { PublishedViewProps } from './Published';
 import { ThemeContext } from './theme';
 import { StaticDiagram } from './render';
 import { KIND_NAMES } from './shapes';
+import { Projector, center } from './geometry';
 import type { Diagram, DiagramNode, DocTarget } from './types';
 
 /**
@@ -23,7 +24,24 @@ interface TocItem {
   children: TocItem[];
 }
 
-/** Components in diagram order, nested under their areas and under the component whose detail they are in. Text labels are left out. */
+/** Within this many pixels left or right, items count as one column and go top to bottom. */
+const SAME_COLUMN = 12;
+
+/**
+ * Siblings in reading order, best effort: left to right as the diagram is
+ * drawn (its own 2D or 2.5D view), and top to bottom where they line up.
+ */
+function readingOrder(nodes: DiagramNode[], d: Diagram): DiagramNode[] {
+  const proj = new Projector(d.view ?? '3d', 0);
+  const at = new Map(nodes.map((n) => [n.id, proj.project(center(n).x, center(n).y, n.z)]));
+  return [...nodes].sort((a, b) => {
+    const p = at.get(a.id)!;
+    const q = at.get(b.id)!;
+    return Math.abs(p.x - q.x) > SAME_COLUMN ? p.x - q.x : p.y - q.y;
+  });
+}
+
+/** Components in reading order, nested under their areas and under the component whose detail they are in. Text labels are left out. */
 function tableOfContents(d: Diagram, level: LevelPath = []): TocItem[] {
   const parents = parentMap(d.nodes);
   const byParent = new Map<string | undefined, DiagramNode[]>();
@@ -35,7 +53,7 @@ function tableOfContents(d: Diagram, level: LevelPath = []): TocItem[] {
     byParent.get(key)!.push(n);
   }
   const build = (key: string | undefined): TocItem[] =>
-    (byParent.get(key) ?? []).map((n) => ({
+    readingOrder(byParent.get(key) ?? [], d).map((n) => ({
       node: n,
       page: [...level, n.id],
       children: [...build(n.id), ...(n.detail ? tableOfContents(n.detail, [...level, n.id]) : [])],
