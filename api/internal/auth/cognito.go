@@ -185,11 +185,12 @@ func (c *cognito) SignIn(ctx context.Context, email, password string) (Identity,
 		return Identity{}, fmt.Errorf("verify cognito id token: %w", err)
 	}
 	var claims struct {
-		Email string `json:"email"`
-		Name  string `json:"name"`
+		Email  string   `json:"email"`
+		Name   string   `json:"name"`
+		Groups []string `json:"cognito:groups"`
 	}
 	_ = idt.Claims(&claims)
-	return Identity{Issuer: idt.Issuer, Subject: idt.Subject, Email: claims.Email, Name: claims.Name}, nil
+	return Identity{Issuer: idt.Issuer, Subject: idt.Subject, Email: claims.Email, Name: claims.Name, Groups: nonNil(claims.Groups)}, nil
 }
 
 func (c *cognito) Forgot(ctx context.Context, email string) error {

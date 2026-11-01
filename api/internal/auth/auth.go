@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -152,16 +153,19 @@ func (a *Auth) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var claims struct {
-		Email    string `json:"email"`
-		Name     string `json:"name"`
-		Username string `json:"preferred_username"`
+		Email         string   `json:"email"`
+		Name          string   `json:"name"`
+		Username      string   `json:"preferred_username"`
+		Groups        []string `json:"groups"`
+		CognitoGroups []string `json:"cognito:groups"`
 	}
 	_ = idt.Claims(&claims)
 	name := claims.Name
 	if name == "" {
 		name = claims.Username
 	}
-	if !a.startSession(w, r, Identity{Issuer: idt.Issuer, Subject: idt.Subject, Email: claims.Email, Name: name}) {
+	groups := nonNil(append(claims.Groups, claims.CognitoGroups...))
+	if !a.startSession(w, r, Identity{Issuer: idt.Issuer, Subject: idt.Subject, Email: claims.Email, Name: name, Groups: groups}) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: loginCookie, Path: "/auth", MaxAge: -1})
@@ -176,6 +180,11 @@ func (a *Auth) startSession(w http.ResponseWriter, r *http.Request, id Identity)
 	u, err := a.store.UpsertUser(ctx, id.Issuer, id.Subject, id.Email, id.Name)
 	if err == nil {
 		err = a.store.EnsurePersonalOrg(ctx, u)
+	}
+	// The identity provider's admin group decides who is a platform admin. Local
+	// accounts send no groups (nil), so their flag is left to `isodraw admin`.
+	if err == nil && id.Groups != nil {
+		err = a.store.SetPlatformAdmin(ctx, u.ID, slices.Contains(id.Groups, a.cfg.AdminGroup))
 	}
 	var token string
 	if err == nil {
@@ -329,4 +338,12 @@ func randomString() string {
 	b := make([]byte, 24)
 	_, _ = rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// nonNil makes "no groups" an empty list, as opposed to nil for "the provider doesn't say".
+func nonNil(groups []string) []string {
+	if groups == nil {
+		return []string{}
+	}
+	return groups
 }

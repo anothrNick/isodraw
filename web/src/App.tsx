@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { ChevronsUpDown, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, Sun, Users } from 'lucide-react';
+import { ChevronsUpDown, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, ShieldCheck, Sun, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, api, signIn, type Org, type User } from './api';
 import { AuthPages } from './AuthPages';
@@ -13,6 +13,7 @@ import { MembersPage } from './MembersPage';
 import { linkProps, navigate, useRoute } from './router';
 import { SessionContext, type Session } from './session';
 import { TokensPage } from './TokensPage';
+import { AdminPage } from './AdminPage';
 import { setThemeSetting, useTheme, type ThemeSetting } from './theme';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -66,7 +67,7 @@ export function App() {
   if (!session) return <Loading />;
 
   // Account-level pages, outside any workspace.
-  if (route.page === 'invite' || route.page === 'cli-login' || route.page === 'connect' || route.page === 'tokens') {
+  if (route.page === 'invite' || route.page === 'cli-login' || route.page === 'connect' || route.page === 'tokens' || route.page === 'admin') {
     return (
       <SessionContext.Provider value={session}>
         <Shell session={session}>
@@ -76,6 +77,8 @@ export function App() {
             <CliLoginPage />
           ) : route.page === 'connect' ? (
             <ConnectPage />
+          ) : route.page === 'admin' ? (
+            <AdminPage section={route.section} id={route.id} />
           ) : (
             <TokensPage />
           )}
@@ -130,7 +133,7 @@ function Shell({ session, org, children }: { session: Session; org?: Org; childr
         <OrgSwitcher orgs={session.orgs} current={org} />
         {/* The editor and docs pages put the diagram's title and actions here. */}
         <div id="app-bar-slot" className="flex min-w-0 flex-1 items-center gap-2" />
-        <UserMenu user={session.user} />
+        <UserMenu user={session.user} admin={!!session.admin} />
       </header>
       <main className="flex min-h-0 flex-1 flex-col">{children}</main>
     </div>
@@ -253,7 +256,7 @@ export function initials(user: { name: string; email: string }) {
   return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
-function UserMenu({ user }: { user: User }) {
+function UserMenu({ user, admin }: { user: User; admin: boolean }) {
   const { setting } = useTheme();
   const signOut = async () => {
     await api.signOut().catch(() => undefined);
@@ -291,6 +294,12 @@ function UserMenu({ user }: { user: User }) {
           <KeyRound />
           API tokens
         </DropdownMenuItem>
+        {admin && (
+          <DropdownMenuItem onSelect={() => navigate('/admin')}>
+            <ShieldCheck />
+            Platform admin
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={signOut}>
           <LogOut />

@@ -13,6 +13,9 @@ type Identity struct {
 	Subject string
 	Email   string
 	Name    string
+	// Groups from the identity provider (Cognito's cognito:groups, or an OIDC
+	// groups claim), when it sends them; nil for local accounts.
+	Groups []string
 }
 
 // PasswordProvider runs IsoDraw's own sign-up, sign-in and password reset

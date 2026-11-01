@@ -34,7 +34,13 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	}
 	t := auth.Token(r.Context())
 	if t == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs, "lifetime": lifetime})
+		// Platform admins get the admin screens; only in the app, never through a token.
+		admin, err := s.store.IsPlatformAdmin(r.Context(), u.ID)
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs, "lifetime": lifetime, "admin": admin})
 		return
 	}
 	// A token sees only its own organization, with the role it acts as there.

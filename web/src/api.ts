@@ -67,6 +67,55 @@ export interface Plan {
   editors: number;
 }
 
+// ---------- platform admin ----------
+
+export interface AdminStats {
+  users: number;
+  usersLastWeek: number;
+  activeWeek: number;
+  lifetime: number;
+  teams: number;
+  diagrams: number;
+  images: number;
+  imageBytes: number;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+  lifetimeSince: string | null;
+  platformAdmin: boolean;
+  workspaces: number;
+  diagrams: number;
+}
+
+export interface AdminWorkspace {
+  id: string;
+  name: string;
+  slug: string;
+  personal: boolean;
+  grandfathered: boolean;
+  createdAt: string;
+  members: number;
+  diagrams: number;
+  /** The first owner's email: the person, for a personal workspace. */
+  owner: string;
+  /** The user's role, when listed for one user. */
+  role?: Role;
+}
+
+export interface AdminEvent {
+  id: string;
+  admin: string;
+  action: string;
+  target: string;
+  detail: string;
+  createdAt: string;
+}
+
 export interface Member {
   userId: string;
   email: string;
@@ -154,7 +203,7 @@ export const authApi = {
 };
 
 export const api = {
-  me: () => request<{ user: User; orgs: Org[]; lifetime: boolean }>('GET', '/api/me'),
+  me: () => request<{ user: User; orgs: Org[]; lifetime: boolean; admin?: boolean }>('GET', '/api/me'),
   plan: (orgId: string) => request<Plan>('GET', `/api/orgs/${orgId}/plan`),
   listDiagrams: (orgId: string) => request<{ diagrams: DiagramMeta[] }>('GET', `/api/orgs/${orgId}/diagrams`),
   createDiagram: (orgId: string, title?: string, content?: Diagram) =>
@@ -194,6 +243,22 @@ export const api = {
   createToken: (name: string, orgId: string, scope: Scope, expiresInDays: number) =>
     request<{ token: ApiToken; secret: string }>('POST', '/api/tokens', { name, orgId, scope, expiresInDays }),
   deleteToken: (id: string) => request<void>('DELETE', `/api/tokens/${id}`),
+
+  /** Platform admin: every user and workspace (404 for everyone else). */
+  admin: {
+    stats: () => request<{ stats: AdminStats; events: AdminEvent[] }>('GET', '/api/admin/stats'),
+    users: (q: string) => request<{ users: AdminUser[]; limit: number }>('GET', `/api/admin/users?${new URLSearchParams({ q })}`),
+    user: (id: string) => request<{ user: AdminUser; workspaces: AdminWorkspace[] }>('GET', `/api/admin/users/${id}`),
+    updateUser: (id: string, change: { lifetime?: boolean }) =>
+      request<{ user: AdminUser; workspaces: AdminWorkspace[] }>('PATCH', `/api/admin/users/${id}`, change),
+    workspaces: (q: string, kind: '' | 'team' | 'personal') =>
+      request<{ workspaces: AdminWorkspace[]; limit: number }>('GET', `/api/admin/orgs?${new URLSearchParams({ q, kind })}`),
+    workspace: (id: string) =>
+      request<{ workspace: AdminWorkspace; members: Member[]; invites: Invite[]; plan: Plan }>('GET', `/api/admin/orgs/${id}`),
+    updateWorkspace: (id: string, change: { grandfathered?: boolean }) =>
+      request<{ workspace: AdminWorkspace; members: Member[]; invites: Invite[]; plan: Plan }>('PATCH', `/api/admin/orgs/${id}`, change),
+    events: () => request<{ events: AdminEvent[] }>('GET', '/api/admin/events'),
+  },
 
   /** Connecting an AI app to the MCP server (the consent page). */
   oauthRequest: (clientId: string, redirectUri: string) =>

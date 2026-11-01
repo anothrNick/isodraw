@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -43,15 +44,19 @@ func (f *fakeCognito) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func (f *fakeCognito) idToken(sub, email, name string) string {
+func (f *fakeCognito) idToken(sub, email, name string, groups ...string) string {
 	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: f.key}, (&jose.SignerOptions{}).WithType("JWT"))
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	claims, _ := json.Marshal(map[string]any{
+	c := map[string]any{
 		"iss": testIssuer, "sub": sub, "aud": "client-1", "email": email, "name": name,
 		"iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix(),
-	})
+	}
+	if len(groups) > 0 {
+		c["cognito:groups"] = groups
+	}
+	claims, _ := json.Marshal(c)
 	jws, err := signer.Sign(claims)
 	if err != nil {
 		f.t.Fatal(err)
@@ -130,7 +135,8 @@ func TestCognitoSignInVerifiesTheIDToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id != (Identity{Issuer: testIssuer, Subject: "sub-123", Email: "ada@example.com", Name: "Ada"}) {
+	// No groups in the token is an empty list: the provider says "no admin groups".
+	if !reflect.DeepEqual(id, Identity{Issuer: testIssuer, Subject: "sub-123", Email: "ada@example.com", Name: "Ada", Groups: []string{}}) {
 		t.Fatalf("%+v", id)
 	}
 	if _, err := c.SignIn(context.Background(), "ada@example.com", "wrong password 1"); !errors.Is(err, ErrBadCredentials) {
