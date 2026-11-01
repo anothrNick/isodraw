@@ -1,7 +1,7 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyboardEvent } from 'react';
 import { DRAG_MIME, IsoCanvas, type Selection, type Tool } from './IsoCanvas';
 import { boundsOf, containerOf, descendantsOf, isContainer } from './containers';
-import { exportDocsMarkdown, hasDoc, nodeTitle, sameTarget, targetKey, withDoc } from './docs';
+import { exportDocsMarkdown, nodeTitle, sameTarget, targetKey, withDoc } from './docs';
 import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } from './export';
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
@@ -10,7 +10,7 @@ import { iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary
 import { fitIsoIcon, imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevel, markMoved, movesItem } from './layout';
-import { canHaveDetail, detailSize, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
+import { canHaveDetail, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
 import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
@@ -1289,9 +1289,6 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             {selNode ? (
               <NodeInspector
                 node={selNode}
-                onOpenDocs={() => openDocs({ kind: 'node', id: selNode.id })}
-                onOpenDetail={() => openDetail(selNode.id)}
-                onAddDetail={() => addDetail(selNode.id)}
                 parent={containerOf(selNode, diagram.nodes)}
                 contents={isContainer(selNode) ? descendantsOf([selNode.id], diagram.nodes).size : 0}
                 onSelectNodes={(ids) => setSelection({ nodes: ids, edges: [] })}
@@ -1311,7 +1308,6 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             ) : selEdge ? (
               <EdgeInspector
                 edge={selEdge}
-                onOpenDocs={() => openDocs({ kind: 'edge', id: selEdge.id })}
                 onChange={(patch, key) => updateEdge(selEdge.id, patch, key)}
                 onRoute={(patch) => commitEdge(selEdge.id, patch)}
                 onDelete={deleteSelection}
@@ -1343,11 +1339,6 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 <p className="isd-hint">
                   Click a shape or icon to add it, or drag it onto the canvas. Select a node to edit it. Press <kbd>?</kbd> for shortcuts.
                 </p>
-                <DocsButton
-                  has={hasDoc(path.length ? levelNodes(root, path).pop()?.doc : diagram.doc)}
-                  label={path.length ? 'overview' : 'diagram overview'}
-                  onClick={() => openDocs({ kind: 'diagram' })}
-                />
                 {diagram.nodes.length > 0 && (
                   <button
                     type="button"
@@ -1459,14 +1450,6 @@ function HelpModal({ readOnly, onClose }: { readOnly?: boolean; onClose: () => v
 
 // ---------- inspectors ----------
 
-function DocsButton({ has, label, onClick }: { has: boolean; label: string; onClick: () => void }) {
-  return (
-    <button type="button" className={`isd-btn isd-docs-btn${has ? ' has-doc' : ''}`} onClick={onClick} title="Open the docs panel (D)">
-      <Icon name="doc" /> {has ? `Open ${label}` : `Add ${label}`}
-    </button>
-  );
-}
-
 function Swatches({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
     <div className="isd-swatches">
@@ -1488,9 +1471,6 @@ function Swatches({ value, onChange }: { value: string; onChange: (c: string) =>
 
 function NodeInspector({
   node,
-  onOpenDocs,
-  onOpenDetail,
-  onAddDetail,
   parent,
   contents,
   onChange,
@@ -1503,9 +1483,6 @@ function NodeInspector({
   onUngroup,
 }: {
   node: DiagramNode;
-  onOpenDocs: () => void;
-  onOpenDetail: () => void;
-  onAddDetail: () => void;
   /** Container this node sits in, if any. */
   parent?: DiagramNode;
   /** Number of items inside this node (containers only). */
@@ -1525,17 +1502,6 @@ function NodeInspector({
   return (
     <div className="isd-panel">
       <h3>{KIND_NAMES[node.kind]}</h3>
-      <DocsButton has={hasDoc(node.doc)} label={isContainer(node) ? 'area docs' : 'docs'} onClick={onOpenDocs} />
-      {canHaveDetail(node) &&
-        (node.detail ? (
-          <button type="button" className="isd-btn isd-docs-btn has-doc" onClick={onOpenDetail} title="Go into this component (Enter, or double-click it)">
-            <Icon name="layers" /> Open detail diagram · {detailSize(node.detail)} item{detailSize(node.detail) === 1 ? '' : 's'}
-          </button>
-        ) : (
-          <button type="button" className="isd-btn isd-docs-btn" onClick={onAddDetail} title="Draw this component's insides as its own diagram">
-            <Icon name="layers" /> Add detail diagram
-          </button>
-        ))}
       {parent && (
         <button type="button" className="isd-breadcrumb" onClick={() => onSelectNodes([parent.id])} title="Select the containing area">
           Inside <strong>{parent.label || KIND_NAMES[parent.kind]}</strong>
@@ -1709,13 +1675,11 @@ const ANIMATIONS: [EdgeAnimation, string][] = [
 
 function EdgeInspector({
   edge,
-  onOpenDocs,
   onChange,
   onRoute,
   onDelete,
 }: {
   edge: DiagramEdge;
-  onOpenDocs: () => void;
   onChange: (patch: Partial<DiagramEdge>, key?: string) => void;
   /** Route changes (anchors, bends) that should not become the default style. */
   onRoute: (patch: Partial<DiagramEdge>) => void;
@@ -1726,7 +1690,6 @@ function EdgeInspector({
   return (
     <div className="isd-panel">
       <h3>Connection</h3>
-      <DocsButton has={hasDoc(edge.doc)} label="docs" onClick={onOpenDocs} />
       <Field label="Label">
         <input className="isd-input" value={edge.label ?? ''} placeholder="e.g. HTTPS" onChange={(e) => onChange({ label: e.target.value }, 'label')} />
       </Field>

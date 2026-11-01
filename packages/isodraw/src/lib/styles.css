@@ -294,8 +294,6 @@ textarea.isd-input { resize: vertical; }
 .isd-root.is-compact .isd-hide-compact { display: none; }
 
 /* ----- documentation ----- */
-.isd-docs-btn { justify-content: flex-start; width: 100%; color: var(--isd-muted); }
-.isd-docs-btn.has-doc { color: var(--isd-accent); border-color: var(--isd-accent-soft) !important; background: var(--isd-accent-soft) !important; }
 
 .isd-docs { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--isd-bg); }
 .isd-docs-loading { align-items: center; justify-content: center; color: var(--isd-muted); }

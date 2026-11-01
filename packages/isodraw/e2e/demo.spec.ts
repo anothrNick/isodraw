@@ -311,10 +311,11 @@ test.describe('detail diagrams', () => {
     await expect(docs.locator('.isd-docs-title h2')).toHaveText('Diagram overview');
   });
 
-  test('add one from the inspector; undo goes back to where each change happened', async ({ page }) => {
+  test('add one from the Docs tab; undo goes back to where each change happened', async ({ page }) => {
     const p = await center(page, '[data-node-id="cognito"]');
     await page.mouse.click(p.x, p.y);
-    await page.getByRole('button', { name: 'Add detail diagram' }).click();
+    await page.getByRole('tab', { name: 'Docs' }).click();
+    await page.locator('.isd-docs-detail').getByRole('button', { name: 'Add detail diagram' }).click();
     await expect(levels(page)).toContainText('Diagram›Cognito');
     await expect(page.locator('.isd-level-empty')).toBeVisible();
     await page.getByRole('button', { name: /^Cylinder/ }).click();
