@@ -24,8 +24,8 @@ export type Placement = { x: number; y: number; w: number; d: number };
 
 const PAD = 1;
 const PAD_TOP = 1.5;
-const COL_GAP = 3;
-const ROW_GAP = 2;
+const COL_GAP = 4;
+const ROW_GAP = 3;
 const MAX_COLUMN = 16;
 const half = (v: number) => Math.round(v * 2) / 2;
 
@@ -54,29 +54,133 @@ export function rankIds(ids: string[], links: [string, string][]): Map<string, n
   return rank;
 }
 
+/**
+ * Pull starting points next to what they feed: an item with nothing coming in
+ * moves to the column just before its nearest successor, instead of waiting in
+ * the first column. Repeats until nothing moves (bounded, for safety).
+ */
+function tightenSources(ids: string[], links: [string, string][], rank: Map<string, number>) {
+  const incoming = new Set(links.map((l) => l[1]));
+  for (let pass = 0; pass < ids.length; pass++) {
+    let moved = false;
+    for (const n of ids) {
+      if (incoming.has(n)) continue;
+      const next = links.filter((l) => l[0] === n).map((l) => rank.get(l[1])!);
+      if (!next.length) continue;
+      const r = Math.min(...next) - 1;
+      if (r > rank.get(n)!) {
+        rank.set(n, r);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+}
+
 /** Positions and sizes for every item, with the top group's corner at (0, 0). */
 export function layeredLayout(input: LayoutInput): Map<string, Placement> {
   const { children, isArea, label, links } = input;
   const order = input.order ?? (() => 0);
-  const components = [...new Set([...children.values()].flat())].filter((id) => !isArea(id));
-  const rank = rankIds(components, links);
   const result = new Map<string, Placement>();
   const size = new Map<string, { w: number; d: number }>();
-  // An area sits in the column of its earliest connected component, so unconnected
-  // things inside it (NAT and internet gateways) don't drag it to the left.
   const connected = new Set(links.flat());
-  const descendants = (id: string): string[] => (children.get(id) ?? []).flatMap((c) => (isArea(c) ? descendants(c) : [c]));
-  const minRank = (id: string): number => {
-    if (!isArea(id)) return rank.get(id) ?? 0;
-    const all = descendants(id);
-    const linked = all.filter((n) => connected.has(n));
-    return all.length ? Math.min(...(linked.length ? linked : all).map((n) => rank.get(n) ?? 0)) : 0;
+  const parent = new Map<string, string | undefined>();
+  for (const [p, kids] of children) for (const k of kids) parent.set(k, p);
+
+  /** The item of `group` that `id` is, or is inside; undefined when it's outside the group. */
+  const within = (group: string | undefined, id: string): string | undefined => {
+    for (let n: string | undefined = id; n !== undefined; n = parent.get(n)) if (parent.get(n) === group) return n;
+    return undefined;
   };
 
-  const columns = (items: string[]) => {
-    const sorted = [...items].sort(
-      (a, b) => minRank(a) - minRank(b) || Number(isArea(a)) - Number(isArea(b)) || order(a) - order(b) || label(a).localeCompare(label(b)),
-    );
+  /**
+   * Each group (the top, and every area) is laid out on its own: its items get
+   * columns by the flow between them, an area counting as one block with all
+   * the links in and out of it. Then each column is ordered to keep lines from
+   * crossing, by the average position of an item's neighbours in nearby columns.
+   */
+  const plans = new Map<string | undefined, { rank: Map<string, number>; pos: Map<string, number> }>();
+  const plan = (group: string | undefined, items: string[]) => {
+    let p = plans.get(group);
+    if (p) return p;
+    const set = new Set(items);
+    const seen = new Set<string>();
+    const local: [string, string][] = [];
+    for (const [a, b] of links) {
+      const A = within(group, a);
+      const B = within(group, b);
+      const key = `${A}\u0000${B}`;
+      if (A && B && A !== B && set.has(A) && set.has(B) && !seen.has(key)) {
+        seen.add(key);
+        local.push([A, B]);
+      }
+    }
+    const rank = rankIds(items, local);
+    tightenSources(items, local, rank);
+    // Inside an area, start from where each item's outside neighbours sit in the
+    // surrounding group, so what's fed from the top stays near the top.
+    const up = group === undefined ? undefined : parent.get(group);
+    const outer = group === undefined ? undefined : plans.get(up);
+    const hint = new Map<string, number>();
+    if (outer) {
+      for (const it of items) {
+        const at: number[] = [];
+        for (const [a, b] of links) {
+          const other = within(group, a) === it ? b : within(group, b) === it ? a : undefined;
+          if (other === undefined || within(group, other) !== undefined) continue;
+          const there = within(up, other);
+          if (there !== undefined && outer.pos.has(there)) at.push(outer.pos.get(there)! + outer.rank.get(there)!);
+        }
+        if (at.length) hint.set(it, at.reduce((t, v) => t + v, 0) / at.length);
+      }
+    }
+    // Then the given order (areas after components), then sweeps to cut crossings.
+    const pos = new Map<string, number>();
+    const byRank = new Map<number, string[]>();
+    const sortKey = (a: string, b: string) =>
+      (hint.has(a) && hint.has(b) ? hint.get(a)! - hint.get(b)! : 0) ||
+      Number(isArea(a)) - Number(isArea(b)) ||
+      order(a) - order(b) ||
+      label(a).localeCompare(label(b));
+    for (const it of [...items].sort(sortKey)) {
+      const r = rank.get(it)!;
+      byRank.set(r, [...(byRank.get(r) ?? []), it]);
+    }
+    const ranks = [...byRank.keys()].sort((a, b) => a - b);
+    const setPos = () => {
+      for (const r of ranks) byRank.get(r)!.forEach((it, i, all) => pos.set(it, (i + 0.5) / all.length));
+    };
+    setPos();
+    const neighbours = (it: string, side: 'before' | 'after') =>
+      local
+        .filter(([a, b]) => (side === 'before' ? b === it && rank.get(a)! < rank.get(it)! : a === it && rank.get(b)! > rank.get(it)!))
+        .map(([a, b]) => pos.get(side === 'before' ? a : b)!);
+    const sweep = (rs: number[], side: 'before' | 'after') => {
+      for (const r of rs) {
+        const col = byRank.get(r)!;
+        const key = new Map(
+          col.map((it, i) => {
+            const near = neighbours(it, side);
+            return [it, near.length ? near.reduce((t, v) => t + v, 0) / near.length : (i + 0.5) / col.length] as const;
+          }),
+        );
+        col.sort((a, b) => key.get(a)! - key.get(b)!);
+        col.forEach((it, i) => pos.set(it, (i + 0.5) / col.length));
+      }
+    };
+    for (let i = 0; i < 3; i++) {
+      sweep(ranks.slice(1), 'before');
+      sweep(ranks.slice(0, -1).reverse(), 'after');
+    }
+    setPos();
+    p = { rank, pos };
+    plans.set(group, p);
+    return p;
+  };
+
+  const columns = (group: string | undefined, items: string[]) => {
+    const { rank, pos } = plan(group, children.get(group) ?? items);
+    const sorted = [...items].sort((a, b) => rank.get(a)! - rank.get(b)! || pos.get(a)! - pos.get(b)!);
     // Long columns wrap, but never below the tallest area plus a couple of components.
     const limit = Math.max(MAX_COLUMN, ...items.map((i) => measure(i).d + 8));
     const cols: { items: string[]; w: number; d: number }[] = [];
@@ -84,7 +188,7 @@ export function layeredLayout(input: LayoutInput): Map<string, Placement> {
     let currentRank = -1;
     for (const item of sorted) {
       const s = measure(item);
-      const r = minRank(item);
+      const r = rank.get(item)!;
       if (!current || r !== currentRank || current.d + ROW_GAP + s.d > limit) {
         current = { items: [], w: 0, d: -ROW_GAP };
         cols.push(current);
@@ -104,10 +208,10 @@ export function layeredLayout(input: LayoutInput): Map<string, Placement> {
     return flow.length ? { flow, loose } : { flow: loose, loose: [] as string[] };
   };
   const rowWidth = (items: string[]) => items.reduce((t, i) => t + measure(i).w, 0) + COL_GAP * (items.length - 1);
-  const groupSize = (items: string[]) => {
+  const groupSize = (group: string | undefined, items: string[]) => {
     if (!items.length) return { w: 4, d: 3 };
     const { flow, loose } = split(items);
-    const cols = columns(flow);
+    const cols = columns(group, flow);
     const w = cols.reduce((t, c) => t + c.w, 0) + COL_GAP * (cols.length - 1);
     const d = Math.max(...cols.map((c) => c.d));
     return loose.length ? { w: Math.max(w, rowWidth(loose)), d: d + ROW_GAP + 2 } : { w, d };
@@ -116,17 +220,17 @@ export function layeredLayout(input: LayoutInput): Map<string, Placement> {
     let s = size.get(id);
     if (!s) {
       if (isArea(id)) {
-        const inner = groupSize(children.get(id) ?? []);
+        const inner = groupSize(id, children.get(id) ?? []);
         s = { w: inner.w + 2 * PAD, d: inner.d + PAD_TOP + PAD };
       } else s = input.size(id);
       size.set(id, s);
     }
     return s;
   }
-  const placeGroup = (items: string[], x0: number, y0: number) => {
+  const placeGroup = (group: string | undefined, items: string[], x0: number, y0: number) => {
     if (!items.length) return;
     const { flow, loose } = split(items);
-    const cols = columns(flow);
+    const cols = columns(group, flow);
     const height = Math.max(...cols.map((c) => c.d));
     let x = x0;
     for (const c of cols) {
@@ -146,9 +250,9 @@ export function layeredLayout(input: LayoutInput): Map<string, Placement> {
   const place = (id: string, x: number, y: number) => {
     const s = measure(id);
     result.set(id, { x, y, w: s.w, d: s.d });
-    if (isArea(id)) placeGroup(children.get(id) ?? [], x + PAD, y + PAD_TOP);
+    if (isArea(id)) placeGroup(id, children.get(id) ?? [], x + PAD, y + PAD_TOP);
   };
-  placeGroup(children.get(undefined) ?? [], 0, 0);
+  placeGroup(undefined, children.get(undefined) ?? [], 0, 0);
   return result;
 }
 
