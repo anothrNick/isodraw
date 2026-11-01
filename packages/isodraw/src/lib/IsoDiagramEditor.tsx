@@ -7,7 +7,7 @@ import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
 import { iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary, withIconColor } from './icons';
-import { imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
+import { fitIsoIcon, imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevel, markMoved, movesItem } from './layout';
 import { canHaveDetail, detailSize, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
@@ -519,10 +519,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
   // Moving or resizing by hand makes an item manual: automatic layout won't move it again.
   const manual = (patch: Partial<DiagramNode>): Partial<DiagramNode> => (movesItem(patch) ? { ...patch, placed: undefined } : patch);
+  // An isometric icon's box follows its drawing: setting one side scales the whole icon.
+  const fit = (n: DiagramNode, patch: Partial<DiagramNode>) => fitIsoIcon(n, 'w' in patch ? 'w' : 'd' in patch ? 'd' : undefined);
   const updateNode = (id: string, patch: Partial<DiagramNode>, key?: string) =>
-    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? { ...n, ...manual(patch) } : n)) }), 'push', key && `${id}:${key}`);
+    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === id ? fit({ ...n, ...manual(patch) }, patch) : n)) }), 'push', key && `${id}:${key}`);
   const updateNodes = (ids: string[], patch: Partial<DiagramNode>) =>
-    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (ids.includes(n.id) ? { ...n, ...manual(patch) } : n)) }));
+    commit((d) => ({ ...d, nodes: d.nodes.map((n) => (ids.includes(n.id) ? fit({ ...n, ...manual(patch) }, patch) : n)) }));
   const updateEdge = (id: string, patch: Partial<DiagramEdge>, key?: string) => {
     const style = Object.fromEntries(Object.entries(patch).filter(([k]) => (EDGE_STYLE_KEYS as readonly string[]).includes(k)));
     if (Object.keys(style).length) setEdgeStyle((s) => ({ ...s, ...style }));
@@ -1577,7 +1579,7 @@ function NodeInspector({
         <Field label="Depth">
           <NumberInput value={node.d} min={0.5} onChange={(d) => onChange({ d }, 'd')} />
         </Field>
-        {!flat && node.kind !== 'sphere' && (
+        {!flat && node.kind !== 'sphere' && !isIsoIcon(node.src) && (
           <Field label="Height">
             <NumberInput value={node.h} min={0.1} step={0.25} onChange={(h) => onChange({ h }, 'h')} />
           </Field>
