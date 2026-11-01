@@ -313,7 +313,7 @@ function ComponentPage({
             highlight={node.id}
             focus={focus}
             animate={false}
-            maxHeight={240}
+            maxHeight={300}
             onNodeClick={(id) => onOpen([...level, id])}
             label={`Where ${nodeTitle(node)} sits`}
           />
