@@ -275,6 +275,69 @@ function OverviewPage({
   );
 }
 
+/**
+ * A component page's picture, with crumbs like the editor's to move up and down
+ * the levels around the component: each level up spotlights the item on the
+ * way down, and "inside" shows the component's detail diagram. Moving changes
+ * only the picture; clicking an item opens its page.
+ */
+function LevelFigure({
+  root,
+  level,
+  node,
+  name,
+  startInside,
+  focus,
+  onOpen,
+}: {
+  root: Diagram;
+  level: LevelPath;
+  node: DiagramNode;
+  name: string;
+  /** Open on the component's detail diagram rather than on the level it sits on. */
+  startInside: boolean;
+  focus: DocTarget | null;
+  onOpen: (p: Page) => void;
+}) {
+  // Every level the picture can show: the top, each component drilled into, and this one's insides.
+  const path = node.detail ? [...level, node.id] : level;
+  const titles = [name, ...levelNodes(root, path).map(nodeTitle)];
+  const [depth, setDepth] = useState(startInside && node.detail ? path.length : level.length);
+  const shown = levelAt(root, path.slice(0, depth)) ?? root;
+  const atHome = depth === level.length;
+  const inside = !!node.detail && depth === path.length;
+  // On the way down, the next item on the path; on the component's own level, the component.
+  const highlight = inside ? undefined : (path[depth] ?? node.id);
+  const label = inside ? `Inside ${nodeTitle(node)}` : atHome ? `Where ${nodeTitle(node)} sits` : `${titles[depth]}, around ${nodeTitle(node)}`;
+  return (
+    <figure className="isd-pub-figure">
+      {path.length > 0 && (
+        <nav className="isd-pub-levels" aria-label="Diagram levels">
+          {titles.map((t, i) => (
+            <span key={i}>
+              {i > 0 && <span aria-hidden>›</span>}
+              <button type="button" aria-current={i === depth ? 'true' : undefined} className={i === depth ? 'is-current' : ''} onClick={() => setDepth(i)}>
+                {i === path.length && node.detail ? `Inside ${t}` : t}
+              </button>
+            </span>
+          ))}
+        </nav>
+      )}
+      <StaticDiagram
+        key={depth}
+        diagram={shown}
+        highlight={highlight}
+        // Hovered mentions are about the component's own level.
+        focus={atHome ? focus : null}
+        animate={inside}
+        maxHeight={inside ? 360 : 300}
+        onNodeClick={(id) => onOpen([...path.slice(0, depth), id])}
+        label={label}
+      />
+    </figure>
+  );
+}
+
 function ComponentPage({
   root,
   level,
@@ -322,21 +385,7 @@ function ComponentPage({
       <h1>{nodeTitle(node)}</h1>
       <p className="isd-pub-meta">{kindLabel(node)}</p>
 
-      <figure className="isd-pub-figure">
-        {showDetail ? (
-          <StaticDiagram diagram={node.detail!} focus={null} maxHeight={360} onNodeClick={(id) => onOpen([...inner, id])} label={`Inside ${nodeTitle(node)}`} />
-        ) : (
-          <StaticDiagram
-            diagram={diagram}
-            highlight={node.id}
-            focus={focus}
-            animate={false}
-            maxHeight={300}
-            onNodeClick={(id) => onOpen([...level, id])}
-            label={`Where ${nodeTitle(node)} sits`}
-          />
-        )}
-      </figure>
+      <LevelFigure key={levelKey(inner)} root={root} level={level} node={node} name={name} startInside={!!showDetail} focus={focus} onOpen={onOpen} />
 
       <section className="isd-pub-doc">
         {hasDoc(node.doc) ? (
