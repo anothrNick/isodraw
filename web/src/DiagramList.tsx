@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Box, MoreHorizontal, Plus, Trash2, Users } from 'lucide-react';
+import { BookOpen, Box, LayoutGrid, List, MoreHorizontal, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type DiagramMeta, type Org } from './api';
 import { NewDiagramDialog } from './NewDiagramDialog';
 import { linkProps, navigate } from './router';
+import { useTheme } from './theme';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,14 +18,40 @@ import {
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 const canEdit = (org: Org) => org.role !== 'viewer';
+
+type View = 'grid' | 'list';
+const VIEW_KEY = 'isodraw:diagram-view';
+
+/** List or grid, remembered in this browser. */
+function useView(): [View, (v: View) => void] {
+  const [view, setView] = useState<View>(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+  const change = (v: View) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  return [view, change];
+}
 
 export function DiagramList({ org }: { org: Org }) {
   const [diagrams, setDiagrams] = useState<DiagramMeta[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<DiagramMeta | null>(null);
+  const [view, setView] = useView();
+  const { resolved } = useTheme();
 
   useEffect(() => {
     api
@@ -45,10 +72,34 @@ export function DiagramList({ org }: { org: Org }) {
 
   return (
     <div className="overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-6 py-10">
+      <div className={cn('mx-auto w-full px-6 py-10', view === 'grid' ? 'max-w-6xl' : 'max-w-3xl')}>
         <div className="mb-6 flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold tracking-tight">{org.personal ? 'Your diagrams' : org.name}</h1>
           <div className="flex gap-2">
+            <div role="radiogroup" aria-label="Show as" className="inline-flex h-9 items-center rounded-md border bg-muted/50 p-0.5">
+              {(
+                [
+                  ['grid', LayoutGrid, 'Grid'],
+                  ['list', List, 'List'],
+                ] as const
+              ).map(([v, Icon, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={view === v}
+                  aria-label={label}
+                  title={label}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    'inline-flex h-full items-center rounded-[5px] px-2 text-muted-foreground transition-colors [&_svg]:size-4',
+                    view === v ? 'bg-background text-foreground shadow-xs' : 'hover:text-foreground',
+                  )}
+                >
+                  <Icon />
+                </button>
+              ))}
+            </div>
             {!org.personal && (
               <Button variant="outline" asChild>
                 <a {...linkProps(`/${org.slug}/members`)}>
@@ -68,7 +119,18 @@ export function DiagramList({ org }: { org: Org }) {
 
         {error && <p className="text-destructive">{error}</p>}
 
-        {!diagrams && !error ? (
+        {!diagrams && !error && view === 'grid' ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="overflow-hidden rounded-lg border bg-card">
+                <Skeleton className="aspect-[16/10] w-full rounded-none" />
+                <div className="p-3">
+                  <Skeleton className="h-4 w-40" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !diagrams && !error ? (
           <div className="divide-y rounded-lg border bg-card">
             {[0, 1, 2].map((i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3.5">
@@ -91,6 +153,25 @@ export function DiagramList({ org }: { org: Org }) {
               </Button>
             )}
           </div>
+        ) : diagrams && view === 'grid' ? (
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {diagrams.map((d) => (
+              <li key={d.id} className="group relative overflow-hidden rounded-lg border bg-card transition-shadow hover:shadow-md">
+                <a className="block" {...linkProps(`/${org.slug}/d/${d.id}`)} aria-label={d.title}>
+                  <Thumbnail diagram={d} dark={resolved === 'dark'} />
+                </a>
+                <div className="flex items-center gap-2 border-t px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <a className="block truncate text-sm font-medium hover:underline" {...linkProps(`/${org.slug}/d/${d.id}`)}>
+                      {d.title}
+                    </a>
+                    <span className="text-xs text-muted-foreground">Edited {ago(d.updatedAt)}</span>
+                  </div>
+                  <DiagramActions org={org} diagram={d} onDelete={setDeleting} />
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : diagrams ? (
           <ul className="divide-y rounded-lg border bg-card">
             {diagrams.map((d) => (
@@ -102,28 +183,7 @@ export function DiagramList({ org }: { org: Org }) {
                   {d.title}
                 </a>
                 <span className="text-xs whitespace-nowrap text-muted-foreground">Edited {ago(d.updatedAt)}</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="size-8" aria-label={`Actions for ${d.title}`}>
-                      <MoreHorizontal />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => navigate(`/${org.slug}/d/${d.id}/docs`)}>
-                      <BookOpen />
-                      Read docs
-                    </DropdownMenuItem>
-                    {canEdit(org) && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(d)}>
-                          <Trash2 />
-                          Delete
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <DiagramActions org={org} diagram={d} onDelete={setDeleting} />
               </li>
             ))}
           </ul>
@@ -147,6 +207,60 @@ export function DiagramList({ org }: { org: Org }) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** A diagram's picture for the grid; an icon until it loads, or if it can't. */
+function Thumbnail({ diagram, dark }: { diagram: DiagramMeta; dark: boolean }) {
+  const [state, setState] = useState<'loading' | 'ready' | 'failed'>(diagram.thumbnail ? 'loading' : 'failed');
+  const src = diagram.thumbnail && (dark ? `${diagram.thumbnail}&theme=dark` : diagram.thumbnail);
+  return (
+    <div className={cn('relative flex aspect-[16/10] items-center justify-center overflow-hidden', dark ? 'bg-[#0b1220]' : 'bg-[#f4f7fb]')}>
+      {state !== 'ready' && (
+        <div className="absolute inset-0 flex items-center justify-center text-primary/60">
+          {state === 'loading' ? <Skeleton className="size-full rounded-none" /> : <Box className="size-8" />}
+        </div>
+      )}
+      {src && state !== 'failed' && (
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setState('ready')}
+          onError={() => setState('failed')}
+          className={cn('size-full object-contain p-2 transition-transform duration-300 group-hover:scale-[1.03]', state !== 'ready' && 'opacity-0')}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Read docs, and delete for editors. */
+function DiagramActions({ org, diagram: d, onDelete }: { org: Org; diagram: DiagramMeta; onDelete: (d: DiagramMeta) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-8 flex-none" aria-label={`Actions for ${d.title}`}>
+          <MoreHorizontal />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => navigate(`/${org.slug}/d/${d.id}/docs`)}>
+          <BookOpen />
+          Read docs
+        </DropdownMenuItem>
+        {canEdit(org) && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => onDelete(d)}>
+              <Trash2 />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

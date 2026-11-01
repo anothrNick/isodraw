@@ -8,3 +8,11 @@ compatibility_date = "2025-01-01"
 [vars]
 # The Fly app that runs the API. Set yours here.
 API_ORIGIN = "https://isodraw-api.fly.dev"
+
+# Drawn preview pictures, one per diagram version, size, theme and format, so
+# each is drawn once. A lifecycle rule deletes them after 30 days. Turn on once
+# the bucket exists (DEPLOY.md, "Preview pictures in R2"); without it, pictures
+# are drawn on every cache miss.
+# [[r2_buckets]]
+# binding = "PREVIEWS"
+# bucket_name = "isodraw-previews"

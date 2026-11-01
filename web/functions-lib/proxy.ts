@@ -7,6 +7,11 @@
  */
 export interface Env {
   API_ORIGIN: string;
+  /** R2 bucket for drawn preview pictures (wrangler.toml); without it, pictures are drawn every time. */
+  PREVIEWS?: {
+    get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>;
+    put(key: string, value: Uint8Array, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+  };
 }
 
 /** The parts of Pages' function context these handlers use. */

@@ -52,7 +52,7 @@ func TestPreviewLinks(t *testing.T) {
 
 	// The top level, without any docs or deeper diagrams.
 	status, out := public(svg)
-	if status != 200 || out["title"] != "Payments" {
+	if status != 200 || out["title"] != "Payments" || out["version"] != float64(1) {
 		t.Fatalf("%d %v", status, out)
 	}
 	raw, _ := json.Marshal(out["diagram"])
@@ -118,4 +118,26 @@ func TestPreviewLinks(t *testing.T) {
 	if status, _ := public(svg); status != 404 {
 		t.Fatalf("deleted: %d", status)
 	}
+}
+
+func TestDiagramListHasThumbnails(t *testing.T) {
+	f := setup(t)
+	c, org := f.user("ada@example.com")
+	_, out := f.do(req{method: "POST", path: "/api/orgs/" + org + "/diagrams", body: `{"title":"Payments","content":` + previewContent + `}`, cookie: c})
+	id := out["id"].(string)
+	res, out := f.do(req{method: "GET", path: "/api/orgs/" + org + "/diagrams", cookie: c})
+	expect(t, res, 200, out)
+	item := out["diagrams"].([]any)[0].(map[string]any)
+	thumb, _ := url.Parse(item["thumbnail"].(string))
+	q := thumb.Query()
+	if thumb.Path != "/p/"+id+".png" || q.Get("size") != "thumb" || q.Get("v") != "1" {
+		t.Fatalf("thumbnail: %s", thumb)
+	}
+	// It's a working preview link, valid for a day or two, the same all day.
+	exp, _ := strconv.ParseInt(q.Get("e"), 10, 64)
+	if d := time.Until(time.Unix(exp, 0)); d < 24*time.Hour || d > 48*time.Hour || exp%86400 != 0 {
+		t.Fatalf("expiry %v", time.Unix(exp, 0))
+	}
+	res, out = f.do(req{method: "GET", path: "/public/previews/" + id + "?" + thumb.RawQuery})
+	expect(t, res, 200, out)
 }
