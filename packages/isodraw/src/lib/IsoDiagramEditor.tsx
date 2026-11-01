@@ -6,7 +6,7 @@ import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } fro
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
-import { iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary, withIconColor } from './icons';
+import { diagramImages, iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary, withIconColor } from './icons';
 import { fitIsoIcon, imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevel, markMoved, movesItem } from './layout';
@@ -822,11 +822,18 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   };
 
   // ----- palette -----
+  // The Images tab: what the user uploaded or linked, plus their images already in the diagram,
+  // which come back with it on any device even when the host doesn't keep the uploads.
+  const usedImages = useMemo(() => diagramImages(root), [root]);
+  const myImages = useMemo(() => {
+    const mine = new Set(userIcons.map((i) => i.src));
+    return [...userIcons, ...usedImages.filter((i) => !mine.has(i.src))];
+  }, [userIcons, usedImages]);
   const libraries: IconLibrary[] = [
     ISO_LIBRARY,
     ...enabledClouds.map((c) => cloudLibs[c.id]?.lib ?? { id: c.id, name: c.name, icons: [] }),
     ...(props.iconLibraries ?? []),
-    { id: 'mine', name: 'Images', icons: userIcons },
+    { id: 'mine', name: 'Images', icons: myImages },
   ];
   const activeLib = libraries.find((l) => l.id === paletteTab);
   const activeCloud = cloudLibs[paletteTab as CloudId];
