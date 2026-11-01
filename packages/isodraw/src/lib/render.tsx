@@ -92,17 +92,9 @@ function ImageNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
   if (isIsoIcon(node.src)) return <IsoIconNode node={node} proj={proj} />;
   const style = node.imageStyle ?? 'tile';
   const pad = style === 'tile' ? Math.min(node.w, node.d) * 0.12 : 0;
-  if (style === 'standing' && proj.mode === '3d') {
-    const c = center(node);
-    const base = proj.project(c.x, c.y, node.z);
-    const s = Math.min(node.w, node.d) * TILE;
-    return (
-      <>
-        <ellipse cx={base.x} cy={base.y} rx={s * 0.42} ry={s * 0.2} fill="#000" opacity={0.12} />
-        <image href={node.src} x={base.x - s / 2} y={base.y - s * 1.02} width={s} height={s} preserveAspectRatio="xMidYMid meet" />
-      </>
-    );
-  }
+  // Standing: the picture alone, upright on the ground at the node's elevation.
+  const stand = standingRect(node, proj);
+  if (stand) return <image href={node.src} x={stand.x} y={stand.y} width={stand.w} height={stand.h} preserveAspectRatio="xMidYMid meet" />;
   const top = style === 'tile' ? node.z + node.h : node.z;
   const f = uprightFrame(node, proj, 'turn');
   return (
@@ -137,6 +129,15 @@ function IsoIconNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
   ) : (
     <image href={href} x={r.x} y={r.y} width={r.w} height={r.h} preserveAspectRatio="xMidYMid meet" />
   );
+}
+
+/** Where a standing (billboard) picture is drawn in 2.5D, in scene pixels; null for anything else. */
+export function standingRect(node: DiagramNode, proj: Projector) {
+  if (node.kind !== 'image' || node.imageStyle !== 'standing' || isIsoIcon(node.src) || proj.mode !== '3d') return null;
+  const c = center(node);
+  const base = proj.project(c.x, c.y, node.z);
+  const s = Math.min(node.w, node.d) * TILE;
+  return { x: base.x - s / 2, y: base.y - s, w: s, h: s };
 }
 
 /** Where an isometric icon component's picture is drawn, in scene pixels. */
@@ -341,7 +342,10 @@ export function TargetHighlight({ target, diagram, proj }: { target: DocTarget; 
     if (!n) return null;
     const flat = isFlat(n);
     const base = footprint(n).map((q) => proj.project(q.x, q.y, n.z));
-    const pts = flat ? base : hull([...base, ...footprint(n).map((q) => proj.project(q.x, q.y, n.z + n.h))]);
+    const stand = standingRect(n, proj);
+    const pts = stand
+      ? [{ x: stand.x, y: stand.y }, { x: stand.x + stand.w, y: stand.y }, { x: stand.x + stand.w, y: stand.y + stand.h }, { x: stand.x, y: stand.y + stand.h }]
+      : flat ? base : hull([...base, ...footprint(n).map((q) => proj.project(q.x, q.y, n.z + n.h))]);
     return (
       <polygon
         className="isd-target-highlight"
@@ -736,9 +740,9 @@ export function sceneBounds(d: Diagram, proj: Projector, pad = 28): { x: number;
     const iso = n.kind === 'image' && isIsoIcon(n.src) ? isoIconRect(n, proj) : null;
     if (iso) {
       if (iso.viewBox) pts.push({ x: iso.x, y: iso.y }, { x: iso.x + iso.w, y: iso.y + iso.h });
-    } else if (n.kind === 'image' && n.imageStyle === 'standing') {
-      const c = proj.project(center(n).x, center(n).y, n.z);
-      pts.push({ x: c.x, y: c.y - Math.min(n.w, n.d) * TILE * 1.05 });
+    } else {
+      const stand = standingRect(n, proj);
+      if (stand) pts.push({ x: stand.x, y: stand.y });
     }
   }
   if (!pts.length) return { x: -100, y: -60, w: 200, h: 120 };

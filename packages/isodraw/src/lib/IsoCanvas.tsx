@@ -3,7 +3,7 @@ import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, sn
 import { containerOf, descendantsOf, isContainer } from './containers';
 import { hasDoc } from './docs';
 import { fitIsoIcon, isIsoIcon } from './isoIcons';
-import { SceneContent, TargetHighlight, edgeGeometry, isoIconRect, midpoint } from './render';
+import { SceneContent, TargetHighlight, edgeGeometry, isoIconRect, midpoint, standingRect } from './render';
 import {
   SIDES,
   type InferredRoute,
@@ -576,11 +576,12 @@ export function IsoCanvas(props: IsoCanvasProps) {
     const n = nodeById.get(id);
     if (!n) return null;
     // In 2D an isometric icon's picture is bigger than its footprint seen from above: outline the picture.
-    const pic = proj.mode === '2d' && n.kind === 'image' && isIsoIcon(n.src) ? isoIconRect(n, proj) : null;
+    // A standing picture: outline the picture, not the box it used to stand on.
+    const pic = proj.mode === '2d' && n.kind === 'image' && isIsoIcon(n.src) ? isoIconRect(n, proj) : standingRect(n, proj);
     const base = pic
       ? [{ x: pic.x, y: pic.y }, { x: pic.x + pic.w, y: pic.y }, { x: pic.x + pic.w, y: pic.y + pic.h }, { x: pic.x, y: pic.y + pic.h }]
       : footprint(n).map((q) => proj.project(q.x, q.y, n.z));
-    const solid = !isFlat(n) && proj.mode === '3d' && n.kind !== 'sphere';
+    const solid = !pic && !isFlat(n) && proj.mode === '3d' && n.kind !== 'sphere';
     const top = solid ? footprint(n).map((q) => proj.project(q.x, q.y, n.z + n.h)) : null;
     return (
       <g key={id}>
