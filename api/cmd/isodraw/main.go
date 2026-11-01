@@ -1,7 +1,9 @@
 // Command isodraw runs the IsoDraw server.
 //
-//	isodraw          migrate the database, then serve (the default)
-//	isodraw migrate  only migrate the database
+//	isodraw                          migrate the database, then serve (the default)
+//	isodraw migrate                  only migrate the database
+//	isodraw lifetime grant <email>   give someone lifetime access by hand (comps, testing)
+//	isodraw lifetime revoke <email>  take it back
 package main
 
 import (
@@ -52,9 +54,31 @@ func run() error {
 		return nil
 	case "serve":
 		return serve(ctx, cfg)
+	case "lifetime":
+		return lifetime(ctx, cfg, os.Args[2:])
 	default:
-		return fmt.Errorf("unknown command %q (use serve or migrate)", cmd)
+		return fmt.Errorf("unknown command %q (use serve, migrate or lifetime)", cmd)
 	}
+}
+
+func lifetime(ctx context.Context, cfg config.Config, args []string) error {
+	if len(args) != 2 || (args[0] != "grant" && args[0] != "revoke") {
+		return errors.New("usage: isodraw lifetime grant|revoke <email>")
+	}
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	n, err := store.New(pool).SetLifetime(ctx, args[1], args[0] == "grant")
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("no account with the email %s", args[1])
+	}
+	slog.Info(map[string]string{"grant": "lifetime access granted", "revoke": "lifetime access revoked"}[args[0]], "email", args[1])
+	return nil
 }
 
 func serve(ctx context.Context, cfg config.Config) error {

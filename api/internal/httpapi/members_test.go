@@ -6,9 +6,11 @@ import (
 	"testing"
 )
 
-// team creates a team owned by the cookie's user and returns its id and slug.
+// team creates a team owned by the cookie's user, who is given lifetime access
+// (teams come with it), and returns its id and slug.
 func (f *fixture) team(c *http.Cookie, name string) (string, string) {
 	f.t.Helper()
+	f.lifetime(c, true)
 	res, out := f.do(req{method: "POST", path: "/api/orgs", body: `{"name":"` + name + `"}`, cookie: c})
 	expect(f.t, res, 201, out)
 	return out["id"].(string), out["slug"].(string)

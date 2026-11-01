@@ -52,6 +52,21 @@ export interface WorkspaceImage {
   createdAt: string;
 }
 
+/** What a workspace may do under its plan, and how much of it is used. Limits are 0 when there are none. */
+export interface Plan {
+  /** An owner has lifetime access (in a personal workspace, its person). */
+  lifetime: boolean;
+  /** A team from before plans: free, with no seat limit. */
+  grandfathered: boolean;
+  /** False for a team whose owners no longer have lifetime access: readable, not changeable. */
+  editable: boolean;
+  diagramLimit: number;
+  editorLimit: number;
+  diagrams: number;
+  /** Seats in use: members who can edit plus open invites to edit. */
+  editors: number;
+}
+
 export interface Member {
   userId: string;
   email: string;
@@ -139,7 +154,8 @@ export const authApi = {
 };
 
 export const api = {
-  me: () => request<{ user: User; orgs: Org[] }>('GET', '/api/me'),
+  me: () => request<{ user: User; orgs: Org[]; lifetime: boolean }>('GET', '/api/me'),
+  plan: (orgId: string) => request<Plan>('GET', `/api/orgs/${orgId}/plan`),
   listDiagrams: (orgId: string) => request<{ diagrams: DiagramMeta[] }>('GET', `/api/orgs/${orgId}/diagrams`),
   createDiagram: (orgId: string, title?: string, content?: Diagram) =>
     request<StoredDiagram>('POST', `/api/orgs/${orgId}/diagrams`, { title, content }),

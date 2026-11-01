@@ -19,6 +19,7 @@ const maxOrgName = 80
 func (s *Server) memberRoutes(api *http.ServeMux) {
 	// Seeing the member list works with a token; changing teams, members and invites is for the app.
 	api.HandleFunc("GET /api/orgs/{org}/members", s.listMembers)
+	api.HandleFunc("GET /api/orgs/{org}/plan", s.orgPlan)
 	for pattern, h := range map[string]http.HandlerFunc{
 		"POST /api/orgs":                          s.createTeam,
 		"PATCH /api/orgs/{org}":                   s.renameOrg,
@@ -77,6 +78,9 @@ func (s *Server) createTeam(w http.ResponseWriter, r *http.Request) {
 	name, msg := cleanOrgName(body.Name)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, "invalid_name", msg)
+		return
+	}
+	if !s.mayOwnTeams(w, r) {
 		return
 	}
 	org, err := s.store.CreateTeam(r.Context(), auth.User(r.Context()).ID, name)
@@ -199,6 +203,10 @@ func (s *Server) changeRole(w http.ResponseWriter, r *http.Request) {
 	if body.Role != store.Owner && s.lastOwner(w, r, current) {
 		return
 	}
+	// Going from viewer to anything that edits takes a seat.
+	if current == store.Viewer && body.Role != store.Viewer && !s.seatFor(w, r, org.ID, "", r.PathValue("user")) {
+		return
+	}
 	if err := s.store.SetRole(r.Context(), org.ID, r.PathValue("user"), body.Role); err != nil {
 		internalError(w, err)
 		return
@@ -270,7 +278,11 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "Only an owner can invite another owner.")
 		return
 	}
-	inv, token, err := s.store.CreateInvite(r.Context(), org.ID, strings.ToLower(addr.Address), body.Role, auth.User(r.Context()).ID, InviteTTL)
+	email := strings.ToLower(addr.Address)
+	if body.Role != store.Viewer && !s.seatFor(w, r, org.ID, email, "") {
+		return
+	}
+	inv, token, err := s.store.CreateInvite(r.Context(), org.ID, email, body.Role, auth.User(r.Context()).ID, InviteTTL)
 	if err != nil {
 		internalError(w, err)
 		return

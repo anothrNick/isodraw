@@ -196,6 +196,24 @@ function CreateTeamDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
       setBusy(false);
     }
   };
+  if (session && !session.lifetime) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Teams come with lifetime access</DialogTitle>
+            <DialogDescription>
+              A team is a shared workspace for you and up to four other editors, with as many viewers as you like. It comes with lifetime access, a
+              one-time purchase. Your personal workspace keeps every feature for free.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => onOpenChange(false)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">

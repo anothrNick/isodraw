@@ -75,6 +75,9 @@ func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "Viewers can't add images to this workspace.")
 		return
 	}
+	if !s.editable(w, r, org) {
+		return
+	}
 	contentType := strings.TrimSpace(strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0])
 	if _, ok := imageTypes[contentType]; !ok {
 		writeError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Upload a PNG, JPEG, GIF, WebP or SVG image.")
@@ -135,6 +138,9 @@ func (s *Server) removeImage(w http.ResponseWriter, r *http.Request) {
 	}
 	if !role.CanEdit() {
 		writeError(w, http.StatusForbidden, "forbidden", "Viewers can't remove images from this workspace.")
+		return
+	}
+	if !s.editable(w, r, org) {
 		return
 	}
 	if !isUUID(id) {

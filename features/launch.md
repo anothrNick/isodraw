@@ -23,8 +23,8 @@ Decided 2026-11-01:
 Still open:
 
 - [ ] Storage numbers: fair use for free (e.g. 250 MB of images) and for lifetime (e.g. 1 GB).
-- [ ] What happens at the 10-diagram limit: creating an 11th is refused with an upgrade note, and nothing existing is locked or deleted.
-- [ ] Do grandfathered teams stay at their launch-day editor count, or get the same 5-editor cap?
+- [x] What happens at the 10-diagram limit: creating an 11th is refused with a note on exporting and deleting one, and nothing existing is locked or deleted.
+- [x] Grandfathered teams have no editor cap for now (built that way; revisit if one grows past what's fair).
 - [ ] Business basics: the entity that sells it, a bank account, and the support email on receipts.
 - [ ] The domain name itself.
 
@@ -34,11 +34,14 @@ Still open:
 - [ ] Checkout: "Buy lifetime access" creates a one-time Checkout session for the signed-in user, then returns to a success page that waits for the webhook.
 - [ ] Webhook endpoint: verify the signature, handle each event once (store event ids), grant on payment and revoke on refund or dispute. Reconcile against the provider daily in case a webhook was missed.
 - [ ] Cohort cap enforced on the server: reserve a seat when checkout starts, release it when the session expires, show "sold out" once full. Two buyers must not get the last seat.
-- [ ] Entitlements checked in the API, not just hidden in the UI, and the same for API tokens, the CLI and MCP:
-  - free: 10 diagrams in the personal workspace, no new team workspaces, image storage cap;
-  - lifetime: team workspaces, 5 editors each (invites and role changes past that are refused), unlimited viewers;
-  - grandfathered: a flag on teams that existed on launch day.
-- [ ] Clear messages at each limit, with the way out: buy lifetime, or export older diagrams as JSON and import them when you need them again.
+- [x] Entitlements checked in the API, not just hidden in the UI, and so the same for API tokens, the CLI and MCP (`api/internal/httpapi/plans.go`; limits answer 402 `plan_limit`):
+  - free: 10 diagrams in the personal workspace and no team workspaces;
+  - lifetime (`users.lifetime_since`): team workspaces, 5 editor seats each (members who edit plus open invites to edit; invites and role changes past that are refused), unlimited viewers;
+  - grandfathered (`orgs.grandfathered`, set on every team that existed when the migration ran): free, no seat limit;
+  - a team whose owners lose lifetime (a refund) turns read-only, with nothing lost.
+- [ ] Image storage cap per workspace (free and lifetime numbers still open).
+- [x] Clear messages at each limit, with the way out: the app shows "n of 10 diagrams", seats used on the Members page, and a create-team dialog that explains lifetime. The buy button comes with checkout.
+- [x] `isodraw lifetime grant|revoke <email>` on the server, for comps and testing before checkout exists (DEPLOY.md).
 - [ ] Docs: how to export a diagram (JSON, Markdown docs, PNG/SVG) and import it back, so free users can keep 10 active and archive the rest.
 - [ ] Account page: plan, purchase date, receipt link, seat number ("Founding member #42").
 - [ ] Launch codes or coupons, if there'll be any.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Check, Copy, Link2, Loader2, LogOut, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, type Invite, type Member, type Org, type Role } from './api';
+import { api, type Invite, type Member, type Org, type Plan, type Role } from './api';
 import { initials, Loading } from './App';
 import { linkProps, navigate } from './router';
 import { ROLE_HINTS, ROLE_NAMES, useSession } from './session';
@@ -31,7 +31,11 @@ export function MembersPage({ org }: { org: Org }) {
   const [data, setData] = useState<{ members: Member[]; invites: Invite[] } | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; body: string; action: string; run: () => Promise<void> } | null>(null);
 
-  const load = useCallback(() => api.members(org.id).then(setData), [org.id]);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const load = useCallback(
+    () => Promise.all([api.members(org.id).then(setData), api.plan(org.id).then(setPlan, () => setPlan(null))]),
+    [org.id],
+  );
   useEffect(() => {
     load().catch((e: Error) => toast.error(e.message));
   }, [load]);
@@ -72,7 +76,14 @@ export function MembersPage({ org }: { org: Org }) {
         {manage && <InviteForm org={org} roles={assignable} onInvited={load} />}
 
         <section className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold">Members · {data.members.length}</h2>
+          <h2 className="mb-3 flex items-baseline justify-between gap-3 text-sm font-semibold">
+            <span>Members · {data.members.length}</span>
+            {plan && plan.editorLimit > 0 && (
+              <span className="font-normal text-muted-foreground" title="Owners, admins and editors, plus open invites to edit. Viewers are unlimited.">
+                {plan.editors} of {plan.editorLimit} editor seats used
+              </span>
+            )}
+          </h2>
           <ul className="divide-y rounded-lg border bg-card">
             {data.members.map((m) => (
               <li key={m.userId} className="flex items-center gap-3 px-4 py-3">

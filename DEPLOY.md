@@ -116,6 +116,15 @@ fly secrets unset DATABASE_URL -a isodraw-api
 fly mpg attach <cluster-id> -a isodraw-api   # sets the new DATABASE_URL and restarts the API
 ```
 
+## Lifetime access by hand
+
+Until checkout exists, grant or take back lifetime access (no diagram limit, team workspaces) for an account by email:
+
+```bash
+fly ssh console -a isodraw-api -C "/isodraw lifetime grant someone@example.com"
+fly ssh console -a isodraw-api -C "/isodraw lifetime revoke someone@example.com"
+```
+
 ## Later deploys
 
 ```bash
