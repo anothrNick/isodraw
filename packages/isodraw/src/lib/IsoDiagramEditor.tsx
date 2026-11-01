@@ -1588,7 +1588,8 @@ function NodeInspector({
         <Field label="Depth">
           <NumberInput value={node.d} min={0.5} onChange={(d) => onChange({ d }, 'd')} />
         </Field>
-        {!flat && node.kind !== 'sphere' && !isIsoIcon(node.src) && (
+        {/* Height is the tile under a picture; isometric icons and standing pictures have none. */}
+        {!flat && node.kind !== 'sphere' && !isIsoIcon(node.src) && node.imageStyle !== 'standing' && (
           <Field label="Height">
             <NumberInput value={node.h} min={0.1} step={0.25} onChange={(h) => onChange({ h }, 'h')} />
           </Field>
