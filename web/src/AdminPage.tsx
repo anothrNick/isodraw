@@ -197,6 +197,7 @@ const LifetimeBadge = () => (
 );
 
 function UserDetail({ id }: { id: string }) {
+  const session = useSession();
   const [data, setData] = useState<{ user: AdminUser; workspaces: AdminWorkspace[] } | null>(null);
   const [confirm, setConfirm] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -209,6 +210,8 @@ function UserDetail({ id }: { id: string }) {
     setBusy(true);
     try {
       setData(await api.admin.updateUser(u.id, { lifetime: on }));
+      // Changing your own access shows in the rest of the app straight away.
+      if (u.id === session.user.id) await session.reload();
       toast.success(on ? `${u.email} has lifetime access` : `Took back ${u.email}'s lifetime access`);
     } catch (e) {
       toast.error((e as Error).message);

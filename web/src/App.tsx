@@ -182,9 +182,13 @@ function CreateTeamDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const session = useContext(SessionContext);
+  const reload = session?.reload;
   useEffect(() => {
-    if (open) setName('');
-  }, [open]);
+    if (!open) return;
+    setName('');
+    // Lifetime access may have changed since the page loaded (a purchase, or an admin's grant).
+    reload?.().catch(() => undefined);
+  }, [open, reload]);
   const create = async () => {
     setBusy(true);
     try {
