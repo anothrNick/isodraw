@@ -239,7 +239,8 @@ function ModeSwitch({ viewing, onChange }: { viewing: boolean; onChange: (view: 
           )}
         >
           {m.icon}
-          {m.label}
+          {/* Icons alone on narrower screens, so the title keeps its room. */}
+          <span className="hidden xl:inline">{m.label}</span>
         </button>
       ))}
     </div>

@@ -6,7 +6,8 @@ import { describeText, outline } from './describe';
 import { GUIDE } from './guide';
 import { exportDocsMarkdown, iconTypes, importTerraform, isTerraformJson, isoIconLibrary, layoutLevel, levelAt, parseDiagram, withLevel } from './lib';
 import { browserLogin } from './login';
-import { applyOps, findNode, OpError, parseLevel, resolveLevel, type Op } from './ops';
+import { serveStdio } from './mcp';
+import { applyOps, OpError, parseLevel, readDoc, resolveLevel, type Op } from './ops';
 
 const HELP = `isodraw: work with IsoDraw diagrams and their docs from the command line.
 
@@ -40,6 +41,7 @@ Usage: isodraw <command> [options]   (add --json to any command for JSON output)
   preview <diagram> [--level a/b] [--expires 7d]   A picture link (SVG) to show anywhere, plus the app link
   icons [search]                  Icons for --icon, by Terraform resource type
   guide                           How AI agents should use this CLI
+  mcp                             Serve IsoDraw's tools to AI apps over stdio (Claude Desktop, Claude Code, Cursor)
 
 Diagrams are named by id or title, items by id or label. Server: --server,
 ISODRAW_SERVER, or the saved config (${configPath()}). Token: ISODRAW_TOKEN or
@@ -134,6 +136,10 @@ async function main() {
   if (!cmd || opt.help || cmd === 'help') return console.log(HELP);
 
   switch (cmd) {
+    case 'mcp':
+      // Runs until the app closes it; stdout belongs to the protocol from here on.
+      return serveStdio(client);
+
     case 'guide':
       return console.log(GUIDE);
 
@@ -200,15 +206,7 @@ async function main() {
       if (sub === 'get') {
         const d = await client.get(ref);
         const level = resolveLevel(d.content, parseLevel(opt.level));
-        const at = levelAt(d.content, level)!;
-        let md: string;
-        if (opt.item) {
-          const edge = at.edges.find((e) => e.id === opt.item);
-          md = edge ? (edge.doc ?? '') : (findNode(at, opt.item).doc ?? '');
-        } else if (level.length) {
-          // A detail diagram's overview is its component's doc.
-          md = levelAt(d.content, level.slice(0, -1))!.nodes.find((n) => n.id === level[level.length - 1])?.doc ?? '';
-        } else md = d.content.doc ?? '';
+        const md = readDoc(d.content, level, opt.item);
         return out({ item: opt.item ?? null, level, markdown: md }, md || '(no doc yet)');
       }
       if (sub === 'set') {

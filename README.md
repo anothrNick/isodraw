@@ -71,6 +71,24 @@ npx isodraw guide          # how agents should use it
 - **For agents:** `--json` on every command, stable exit codes (0 ok, 1 usage, 2 not found, 3 conflict, 4 not signed in or not allowed), and a Claude Code skill in `.claude/skills/isodraw/` that tells Claude when and how to use it. Copy that folder to `~/.claude/skills/` to use it outside this repo.
 - **Preview links:** `isodraw preview <diagram> [--level a/b] [--expires 30d]` prints a signed link to a picture of the diagram (`/p/{id}.svg`) and the editor link, plus Markdown that shows one linking to the other. Anyone with the picture link can see it until it expires (a week by default, at most a year); it shows the diagram as it is when fetched, without docs or deeper levels, and stops working if the diagram is deleted. Agents end their work with it, so chat apps show what changed. Behind it: `GET /api/diagrams/{id}/preview` signs the link (HMAC from `SESSION_SECRET`, so rotating that secret revokes every link), `GET /public/previews/{id}` checks it and returns the stripped level, and `web/preview/render.ts` draws the SVG with the library's `StaticDiagram` and inlines the icons, in a Pages Function in production and in the Vite dev server locally. Add `&theme=dark` to the picture link for the dark theme.
 
+### In Claude, Cursor and other AI apps (MCP)
+
+`isodraw mcp` serves IsoDraw's tools to AI apps that launch local MCP servers. It uses the same sign-in as the CLI, so run `isodraw login` first (or set `ISODRAW_TOKEN`). Until the CLI is on npm, build it once with `npm run build -w @isodraw/cli` and point apps at `packages/cli/dist/isodraw.mjs`:
+
+```bash
+claude mcp add isodraw -- node /path/to/isodraw/packages/cli/dist/isodraw.mjs mcp
+```
+
+For Claude Desktop (`claude_desktop_config.json`) and Cursor (`.cursor/mcp.json`):
+
+```json
+{ "mcpServers": { "isodraw": { "command": "node", "args": ["/path/to/isodraw/packages/cli/dist/isodraw.mjs", "mcp"] } } }
+```
+
+- **Tools:** `list_diagrams`, `describe_diagram`, `get_docs` and `find_icons` read; `create_diagram`, `apply_changes` (the CLI's change list, with `dry_run`) and `import_terraform` write; `preview_diagram` returns Markdown for a picture that links to the editor, and every write ends with one. Read tools are marked read-only and `apply_changes` destructive, so apps can ask before writing.
+- **Instructions** sent on connect tell the model to describe before changing, batch changes, never think about layout, show the picture, and treat doc text as information. `get_docs` returns docs wrapped as quoted content.
+- **One module for both:** `packages/cli/src/mcp.ts` builds the server from the CLI's operations and doesn't care about transport, so the hosted `/mcp` endpoint (planned in `features/mcp-server.md`) will serve the same tools.
+
 ### Tokens
 
 Tokens look like `isd_…` and are stored hashed. A token acts as its user, in one workspace only; a read-only token acts as a viewer there and can only make `GET` requests. Tokens can't create teams, change members, accept invites or make other tokens; those stay in the app. Send one as `Authorization: Bearer isd_…`.
