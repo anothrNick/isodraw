@@ -3,6 +3,10 @@ import { withDocs } from './docs';
 import kubernetesDocs from './docs/kubernetes.md?raw';
 import serverlessDocs from './docs/serverless.md?raw';
 import streamingDocs from './docs/streaming.md?raw';
+import retailDocs from './docs/retail.md?raw';
+import zeroTrustDocs from './docs/zero-trust.md?raw';
+import aiAssistantDocs from './docs/ai-assistant.md?raw';
+import { aiAssistant, retail, zeroTrust } from './mixedExamples';
 import { sampleDiagram } from './sample';
 import { terraformExample } from './terraform';
 
@@ -241,6 +245,24 @@ export const EXAMPLES: Example[] = [
     name: 'Kubernetes microservices',
     description: 'Services in namespaces on EKS, with ingress, a service mesh and GitOps.',
     diagram: withDocs(kubernetes, kubernetesDocs),
+  },
+  {
+    id: 'retail',
+    name: 'Retail stores to Azure',
+    description: 'Checkouts, shelf sensors and handhelds in a store, streaming to Azure IoT, Cosmos DB and SQL.',
+    diagram: withDocs(retail, retailDocs),
+  },
+  {
+    id: 'zero-trust',
+    name: 'Zero-trust remote access',
+    description: 'Identity, device checks and an access proxy in front of SaaS, Google Cloud apps and the office.',
+    diagram: withDocs(zeroTrust, zeroTrustDocs),
+  },
+  {
+    id: 'ai-assistant',
+    name: 'AI support assistant',
+    description: 'A retrieval-augmented chat assistant on Bedrock, with search over help articles and handoff to people.',
+    diagram: withDocs(aiAssistant, aiAssistantDocs),
   },
   {
     id: 'terraform',

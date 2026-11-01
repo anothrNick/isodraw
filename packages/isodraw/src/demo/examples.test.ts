@@ -7,12 +7,18 @@ import kubernetesDocs from './docs/kubernetes.md?raw';
 import serverlessDocs from './docs/serverless.md?raw';
 import streamingDocs from './docs/streaming.md?raw';
 import threeTierDocs from './docs/three-tier.md?raw';
+import retailDocs from './docs/retail.md?raw';
+import zeroTrustDocs from './docs/zero-trust.md?raw';
+import aiAssistantDocs from './docs/ai-assistant.md?raw';
 
 const SOURCES: Record<string, string> = {
   'three-tier': threeTierDocs,
   serverless: serverlessDocs,
   streaming: streamingDocs,
   kubernetes: kubernetesDocs,
+  retail: retailDocs,
+  'zero-trust': zeroTrustDocs,
+  'ai-assistant': aiAssistantDocs,
 };
 
 const allDocs = (d: Diagram) => [d.doc ?? '', ...d.nodes.map((n) => n.doc ?? ''), ...d.edges.map((e) => e.doc ?? '')];

@@ -146,12 +146,26 @@
 .isd-resizer:hover::after, .isd-resizer.is-active::after { opacity: 1; }
 .isd-root.is-resizing, .isd-root.is-resizing * { cursor: col-resize !important; user-select: none; }
 
-.isd-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid var(--isd-border); align-items: center; }
-.isd-tabs button {
-  border: 1px solid var(--isd-border); background: var(--isd-bg); border-radius: 999px; padding: 3px 10px;
-  font: inherit; font-weight: 500; cursor: pointer; color: var(--isd-text);
+.isd-tabs { position: relative; flex: none; display: flex; min-height: 36px; border-bottom: 1px solid var(--isd-border); background: var(--isd-panel); }
+/* Underlined tabs like the sidebar's, on one row that scrolls sideways. */
+.isd-tabs-scroll {
+  flex: 1; min-width: 0; display: flex; gap: 16px; padding: 0 12px; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none; scroll-behavior: smooth; overscroll-behavior-x: contain;
 }
-.isd-tabs button.is-active { background: var(--isd-accent); border-color: var(--isd-accent); color: var(--isd-on-accent); }
+.isd-tabs-scroll::-webkit-scrollbar { display: none; }
+.isd-tabs-scroll button {
+  flex: none; margin-bottom: -1px; padding: 0 1px; border: 0; border-bottom: 2px solid transparent; background: none;
+  font: inherit; font-size: 12.5px; font-weight: 500; white-space: nowrap; color: var(--isd-muted); cursor: pointer;
+}
+.isd-tabs-scroll button:hover { color: var(--isd-text); }
+.isd-tabs-scroll button.is-active { border-bottom-color: var(--isd-accent); color: var(--isd-text); font-weight: 600; }
+/* Fade the edges where more tabs are scrolled out of view. */
+.isd-tabs::before, .isd-tabs::after {
+  content: ''; position: absolute; top: 0; bottom: 1px; width: 24px; pointer-events: none; opacity: 0; transition: opacity 0.15s;
+}
+.isd-tabs::before { left: 0; background: linear-gradient(to right, var(--isd-panel), transparent); }
+.isd-tabs::after { right: 0; background: linear-gradient(to left, var(--isd-panel), transparent); }
+.isd-tabs.has-more-left::before, .isd-tabs.has-more-right::after { opacity: 1; }
 .isd-tab-note { color: var(--isd-muted); font-size: 11px; }
 .isd-search { padding: 8px 8px 0; }
 .isd-palette-scroll { flex: 1; overflow-y: auto; padding: 8px; }
@@ -255,7 +269,7 @@ textarea.isd-input { resize: vertical; }
   width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--isd-muted); cursor: pointer;
 }
 .isd-drawer-close:hover { background: var(--isd-border); color: var(--isd-text); }
-.isd-root.is-compact .isd-palette .isd-tabs { padding-right: 40px; }
+.isd-root.is-compact .isd-palette .isd-tabs { margin-right: 40px; }
 
 .isd-segmented { display: flex; padding: 2px; gap: 2px; background: var(--isd-bg); border: 1px solid var(--isd-border); border-radius: 7px; }
 .isd-segmented button {

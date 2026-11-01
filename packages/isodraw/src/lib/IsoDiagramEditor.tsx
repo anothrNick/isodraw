@@ -120,6 +120,55 @@ interface PalettePayload {
   name?: string;
 }
 
+/**
+ * The palette's icon-set tabs: underlined like the sidebar's, on one row that
+ * scrolls sideways when it doesn't fit. The wheel scrolls it too, the open tab
+ * stays in view, and the edges fade where there's more to see.
+ */
+function PaletteTabs({ tabs, active, onChange }: { tabs: { id: string; name: string }[]; active: string; onChange: (id: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const left = el.scrollLeft > 1;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setMore((m) => (m.left === left && m.right === right ? m : { left, right }));
+  }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    // A vertical wheel scrolls the row sideways; it has nothing to scroll up or down.
+    const wheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('wheel', wheel);
+    };
+  }, [measure]);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [active]);
+  return (
+    <div className={`isd-tabs${more.left ? ' has-more-left' : ''}${more.right ? ' has-more-right' : ''}`}>
+      <div ref={ref} className="isd-tabs-scroll" role="tablist" aria-label="Palette" onScroll={measure}>
+        {tabs.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={active === t.id} className={active === t.id ? 'is-active' : ''} onClick={() => onChange(t.id)}>
+            {t.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const { readOnly, awsIcons = true, gcpIcons = true, azureIcons = true, lucideIcons = true } = props;
   const theme = useResolvedTheme(props.theme);
@@ -777,7 +826,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     ISO_LIBRARY,
     ...enabledClouds.map((c) => cloudLibs[c.id]?.lib ?? { id: c.id, name: c.name, icons: [] }),
     ...(props.iconLibraries ?? []),
-    { id: 'mine', name: 'My images', icons: userIcons },
+    { id: 'mine', name: 'Images', icons: userIcons },
   ];
   const activeLib = libraries.find((l) => l.id === paletteTab);
   const activeCloud = cloudLibs[paletteTab as CloudId];
@@ -1036,13 +1085,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 <Icon name="close" />
               </button>
             )}
-            <div className="isd-tabs" role="tablist">
-              {[{ id: 'shapes', name: 'Shapes' }, ...libraries].map((t) => (
-                <button key={t.id} type="button" role="tab" aria-selected={paletteTab === t.id} className={paletteTab === t.id ? 'is-active' : ''} onClick={() => setPaletteTab(t.id)}>
-                  {t.name}
-                </button>
-              ))}
-            </div>
+            <PaletteTabs tabs={[{ id: 'shapes', name: 'Shapes' }, ...libraries]} active={paletteTab} onChange={setPaletteTab} />
 
             {paletteTab === 'shapes' ? (
               <div className="isd-palette-scroll">
