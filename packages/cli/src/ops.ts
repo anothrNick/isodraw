@@ -266,7 +266,11 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
             if (op.icon) {
               const src = iconUrl(op.icon);
               // Isometric icons stand on their tiles in the component's color; other images sit on a tile.
-              if (isIsoIcon(src)) Object.assign(patch, { kind: 'image', src, h: 1, imageStyle: undefined, color: op.color ?? ISO_ICON_COLOR });
+              if (isIsoIcon(src)) {
+                // Its box becomes the drawing's, around the same middle.
+                const fresh = createImageNode(src, n.label ?? '', n.x + n.w / 2, n.y + n.d / 2);
+                Object.assign(patch, { kind: 'image', src, x: fresh.x, y: fresh.y, w: fresh.w, d: fresh.d, h: fresh.h, imageStyle: undefined, color: op.color ?? ISO_ICON_COLOR });
+              }
               else Object.assign(patch, { kind: 'image', src, imageStyle: n.imageStyle ?? 'tile' });
             }
             changes.push(`changed ${n.id} (${Object.keys(patch).join(', ') || 'nothing'})${where}`);

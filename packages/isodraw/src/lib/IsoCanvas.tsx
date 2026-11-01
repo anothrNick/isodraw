@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as RPoin
 import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, snap } from './geometry';
 import { containerOf, descendantsOf, isContainer } from './containers';
 import { hasDoc } from './docs';
-import { SceneContent, TargetHighlight, edgeGeometry, midpoint } from './render';
+import { fitIsoIcon, isIsoIcon } from './isoIcons';
+import { SceneContent, TargetHighlight, edgeGeometry, isoIconRect, midpoint } from './render';
 import {
   SIDES,
   type InferredRoute,
@@ -397,17 +398,16 @@ export function IsoCanvas(props: IsoCanvasProps) {
           props.onBeginChange?.();
           setDrag({ ...drag, began: true });
         }
-        updateNodes((m) =>
-          m.id === drag.id
-            ? {
-                ...m,
-                x: px < drag.fixed.x ? drag.fixed.x - nw : drag.fixed.x,
-                y: py < drag.fixed.y ? drag.fixed.y - nd : drag.fixed.y,
-                w: nw,
-                d: nd,
-              }
-            : m,
-        );
+        updateNodes((m) => {
+          if (m.id !== drag.id) return m;
+          // An isometric icon keeps its shape: its box scales with the drag, from the fixed corner.
+          const sized = fitIsoIcon({ ...m, w: nw, d: nd });
+          return {
+            ...sized,
+            x: px < drag.fixed.x ? drag.fixed.x - sized.w : drag.fixed.x,
+            y: py < drag.fixed.y ? drag.fixed.y - sized.d : drag.fixed.y,
+          };
+        });
         break;
       }
       case 'height': {
@@ -575,7 +575,11 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const overlay = selection.nodes.map((id) => {
     const n = nodeById.get(id);
     if (!n) return null;
-    const base = footprint(n).map((q) => proj.project(q.x, q.y, n.z));
+    // In 2D an isometric icon's picture is bigger than its footprint seen from above: outline the picture.
+    const pic = proj.mode === '2d' && n.kind === 'image' && isIsoIcon(n.src) ? isoIconRect(n, proj) : null;
+    const base = pic
+      ? [{ x: pic.x, y: pic.y }, { x: pic.x + pic.w, y: pic.y }, { x: pic.x + pic.w, y: pic.y + pic.h }, { x: pic.x, y: pic.y + pic.h }]
+      : footprint(n).map((q) => proj.project(q.x, q.y, n.z));
     const solid = !isFlat(n) && proj.mode === '3d' && n.kind !== 'sphere';
     const top = solid ? footprint(n).map((q) => proj.project(q.x, q.y, n.z + n.h)) : null;
     return (

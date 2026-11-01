@@ -1,4 +1,4 @@
-import { ISO_ICON_COLOR, isIsoIcon } from './isoIcons';
+import { ISO_ICON_COLOR, isIsoIcon, isoIconMetrics } from './isoIcons';
 import { uid } from './geometry';
 import type { Diagram, DiagramEdge, DiagramNode, ShapeKind } from './types';
 
@@ -67,7 +67,12 @@ export function createShape(kind: ShapeKind, cx: number, cy: number, extra: Part
 
 export function createImageNode(src: string, name: string, cx: number, cy: number): DiagramNode {
   // IsoDraw's isometric icons are objects of their own, in the component's color.
-  if (isIsoIcon(src)) return createShape('image', cx, cy, { w: 2, d: 2, h: 1, src, label: name, color: ISO_ICON_COLOR });
+  // Its box fits the drawing at its natural size.
+  if (isIsoIcon(src)) {
+    const m = isoIconMetrics(src)!;
+    const r = (v: number) => Math.round(v * 1000) / 1000;
+    return createShape('image', cx, cy, { w: r(m.x1 - m.x0), d: r(m.y1 - m.y0), h: r(m.h), src, label: name, color: ISO_ICON_COLOR });
+  }
   return createShape('image', cx, cy, {
     w: 2,
     d: 2,

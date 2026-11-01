@@ -177,7 +177,30 @@ function palette(c: string): Palette {
 class Draw {
   private out: string[] = [];
   private defs: string[] = [];
+  /** What the drawing covers: in the world (solids) and in the picture (everything but the shadow). */
+  readonly world = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity, z1: 0 };
+  readonly pic = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
   constructor(readonly p: Palette) {}
+
+  /** Count a solid's point toward the drawing's extent. */
+  see(q: V3) {
+    const w = this.world;
+    w.x0 = Math.min(w.x0, q[0]);
+    w.x1 = Math.max(w.x1, q[0]);
+    w.y0 = Math.min(w.y0, q[1]);
+    w.y1 = Math.max(w.y1, q[1]);
+    w.z1 = Math.max(w.z1, q[2]);
+    this.seePic(project(q));
+  }
+
+  /** Count a point in the picture (with room for outlines) toward what the picture shows. */
+  seePic([x, y]: V2, pad = 1.5) {
+    const b = this.pic;
+    b.x0 = Math.min(b.x0, x - pad);
+    b.x1 = Math.max(b.x1, x + pad);
+    b.y0 = Math.min(b.y0, y - pad);
+    b.y1 = Math.max(b.y1, y + pad);
+  }
 
   /** A soft shadow on the ground under the object. */
   shadow(w: number, d: number, cx = 0, cy = 0) {
@@ -186,6 +209,7 @@ class Draw {
 
   /** Draw faces: an outline pass first (its outer half shows as the silhouette), then the shaded fills. */
   private faces(list: { pts: V3[]; n: V3 }[], color: string, convex: boolean) {
+    for (const f of list) for (const q of f.pts) this.see(q);
     const visible = list.filter((f) => dot(f.n, VIEW) > 1e-6);
     if (!visible.length) return;
     // The outline: a convex part's silhouette is the hull of its corners. Otherwise outline the
@@ -250,6 +274,9 @@ class Draw {
   /** A shaded ball. */
   sphere(c: V3, r: number, color: string) {
     const [x, y] = project(c);
+    this.see([c[0] - r, c[1] - r, c[2] - r]);
+    this.see([c[0] + r, c[1] + r, c[2] + r]);
+    this.seePic([x, y], r * TILE + 1.5);
     const id = `s${this.defs.length}`;
     this.defs.push(
       `<radialGradient id="${id}" cx="36%" cy="30%" r="72%"><stop offset="0" stop-color="${shade(color, 1.5)}"/><stop offset=".55" stop-color="${color}"/><stop offset="1" stop-color="${shade(color, 0.7)}"/></radialGradient>`,
@@ -267,6 +294,7 @@ class Draw {
 
   /** A stroke painted on a surface. */
   line(plane: Plane, pts: V2[], stroke: string, width = 2, opacity = 1) {
+    for (const q of pts) this.seePic(project(at(plane, q)), width / 2);
     const d = 'M' + pts.map((q) => project(at(plane, q)).map(n1).join(' ')).join('L');
     this.out.push(
       `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"${opacity < 1 ? ` opacity="${opacity}"` : ''}/>`,
@@ -303,6 +331,7 @@ function waves(g: Draw, center: V3, color: string, radii = [10, 17, 24], from = 
     const a = (from * Math.PI) / 180;
     const b = (to * Math.PI) / 180;
     const p = (t: number) => `${n1(cx + r * Math.cos(t))} ${n1(cy + r * Math.sin(t))}`;
+    for (let t = a; t <= b + 1e-9; t += (b - a) / 8) g.seePic([cx + r * Math.cos(t), cy + r * Math.sin(t)], 2);
     g.raw(`<path d="M${p(a)}A${r} ${r} 0 0 1 ${p(b)}" fill="none" stroke="${color}" stroke-width="3.2" stroke-linecap="round"/>`);
   }
 }
@@ -698,8 +727,11 @@ const ICONS: Record<string, { name: string; category: string; draw: Maker }> = {
       const topR = 0.1;
       const h = 2.1;
       const pt = ([x, y]: V2, t: number): V3 => [x * (1 - t) + Math.sign(x) * topR * t, y * (1 - t) + Math.sign(y) * topR * t, h * t];
-      const ln = (a: V3, b: V3, w: number) =>
+      const ln = (a: V3, b: V3, w: number) => {
+        g.see(a);
+        g.see(b);
         g.raw(`<path d="M${project(a).map(n1).join(' ')}L${project(b).map(n1).join(' ')}" stroke="${p.navy}" stroke-width="${w}" stroke-linecap="round"/>`);
+      };
       for (let i = 0; i < 4; i++) {
         const a = legs[i];
         const b = legs[(i + 1) % 4];
@@ -1159,6 +1191,86 @@ export function isoIconSvg(name: string, color = ISO_ICON_COLOR): string | null 
   const g = new Draw(palette(/^#[0-9a-f]{6}$/i.test(color) ? color : ISO_ICON_COLOR));
   icon.draw(g, g.p);
   return g.svg();
+}
+
+export interface IsoIconMetrics {
+  /** The ground the object stands on, in tiles at its natural size (scale 1), around the picture's origin. */
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  /** How tall it is, in tiles. */
+  h: number;
+  /** The part of the picture with something in it, in picture pixels at scale 1. */
+  pic: { x: number; y: number; w: number; h: number };
+}
+
+const metricsCache = new Map<string, IsoIconMetrics>();
+/** Thinnest footprint side, so upright things like a phone still have a footprint to grab. */
+const MIN_SIDE = 0.4;
+
+/** Where an icon's drawing actually is: its footprint, height, and the filled part of its picture. */
+export function isoIconMetrics(src: string): IsoIconMetrics | null {
+  if (!isIsoIcon(src)) return null;
+  let m = metricsCache.get(src);
+  if (!m) {
+    const g = new Draw(palette(ISO_ICON_COLOR));
+    ICONS[src.slice(ISO_ICON_PREFIX.length)].draw(g, g.p);
+    const w = g.world;
+    const grow = (a: number, b: number): [number, number] => {
+      const pad = Math.max(0, MIN_SIDE - (b - a)) / 2;
+      return [a - pad, b + pad];
+    };
+    const [x0, x1] = grow(w.x0, w.x1);
+    const [y0, y1] = grow(w.y0, w.y1);
+    const b = g.pic;
+    m = { x0, x1, y0, y1, h: w.z1, pic: { x: b.x0, y: b.y0, w: b.x1 - b.x0, h: b.y1 - b.y0 } };
+    metricsCache.set(src, m);
+  }
+  return m;
+}
+
+/** How much an icon component is scaled from the icon's natural size. */
+export function isoIconScale(n: { src?: string; w: number; d: number }): number {
+  const m = n.src ? isoIconMetrics(n.src) : null;
+  return m ? Math.min(n.w / (m.x1 - m.x0), n.d / (m.y1 - m.y0)) : 1;
+}
+
+/**
+ * Where an icon component's picture goes, relative to the component's middle
+ * on screen. In 2.5D it's the whole picture, placed so the drawing stands on
+ * the footprint; in 2D (`crop`) only the part with something in it, centered,
+ * at the same size.
+ */
+export function isoIconPlacement(src: string, k: number, mode: '2d' | '3d'): { x: number; y: number; w: number; h: number; viewBox?: string } | null {
+  const m = isoIconMetrics(src);
+  if (!m) return null;
+  if (mode === '2d') {
+    const p = m.pic;
+    return { x: (-p.w * k) / 2, y: (-p.h * k) / 2, w: p.w * k, h: p.h * k, viewBox: `${p.x} ${p.y} ${p.w} ${p.h}` };
+  }
+  const [fx, fy] = project([(m.x0 + m.x1) / 2, (m.y0 + m.y1) / 2, 0]);
+  const b = ISO_ICON_BOX;
+  return { x: (b.x - fx) * k, y: (b.y - fy) * k, w: b.w * k, h: b.h * k };
+}
+
+const r3 = (v: number) => Math.round(v * 1000) / 1000;
+
+/**
+ * Keep an isometric icon component's box on its drawing: the footprint and
+ * height follow the icon at one scale. `by` says which side was just set, so
+ * that side sets the scale; otherwise the two sides agree on one.
+ */
+export function fitIsoIcon<N extends { src?: string; kind: string; w: number; d: number; h: number }>(n: N, by?: 'w' | 'd'): N {
+  const m = n.kind === 'image' && n.src ? isoIconMetrics(n.src) : null;
+  if (!m) return n;
+  const ex = m.x1 - m.x0;
+  const ey = m.y1 - m.y0;
+  const k = by === 'w' ? n.w / ex : by === 'd' ? n.d / ey : (n.w / ex + n.d / ey) / 2;
+  const w = r3(ex * k);
+  const d = r3(ey * k);
+  const h = r3(m.h * k);
+  return w === n.w && d === n.d && h === n.h ? n : { ...n, w, d, h };
 }
 
 /** Is this image source one of our isometric icons (`isodraw:<name>`)? */
