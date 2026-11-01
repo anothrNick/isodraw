@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { ApiError, api, signIn, type Org, type User } from './api';
 import { AuthPages } from './AuthPages';
 import { CliLoginPage } from './CliLoginPage';
+import { ConnectPage } from './ConnectPage';
 import { DiagramList } from './DiagramList';
 import { DocsPage } from './DocsPage';
 import { EditorPage } from './EditorPage';
@@ -65,11 +66,19 @@ export function App() {
   if (!session) return <Loading />;
 
   // Account-level pages, outside any workspace.
-  if (route.page === 'invite' || route.page === 'cli-login' || route.page === 'tokens') {
+  if (route.page === 'invite' || route.page === 'cli-login' || route.page === 'connect' || route.page === 'tokens') {
     return (
       <SessionContext.Provider value={session}>
         <Shell session={session}>
-          {route.page === 'invite' ? <InvitePage token={route.token} /> : route.page === 'cli-login' ? <CliLoginPage /> : <TokensPage />}
+          {route.page === 'invite' ? (
+            <InvitePage token={route.token} />
+          ) : route.page === 'cli-login' ? (
+            <CliLoginPage />
+          ) : route.page === 'connect' ? (
+            <ConnectPage />
+          ) : (
+            <TokensPage />
+          )}
         </Shell>
       </SessionContext.Provider>
     );

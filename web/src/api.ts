@@ -155,4 +155,14 @@ export const api = {
   createToken: (name: string, orgId: string, scope: Scope, expiresInDays: number) =>
     request<{ token: ApiToken; secret: string }>('POST', '/api/tokens', { name, orgId, scope, expiresInDays }),
   deleteToken: (id: string) => request<void>('DELETE', `/api/tokens/${id}`),
+
+  /** Connecting an AI app to the MCP server (the consent page). */
+  oauthRequest: (clientId: string, redirectUri: string) =>
+    request<{ clientName: string; redirectHost: string; redirectScheme: string }>(
+      'GET',
+      `/api/oauth/request?${new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri })}`,
+    ),
+  oauthApprove: (b: { clientId: string; redirectUri: string; codeChallenge: string; state: string; orgId: string; scope: Scope; expiresInDays: number }) =>
+    request<{ redirect: string }>('POST', '/api/oauth/approve', b),
+  oauthDeny: (b: { clientId: string; redirectUri: string; state: string }) => request<{ redirect: string }>('POST', '/api/oauth/deny', b),
 };

@@ -61,6 +61,7 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 	api.HandleFunc("GET /api/diagrams/{id}/preview", srv.previewLink)
 	srv.memberRoutes(api)
 	srv.tokenRoutes(api)
+	srv.oauthRoutes(mux, api)
 	api.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "No such API route.")
 	})

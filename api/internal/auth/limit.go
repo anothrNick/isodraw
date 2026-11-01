@@ -63,3 +63,15 @@ func clientIP(r *http.Request) string {
 	}
 	return host
 }
+
+// Limiter is the rate limiter, for other packages' endpoints (OAuth client registration).
+type Limiter = limiter
+
+// NewLimiter allows max attempts per key in each window.
+func NewLimiter(max int, window time.Duration) *Limiter { return newLimiter(max, window) }
+
+// Allow records an attempt and reports whether it's within the limit.
+func (l *limiter) Allow(key string) bool { return l.allow(key) }
+
+// ClientIP is the address a request came from, as the limits see it.
+func ClientIP(r *http.Request) string { return clientIP(r) }
