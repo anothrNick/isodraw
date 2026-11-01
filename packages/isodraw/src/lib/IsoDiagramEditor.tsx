@@ -6,7 +6,7 @@ import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } fro
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
-import { loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary } from './icons';
+import { iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary, withIconColor } from './icons';
 import { imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevel, markMoved, movesItem } from './layout';
@@ -1543,6 +1543,12 @@ function NodeInspector({
       ) : null}
       {node.kind === 'image' && (
         <>
+          {/* Lucide icons (and other one-color SVGs) can be redrawn in any color. */}
+          {iconColor(node.src) && (
+            <Field label="Icon color">
+              <Swatches value={iconColor(node.src)!} onChange={(color) => onChange({ src: withIconColor(node.src!, color) })} />
+            </Field>
+          )}
           {/* Isometric icons are objects already; the styles are for flat pictures. */}
           {!isIsoIcon(node.src) && (
             <Field label="Style">

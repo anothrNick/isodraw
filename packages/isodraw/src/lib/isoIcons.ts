@@ -75,15 +75,15 @@ function rr(w: number, h: number, r: number, cx = 0, cy = 0): V2[] {
       out.push([x, y]);
       continue;
     }
-    for (let i = 0; i <= 4; i++) {
-      const a = ((a0 + i * 22.5) * Math.PI) / 180;
+    for (let i = 0; i <= 8; i++) {
+      const a = ((a0 + i * 11.25) * Math.PI) / 180;
       out.push([x + r * Math.cos(a), y + r * Math.sin(a)]);
     }
   }
   return out;
 }
 
-function circle(r: number, cx = 0, cy = 0, n = 28): V2[] {
+function circle(r: number, cx = 0, cy = 0, n = 48): V2[] {
   return Array.from({ length: n }, (_, i) => {
     const a = (i / n) * Math.PI * 2;
     return [cx + r * Math.cos(a), cy + r * Math.sin(a)] as V2;
@@ -97,7 +97,40 @@ function polygon(r: number, sides: number, cx = 0, cy = 0, turn = 0): V2[] {
   });
 }
 
-const signedArea = (pts: V2[]) => pts.reduce((s, p, i) => s + (p[0] * pts[(i + 1) % pts.length][1] - pts[(i + 1) % pts.length][0] * p[1]), 0) / 2;
+/** Twice the signed area of a screen polygon. */
+const area2 = (pts: V2[]) => pts.reduce((s, p, i) => s + (p[0] * pts[(i + 1) % pts.length][1] - pts[(i + 1) % pts.length][0] * p[1]), 0);
+
+/** Does the outline turn the same way at every corner? */
+function isConvex(pts: V2[]): boolean {
+  let sign = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [a, b, c] = [pts[i], pts[(i + 1) % pts.length], pts[(i + 2) % pts.length]];
+    const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (Math.abs(cross) < 1e-9) continue;
+    if (sign && Math.sign(cross) !== sign) return false;
+    sign = Math.sign(cross);
+  }
+  return true;
+}
+
+/** Convex hull of screen points (monotone chain). */
+function hull(pts: V2[]): V2[] {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cross = (o: V2, a: V2, b: V2) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list: V2[]) => {
+    const out: V2[] = [];
+    for (const q of list) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], q) <= 0) out.pop();
+      out.push(q);
+    }
+    out.pop();
+    return out;
+  };
+  return [...half(p), ...half([...p].reverse())];
+}
+
+const signedArea = (pts: V2[]) => area2(pts) / 2;
 
 // ----- planes -----
 
@@ -152,12 +185,15 @@ class Draw {
   }
 
   /** Draw faces: an outline pass first (its outer half shows as the silhouette), then the shaded fills. */
-  private faces(list: { pts: V3[]; n: V3 }[], color: string) {
+  private faces(list: { pts: V3[]; n: V3 }[], color: string, convex: boolean) {
     const visible = list.filter((f) => dot(f.n, VIEW) > 1e-6);
     if (!visible.length) return;
-    this.out.push(
-      `<path d="${visible.map((f) => pathOf(f.pts)).join('')}" fill="${this.p.ink}" stroke="${this.p.ink}" stroke-width="2.4" stroke-linejoin="round"/>`,
-    );
+    // The outline: a convex part's silhouette is the hull of its corners. Otherwise outline the
+    // faces themselves, leaving out slivers seen edge-on, whose strokes would poke past the edge.
+    const ink = convex
+      ? 'M' + hull(list.flatMap((f) => f.pts.map(project))).map((q) => q.map(n1).join(' ')).join('L') + 'Z'
+      : visible.filter((f) => Math.abs(area2(f.pts.map(project))) > 1.5).map((f) => pathOf(f.pts)).join('');
+    this.out.push(`<path d="${ink}" fill="${this.p.ink}" stroke="${this.p.ink}" stroke-width="2.4" stroke-linejoin="round"/>`);
     for (const f of visible) {
       const fill = shade(color, light(f.n));
       this.out.push(`<path d="${pathOf(f.pts)}" fill="${fill}" stroke="${fill}" stroke-width=".6" stroke-linejoin="round"/>`);
@@ -184,7 +220,7 @@ class Draw {
     // Back walls first, so a concave outline's walls overlap correctly.
     sides.sort((a, b) => depthOf(a.pts) - depthOf(b.pts));
     // The plane's u×v may point either way relative to w; caps are the ±w faces.
-    this.faces([{ pts: [...bottom].reverse(), n: mul(capN, -1) }, ...sides, { pts: lid, n: capN }], color);
+    this.faces([{ pts: [...bottom].reverse(), n: mul(capN, -1) }, ...sides, { pts: lid, n: capN }], color, isConvex(outline));
   }
 
   /** A box with rounded upright edges; (x, y, z) is its lowest corner. */
@@ -208,7 +244,7 @@ class Draw {
       const out: V3 = [m[0] - c[0], m[1] - c[1], (r - rTop) / h * Math.hypot(m[0] - c[0], m[1] - c[1])];
       return { pts, n: out };
     });
-    this.faces([{ pts: [...lo].reverse(), n: [0, 0, -1] }, ...faces, { pts: hi, n: [0, 0, 1] }], color);
+    this.faces([{ pts: [...lo].reverse(), n: [0, 0, -1] }, ...faces, { pts: hi, n: [0, 0, 1] }], color, true);
   }
 
   /** A shaded ball. */
@@ -277,6 +313,21 @@ function waves(g: Draw, center: V3, color: string, radii = [10, 17, 24], from = 
 
 type Maker = (g: Draw, p: Palette) => void;
 
+/** A cartoon cloud's outline: puffs on a flat bottom, traced around from inside. */
+function cloudOutline(): V2[] {
+  const puffs: [number, number, number][] = [[-0.52, 0.42, 0.32], [-0.1, 0.72, 0.44], [0.38, 0.6, 0.36], [0.66, 0.34, 0.24]];
+  const inside = ([u, v]: V2) => (u >= -0.52 && u <= 0.66 && v >= 0.1 && v <= 0.45) || puffs.some(([x, y, r]) => (u - x) ** 2 + (v - y) ** 2 <= r * r);
+  const c: V2 = [0.04, 0.42];
+  const pts: V2[] = [];
+  for (let a = 0; a < 360; a += 3) {
+    const d: V2 = [Math.cos((a * Math.PI) / 180), Math.sin((a * Math.PI) / 180)];
+    let t = 0;
+    while (inside([c[0] + d[0] * (t + 0.005), c[1] + d[1] * (t + 0.005)]) && t < 2) t += 0.005;
+    pts.push([c[0] + d[0] * t, c[1] + d[1] * t]);
+  }
+  return pts;
+}
+
 /** A window or screen standing upright, facing +y, with its front plane returned. */
 function panel(g: Draw, w: number, h: number, z: number, color: string, y = -0.05, depth = 0.1, r = 0.08): Plane {
   g.prism(left(y), rr(w, h, r, 0, z + h / 2), [0, 1, 0], depth, color);
@@ -302,18 +353,29 @@ const ICONS: Record<string, { name: string; category: string; draw: Maker }> = {
     category: 'Devices',
     draw(g, p) {
       g.shadow(1.9, 1.5, 0, 0.05);
-      const { plane, normal } = leaning([0, -0.62, 0.1], 14);
-      g.prism(plane, rr(1.6, 1.05, 0.08, 0, 0.53), normal, 0.06, p.body);
-      const screen: Plane = { ...plane, o: add(plane.o, mul(normal, 0.062)) };
-      g.decal(screen, rr(1.42, 0.86, 0.05, 0, 0.55), p.navy);
-      g.decal(screen, rr(1.42, 0.14, 0.04, 0, 0.91), p.c);
-      g.decal(screen, rr(0.55, 0.42, 0.05, -0.38, 0.5), p.lite);
-      g.decal(screen, rr(0.6, 0.08, 0.04, 0.3, 0.66), p.lite, 0.8);
-      g.decal(screen, rr(0.45, 0.08, 0.04, 0.23, 0.5), p.lite, 0.55);
-      g.decal(screen, rr(0.55, 0.08, 0.04, 0.28, 0.34), p.lite, 0.55);
-      g.box(-0.8, -0.62, 0, 1.6, 1.3, 0.1, p.body);
-      g.decal(top(0.101), rr(1.34, 0.56, 0.05, 0, -0.22), p.metal);
-      g.decal(top(0.101), rr(0.46, 0.28, 0.05, 0, 0.36), p.metal);
+      const { plane, normal } = leaning([0, -0.6, 0.09], 12);
+      g.prism(plane, rr(1.6, 1.04, 0.09, 0, 0.52), normal, 0.05, p.body);
+      const screen: Plane = { ...plane, o: add(plane.o, mul(normal, 0.052)) };
+      g.decal(screen, rr(1.46, 0.9, 0.05, 0, 0.54), p.navy);
+      g.decal(screen, rr(1.46, 0.13, 0.05, 0, 0.925), p.c);
+      g.decal(screen, rr(0.5, 0.56, 0.05, -0.42, 0.48), p.lite);
+      g.decal(screen, rr(0.66, 0.08, 0.04, 0.27, 0.68), p.lite, 0.85);
+      g.decal(screen, rr(0.5, 0.08, 0.04, 0.19, 0.52), p.lite, 0.55);
+      g.decal(screen, rr(0.6, 0.08, 0.04, 0.24, 0.36), p.lite, 0.55);
+      g.box(-0.8, -0.6, 0, 1.6, 1.28, 0.09, p.body, 0.1);
+      const t = top(0.091);
+      g.decal(t, rr(1.22, 0.05, 0.025, 0, -0.55), p.metal);
+      // Keys: four rows, then a row with the space bar.
+      const key = shade(p.metal, 1.08);
+      g.decal(t, rr(1.36, 0.58, 0.05, 0, -0.2), p.metal);
+      for (let r = 0; r < 4; r++)
+        for (let k = 0; k < 11; k++) g.decal(t, rr(0.1, 0.09, 0.02, -0.59 + k * 0.118, -0.43 + r * 0.11), key);
+      g.decal(t, rr(0.1, 0.09, 0.02, -0.59, 0.01), key);
+      g.decal(t, rr(0.1, 0.09, 0.02, -0.472, 0.01), key);
+      g.decal(t, rr(0.7, 0.09, 0.02, 0, 0.01), key);
+      g.decal(t, rr(0.1, 0.09, 0.02, 0.472, 0.01), key);
+      g.decal(t, rr(0.1, 0.09, 0.02, 0.59, 0.01), key);
+      g.decal(t, rr(0.48, 0.26, 0.05, 0, 0.34), p.metal);
     },
   },
   desktop: {
@@ -363,17 +425,26 @@ const ICONS: Record<string, { name: string; category: string; draw: Maker }> = {
     name: 'Printer',
     category: 'Devices',
     draw(g, p) {
-      g.shadow(1.8, 1.6, 0, 0.1);
-      const { plane, normal } = leaning([0, -0.3, 0.5], 18);
-      g.prism(plane, rr(1.0, 0.6, 0.02, 0, 0.3), normal, 0.03, p.white);
-      g.box(-0.8, -0.6, 0, 1.6, 1.2, 0.55, p.body, 0.14);
-      g.decal(top(0.551), rr(1.2, 0.12, 0.05, 0, -0.35), p.navy);
-      g.decal(top(0.551), rr(0.36, 0.3, 0.06, 0.48, 0.25), p.navy);
-      g.decal(top(0.551), circle(0.05, 0.48, 0.25), p.green);
-      g.decal(left(0.601), rr(1.2, 0.08, 0.04, 0, 0.28), p.deep);
-      g.box(-0.55, 0.6, 0.12, 1.1, 0.32, 0.05, p.metal, 0.04);
-      g.box(-0.42, 0.55, 0.17, 0.84, 0.32, 0.02, p.white, 0.02);
-      g.decal(top(0.191), rr(0.5, 0.05, 0.02, -0.08, 0.72), p.c, 0.8);
+      g.shadow(1.9, 1.7, 0, 0.12);
+      // Paper waiting at the back, leaning out of its slot.
+      const { plane, normal } = leaning([0, -0.36, 0.5], 22);
+      g.prism(plane, rr(0.92, 0.56, 0.02, 0, 0.28), normal, 0.02, p.white);
+      g.box(-0.78, -0.55, 0, 1.56, 1.05, 0.62, p.body, 0.16);
+      const t = top(0.621);
+      g.decal(t, rr(1.08, 0.07, 0.035, 0, -0.36), p.navy);
+      g.decal(t, rr(0.46, 0.32, 0.06, 0.4, 0.14), p.navy);
+      g.decal(t, rr(0.26, 0.18, 0.03, 0.34, 0.14), p.lite);
+      g.decal(t, circle(0.04, 0.56, 0.08), p.c);
+      g.decal(t, circle(0.04, 0.56, 0.2), p.green);
+      const f = left(0.501);
+      g.decal(f, rr(1.1, 0.06, 0.03, 0, 0.3), p.navy);
+      g.decal(f, rr(0.24, 0.05, 0.025, -0.52, 0.5), p.c);
+      // The output tray, with a printed page on it.
+      g.box(-0.52, 0.48, 0.12, 1.04, 0.4, 0.04, p.metal, 0.04);
+      g.box(-0.4, 0.44, 0.16, 0.8, 0.38, 0.012, p.white, 0.01);
+      const sheet = top(0.173);
+      g.decal(sheet, rr(0.36, 0.05, 0.025, -0.14, 0.56), p.c);
+      for (let k = 0; k < 3; k++) g.decal(sheet, rr(k === 2 ? 0.34 : 0.58, 0.035, 0.018, k === 2 ? -0.13 : -0.01, 0.65 + k * 0.06), p.lite);
     },
   },
   camera: {
@@ -520,12 +591,11 @@ const ICONS: Record<string, { name: string; category: string; draw: Maker }> = {
     name: 'Cloud',
     category: 'Network',
     draw(g, p) {
-      g.shadow(1.9, 1.2);
-      g.box(-0.85, -0.45, 0, 1.7, 0.9, 0.36, p.c, 0.44);
-      g.sphere([-0.35, -0.15, 0.55], 0.4, p.c);
-      g.sphere([0.12, -0.3, 0.75], 0.52, p.c);
-      g.sphere([0.55, 0.1, 0.45], 0.36, p.c);
-      g.sphere([-0.05, 0.25, 0.42], 0.34, p.c);
+      g.shadow(1.9, 0.9);
+      const outline = cloudOutline();
+      g.prism(left(-0.18), outline, [0, 1, 0], 0.36, p.c);
+      // A soft highlight on the face.
+      g.decal(left(0.182), outline.map(([u, v]) => [u * 0.8 - 0.02, 0.18 + (v - 0.1) * 0.8] as V2), p.lite, 0.35);
     },
   },
   globe: {
@@ -698,15 +768,27 @@ const ICONS: Record<string, { name: string; category: string; draw: Maker }> = {
     name: 'House',
     category: 'Places',
     draw(g, p) {
-      g.shadow(1.8, 1.6);
-      g.box(-0.68, -0.58, 0, 1.36, 1.16, 0.72, p.body, 0.03);
-      const f = left(0.581);
-      g.decal(f, rr(0.3, 0.5, 0.05, -0.25, 0.25), p.c);
-      g.decal(f, rr(0.3, 0.24, 0.03, 0.3, 0.42), p.lite);
-      g.decal(right(0.681), rr(0.28, 0.24, 0.03, 0, 0.42), p.lite);
-      g.prism({ o: [-0.78, 0, 0], u: [0, 1, 0], v: [0, 0, 1] }, [[-0.72, 0.7], [0.72, 0.7], [0, 1.32]], [1, 0, 0], 1.56, p.c);
-      g.decal({ o: [0.781, 0, 0], u: [0, -1, 0], v: [0, 0, 1] }, [[-0.6, 0.74], [0.6, 0.74], [0, 1.24]], p.body);
-      g.decal({ o: [0.782, 0, 0], u: [0, -1, 0], v: [0, 0, 1] }, circle(0.1, 0, 0.94), p.lite);
+      g.shadow(1.6, 1.9);
+      g.box(-0.6, -0.7, 0, 1.2, 1.4, 0.72, p.body, 0.03);
+      // The attic: a triangle running front to back under the roof.
+      g.prism({ o: [0, -0.7, 0], u: [1, 0, 0], v: [0, 0, 1] }, [[-0.6, 0.72], [0.6, 0.72], [0, 1.18]], [0, 1, 0], 1.4, p.body);
+      // Walls first, so the roof's overhang covers them.
+      const win = (pl: Plane, u: number, v: number) => {
+        g.decal(pl, rr(0.28, 0.26, 0.03, u, v), p.lite);
+        g.line(pl, [[u, v - 0.12], [u, v + 0.12]], p.white, 1.4);
+        g.line(pl, [[u - 0.13, v], [u + 0.13, v]], p.white, 1.4);
+      };
+      const f = left(0.701);
+      g.decal(f, rr(0.28, 0.48, 0.05, 0.22, 0.24), p.deep);
+      g.decal(f, circle(0.025, 0.31, 0.24), p.lite);
+      win(f, -0.26, 0.4);
+      const r = right(0.601);
+      win(r, -0.32, 0.3);
+      win(r, 0.32, 0.3);
+      // The roof: its end profile (a thick chevron resting on the attic) run front to back, with an overhang.
+      const roof: V2[] = [[-0.72, 0.628], [0, 1.18], [0.72, 0.628], [0.72, 0.73], [0, 1.29], [-0.72, 0.73]];
+      g.prism({ o: [0, -0.8, 0], u: [1, 0, 0], v: [0, 0, 1] }, roof, [0, 1, 0], 1.6, p.c);
+      g.box(0.24, -0.5, 1.0, 0.2, 0.2, 0.4, p.deep, 0.02);
     },
   },
   factory: {
