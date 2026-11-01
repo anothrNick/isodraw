@@ -69,11 +69,19 @@ describe('messageSvg', () => {
 });
 
 describe('PNG pictures', () => {
-  it('are twice the picture width, within limits', async () => {
+  it('are up to twice the picture width, smaller when icons would make them slow', async () => {
     const { pngWidth } = await import('./raster');
-    expect(pngWidth('<svg xmlns="x" width="1000" height="10">')).toBe(2000);
-    expect(pngWidth('<svg xmlns="x" width="200" height="10">')).toBe(800);
-    expect(pngWidth('<svg xmlns="x" width="5000" height="10">')).toBe(2400);
+    const svg = (w: number, h: number, icons = 0) => `<svg xmlns="x" width="${w}" height="${h}">` + '<image href="x"/>'.repeat(icons) + '</svg>';
+    expect(pngWidth(svg(500, 300))).toBe(1000);
+    expect(pngWidth(svg(200, 100))).toBe(600);
+    expect(pngWidth(svg(2000, 1200))).toBe(2400);
+    // IsoDraw's own architecture diagram: 13 icons. It took 2 s of CPU at 2400 px, over the limit.
+    const arch = pngWidth(svg(1507, 938, 13));
+    expect(arch).toBeGreaterThan(1200);
+    expect(arch).toBeLessThan(1600);
+    // Many icons: smaller, but never below 600 px.
+    expect(pngWidth(svg(1507, 938, 40))).toBeLessThan(1000);
+    expect(pngWidth(svg(3000, 3000, 200))).toBe(600);
   });
 
   it('rasterize a diagram with the bundled font', async () => {
