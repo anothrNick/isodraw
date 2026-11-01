@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
 	"github.com/anothrNick/isodraw/api/internal/store"
 	"github.com/anothrNick/isodraw/api/internal/testdb"
@@ -38,7 +39,7 @@ func setup(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &fixture{t: t, store: s, h: New(cfg, s, a)}
+	return &fixture{t: t, store: s, h: New(cfg, s, a, blobs.Dir(t.TempDir()))}
 }
 
 // user signs a new user in and returns their session cookie and personal org id.

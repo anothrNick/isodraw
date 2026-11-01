@@ -33,6 +33,10 @@ type Config struct {
 	SessionTTL    time.Duration
 	// WebDir, when set, is a built web app to serve for every path outside /api and /auth.
 	WebDir string
+	// BucketName, when set, is the S3-compatible bucket (Tigris on Fly) for uploaded images,
+	// reached with the usual AWS_* variables. Without it, images are files under ImageDir.
+	BucketName string
+	ImageDir   string
 }
 
 // FromEnv reads the configuration, reporting every missing or invalid setting at once.
@@ -48,6 +52,8 @@ func FromEnv() (Config, error) {
 		OIDCScopes:       strings.Fields(env("OIDC_SCOPES", "openid email profile")),
 		SessionSecret:    os.Getenv("SESSION_SECRET"),
 		WebDir:           os.Getenv("WEB_DIR"),
+		BucketName:       os.Getenv("BUCKET_NAME"),
+		ImageDir:         env("IMAGE_DIR", ".data/images"),
 	}
 	var errs []error
 	ttl, err := time.ParseDuration(env("SESSION_TTL", "720h"))

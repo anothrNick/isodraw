@@ -40,6 +40,18 @@ export interface PreviewLink {
   expiresAt: string;
 }
 
+/** An image uploaded to a workspace, for everyone in it. `url` works without signing in. */
+export interface WorkspaceImage {
+  id: string;
+  orgId: string;
+  name: string;
+  url: string;
+  contentType: string;
+  size: number;
+  uploadedBy: string;
+  createdAt: string;
+}
+
 export interface Member {
   userId: string;
   email: string;
@@ -97,10 +109,12 @@ export function signIn(): never {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+  // A File goes up as its own bytes, typed by its Content-Type; anything else as JSON.
+  const raw = body instanceof Blob;
   const res = await fetch(path, {
     method,
-    headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    headers: { ...(raw ? { 'Content-Type': body.type } : body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
+    body: raw ? body : body !== undefined ? JSON.stringify(body) : undefined,
     credentials: 'same-origin',
   });
   if (res.status === 204) return undefined as T;
@@ -139,6 +153,13 @@ export const api = {
   previewLink: (id: string, level: string[]) =>
     request<PreviewLink>('GET', `/api/diagrams/${id}/preview?${new URLSearchParams(level.length ? { level: level.join('/') } : {})}`),
   signOut: () => request<void>('POST', '/auth/logout'),
+
+  /** The workspace's shared images, for the editor's Images tab. */
+  images: (orgId: string) => request<{ images: WorkspaceImage[] }>('GET', `/api/orgs/${orgId}/images`),
+  uploadImage: (orgId: string, file: File) =>
+    request<WorkspaceImage>('POST', `/api/orgs/${orgId}/images?${new URLSearchParams({ name: file.name.replace(/\.[^.]+$/, '') })}`, file),
+  /** Takes an image off the workspace's list; diagrams that use it keep showing it. */
+  removeImage: (orgId: string, id: string) => request<void>('DELETE', `/api/orgs/${orgId}/images/${id}`),
 
   createTeam: (name: string) => request<Org>('POST', '/api/orgs', { name }),
   renameOrg: (orgId: string, name: string) => request<Org>('PATCH', `/api/orgs/${orgId}`, { name }),

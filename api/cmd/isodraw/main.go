@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
 	"github.com/anothrNick/isodraw/api/internal/db"
 	"github.com/anothrNick/isodraw/api/internal/httpapi"
@@ -67,9 +68,15 @@ func serve(ctx context.Context, cfg config.Config) error {
 	if err != nil {
 		return err
 	}
+	files := blobs.Dir(cfg.ImageDir)
+	if cfg.BucketName != "" {
+		if files, err = blobs.Bucket(ctx, cfg.BucketName); err != nil {
+			return err
+		}
+	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, s, a),
+		Handler:           httpapi.New(cfg, s, a, files),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)

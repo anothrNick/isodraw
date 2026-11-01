@@ -12,8 +12,8 @@ import (
 	"github.com/anothrNick/isodraw/api/internal/store"
 )
 
-// MaxContentBytes caps a diagram's JSON. Uploaded images will move out of the
-// content into asset storage, so real diagrams stay far below this.
+// MaxContentBytes caps a diagram's JSON. Uploaded images live in workspace image
+// storage (images.go) and diagrams link to them, so real diagrams stay far below this.
 const MaxContentBytes = 5 << 20
 
 const maxTitle = 200

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { IsoDiagramEditor, type LevelPath } from 'isodraw';
 import { ApiError, api, type Org, type PreviewLink, type StoredDiagram } from './api';
 import { useAutosave, type SaveStatus } from './autosave';
+import { useWorkspaceImages } from './workspaceImages';
 import { Loading, Message } from './App';
 import { docsHashForLevel, navigate } from './router';
 import { useTheme } from './theme';
@@ -57,6 +58,7 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
   const { resolved } = useTheme();
   const [title, setTitle] = useState(initial.title);
   const [level, setLevel] = useState<LevelPath>(readLevel);
+  const images = useWorkspaceImages(org.id);
 
   useEffect(() => {
     const on = () => {
@@ -141,6 +143,10 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
         level={level}
         onLevelChange={changeLevel}
         theme={resolved}
+        // The Images tab is the workspace's: uploads are shared with everyone in it.
+        userIcons={images.icons}
+        onUserIconsChange={images.change}
+        onUploadImages={images.upload}
         // The top bar links to the docs page; writing docs happens in the sidebar's Docs tab.
         docsButton={false}
         // The library's own styles round and border the editor; full-bleed under the app bar, it needs neither.

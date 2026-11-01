@@ -34,9 +34,14 @@ export interface IsoDiagramEditorProps {
   azureIcons?: boolean;
   /** Offer the Lucide icons, loaded from the jsDelivr CDN when the tab is first opened (default true). */
   lucideIcons?: boolean;
-  /** Icons the user imported; persisted by the host if desired. */
+  /** Icons the user imported; persisted by the host if desired. Removing one from the Images tab drops it from this list. */
   userIcons?: IconDef[];
   onUserIconsChange?: (icons: IconDef[]) => void;
+  /**
+   * Store uploaded image files somewhere (a server, say) and return them as icons
+   * to add to userIcons. Without it, uploads become data URLs inside the diagram.
+   */
+  onUploadImages?: (files: File[]) => Promise<IconDef[]>;
   readOnly?: boolean;
   /** When to show doc markers on documented items (default: on hover or selection). */
   docBadges?: 'hover' | 'always' | 'never';
@@ -801,11 +806,22 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     }
   };
 
-  const importImages = async (files: FileList | File[]) => {
-    const added: IconDef[] = [];
-    for (const f of Array.from(files)) {
-      if (!f.type.startsWith('image/')) continue;
-      added.push({ id: uid('img'), name: f.name.replace(/\.[^.]+$/, ''), src: await readFileAsDataUrl(f), category: 'Imported' });
+  const importImages = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    let added: IconDef[];
+    if (props.onUploadImages) {
+      setToast(`Uploading ${files.length} image${files.length > 1 ? 's' : ''}…`);
+      try {
+        added = await props.onUploadImages(files);
+      } catch (err) {
+        setToast(`Couldn't upload: ${(err as Error).message}`);
+        return;
+      }
+    } else {
+      added = await Promise.all(
+        files.map(async (f) => ({ id: uid('img'), name: f.name.replace(/\.[^.]+$/, ''), src: await readFileAsDataUrl(f), category: 'Imported' })),
+      );
     }
     if (!added.length) return;
     setUserIcons([...userIcons, ...added]);
@@ -1143,20 +1159,40 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                     <div key={cat}>
                       {cat && <div className="isd-section-title">{cat}</div>}
                       <div className="isd-icon-grid">
-                        {icons.map((i) => (
-                          <button
-                            key={i.id}
-                            type="button"
-                            className="isd-icon-tile"
-                            title={i.name}
-                            draggable
-                            onDragStart={dragStart({ type: 'icon', src: i.src, name: i.name })}
-                            onClick={() => placePayload({ type: 'icon', src: i.src, name: i.name }, viewCenter())}
-                          >
-                            <img src={imageHref(i.src)} alt="" loading="lazy" draggable={false} />
-                            <span>{i.name.replace(/^(Amazon|AWS|Azure|Google Cloud) /, '')}</span>
-                          </button>
-                        ))}
+                        {icons.map((i) => {
+                          const tile = (
+                            <button
+                              key={i.id}
+                              type="button"
+                              className="isd-icon-tile"
+                              title={i.name}
+                              draggable
+                              onDragStart={dragStart({ type: 'icon', src: i.src, name: i.name })}
+                              onClick={() => placePayload({ type: 'icon', src: i.src, name: i.name }, viewCenter())}
+                            >
+                              <img src={imageHref(i.src)} alt="" loading="lazy" draggable={false} />
+                              <span>{i.name.replace(/^(Amazon|AWS|Azure|Google Cloud) /, '')}</span>
+                            </button>
+                          );
+                          // The user's own images can be taken off the tab; ones only found in the diagram can't.
+                          if (paletteTab !== 'mine' || !userIcons.some((u) => u.id === i.id)) return tile;
+                          return (
+                            <div key={i.id} className="isd-icon-tile-wrap">
+                              {tile}
+                              <button
+                                type="button"
+                                className="isd-icon-remove"
+                                title={`Remove ${i.name} from Images`}
+                                aria-label={`Remove ${i.name} from Images`}
+                                onClick={() => {
+                                  if (window.confirm(`Remove "${i.name}" from Images? Diagrams that use it keep it.`)) setUserIcons(userIcons.filter((u) => u.id !== i.id));
+                                }}
+                              >
+                                <Icon name="close" size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

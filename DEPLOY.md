@@ -47,7 +47,8 @@ fly apps create isodraw-api
 fly postgres create --name isodraw-db --region iad --initial-cluster-size 1 --vm-size shared-cpu-1x --volume-size 1
 fly postgres attach isodraw-db -a isodraw-api --superuser=false
 
-# Object storage for uploaded images (sets AWS_* and BUCKET_NAME). Used once image storage lands.
+# Object storage for workspace images (sets AWS_* and BUCKET_NAME). Without it, the API keeps
+# images as files under IMAGE_DIR, which is lost when a Fly machine is replaced.
 fly storage create -a isodraw-api
 
 # Sign-in and sessions.

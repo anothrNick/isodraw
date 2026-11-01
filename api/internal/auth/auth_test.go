@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
 	"github.com/anothrNick/isodraw/api/internal/httpapi"
 	"github.com/anothrNick/isodraw/api/internal/store"
@@ -55,7 +56,7 @@ func server(t *testing.T, issuer string) (*httptest.Server, *store.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(httpapi.New(cfg, s, a))
+	srv := httptest.NewServer(httpapi.New(cfg, s, a, blobs.Dir(t.TempDir())))
 	t.Cleanup(srv.Close)
 	return srv, s
 }

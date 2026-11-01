@@ -39,7 +39,10 @@ export const onRequestGet = async ({ request, env, waitUntil }: PagesContext): P
   const hit = await cache.match(request);
   if (hit) return hit;
   // Icons come from public CDNs; keep them at Cloudflare's edge for a day.
-  const getImage = (u: string) => fetch(u, { cf: { cacheEverything: true, cacheTtl: 86400 } } as RequestInit);
+  // Workspace images (this site's /i/ links) are fetched from the API directly.
+  const own = `${new URL(request.url).origin}/i/`;
+  const getImage = (u: string) =>
+    fetch(u.startsWith(own) ? new URL(new URL(u).pathname, env.API_ORIGIN).href : u, { cf: { cacheEverything: true, cacheTtl: 86400 } } as RequestInit);
   const out = await previewImage(new URL(request.url), env.API_ORIGIN, {
     getImage,
     toPng,
