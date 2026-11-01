@@ -8,4 +8,7 @@ export function previewSvg(
   apiOrigin: string,
   getImage?: (url: string) => Promise<Response>,
 ): Promise<{ status: number; svg: string; cacheable: boolean }>;
-export function previewHeaders(cacheable: boolean): Record<string, string>;
+export function previewHeaders(cacheable: boolean, type?: 'svg' | 'png'): Record<string, string>;
+export function wantsPng(url: URL): boolean;
+export function pngWidth(svg: string): number;
+export function rasterizer(wasm: WebAssembly.Module | ArrayBuffer | Uint8Array, fonts: Uint8Array[]): (svg: string, width?: number) => Promise<Uint8Array>;

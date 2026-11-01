@@ -1,2 +1,4 @@
 functions-lib/preview.gen.js
 functions-lib/mcp.gen.js
+functions-lib/resvg.wasm
+functions-lib/inter-*.bin

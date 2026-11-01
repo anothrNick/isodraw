@@ -67,3 +67,26 @@ describe('messageSvg', () => {
     expect(messageSvg('Expired <link>', 'a & b')).toContain('Expired &lt;link&gt;');
   });
 });
+
+describe('PNG pictures', () => {
+  it('are twice the picture width, within limits', async () => {
+    const { pngWidth } = await import('./raster');
+    expect(pngWidth('<svg xmlns="x" width="1000" height="10">')).toBe(2000);
+    expect(pngWidth('<svg xmlns="x" width="200" height="10">')).toBe(800);
+    expect(pngWidth('<svg xmlns="x" width="5000" height="10">')).toBe(2400);
+  });
+
+  it('rasterize a diagram with the bundled font', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { createRequire } = await import('node:module');
+    const { rasterizer } = await import('./raster');
+    const require = createRequire(import.meta.url);
+    const font = (f: string) => readFileSync(require.resolve(`@expo-google-fonts/inter/${f}`));
+    const toPng = rasterizer(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')), [font('600SemiBold/Inter_600SemiBold.ttf')]);
+    const svg = renderSvg(diagram, { title: 'Shop' });
+    const png = await toPng(svg, 400);
+    expect([...png.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    // The PNG's width (big-endian, bytes 16–19) is what was asked for.
+    expect(new DataView(png.buffer, png.byteOffset).getUint32(16)).toBe(400);
+  });
+});

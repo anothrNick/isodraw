@@ -95,7 +95,9 @@ The point of a visual product is seeing it, so every write ends with a picture.
   - The consent page (`/connect`) shares its workspace, access and expiry controls with the CLI's sign-in page.
   - Tested end to end with the MCP SDK's own OAuth client (discover, register, consent, exchange, tools over HTTP), in Cloudflare's runtime with `wrangler pages dev`, and in Go and TypeScript unit tests.
 - **Decided:** one workspace per connection, chosen at consent, defaulting to read and write for 90 days. No refresh tokens for now: the access token lasts as long as the person chose, and the app asks them to connect again after that.
-- **Next:** deploy (API migration, then web), connect the live site in Claude and ChatGPT and tune tool descriptions on real tasks; then phase 3, pictures in chat (PNG).
+- **Deployed (phase 2)** and used for real from Claude Code: listing, describing and creating diagrams through the connector. It showed that chat apps don't display the SVG pictures, and that automatic layout needed work for levels with areas (fixed).
+- **Done (phase 3, pictures in chat):** preview links also come as PNG (`/p/{id}.png`, resvg in WebAssembly with Inter), and tools that change a diagram, and `preview_diagram`, return the PNG as an image in the result as well as Markdown linking to the editor.
+- **Next:** check how Claude and ChatGPT show the images; the interactive view in chat (MCP Apps); tune tool descriptions on real tasks.
 
 ## Phases
 

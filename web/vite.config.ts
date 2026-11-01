@@ -1,6 +1,8 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 // The platform app. In development the API runs on :8080 and this server
@@ -9,8 +11,12 @@ import { fileURLToPath } from 'node:url';
 // it hot-reload here too.
 const API = process.env.ISODRAW_API ?? 'http://localhost:8080';
 
-// In production a Pages Function draws preview links' pictures (/p/{id}.svg);
+// In production a Pages Function draws preview links' pictures (/p/{id}.svg and .png);
 // here the dev server does, with the same code.
+const require = createRequire(import.meta.url);
+const FONTS = ['400Regular/Inter_400Regular.ttf', '600SemiBold/Inter_600SemiBold.ttf', '700Bold/Inter_700Bold.ttf'];
+let toPng: ((svg: string) => Promise<Uint8Array>) | undefined;
+
 function previews(): Plugin {
   return {
     name: 'isodraw-previews',
@@ -18,9 +24,16 @@ function previews(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         if (req.method !== 'GET' || !req.url?.startsWith('/p/')) return next();
         try {
-          const { previewSvg, previewHeaders } = await server.ssrLoadModule('/preview/render.ts');
+          const { previewSvg, previewHeaders, rasterizer, wantsPng } = await server.ssrLoadModule('/preview/render.ts');
           const url = new URL(req.url, `http://${req.headers.host}`);
           const out = await previewSvg(url, API);
+          if (wantsPng(url)) {
+            toPng ??= rasterizer(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')), FONTS.map((f) => readFileSync(require.resolve(`@expo-google-fonts/inter/${f}`))));
+            const png: Uint8Array = await toPng(out.svg);
+            res.writeHead(out.status, previewHeaders(out.cacheable, 'png'));
+            res.end(Buffer.from(png));
+            return;
+          }
           res.writeHead(out.status, previewHeaders(out.cacheable));
           res.end(out.svg);
         } catch (e) {

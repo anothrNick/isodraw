@@ -38,6 +38,14 @@ export interface StoredDiagram extends DiagramMeta {
   content: Diagram;
 }
 
+export interface PreviewLinks {
+  svg: string;
+  png: string;
+  url: string;
+  title: string;
+  expiresAt: string;
+}
+
 export class Client {
   constructor(
     readonly server: string,
@@ -132,6 +140,16 @@ export class Client {
       }
     }
     throw new CliError('The diagram kept changing while saving. Try again.', 3);
+  }
+
+  /** Signed picture links for a diagram (or one level): SVG, PNG, and the editor link. */
+  async preview(id: string, level: string[] = [], ttl?: string): Promise<PreviewLinks> {
+    const q = new URLSearchParams();
+    if (level.length) q.set('level', level.join('/'));
+    if (ttl) q.set('ttl', ttl);
+    const p = await this.request<Omit<PreviewLinks, 'png'> & { png?: string }>('GET', `/api/diagrams/${id}/preview?${q}`);
+    // Older APIs only answer with the SVG link; the PNG is the same link with another extension.
+    return { ...p, png: p.png ?? p.svg.replace('.svg?', '.png?') };
   }
 
   rename = async (ref: string, title: string) => this.request<DiagramMeta>('PATCH', `/api/diagrams/${(await this.resolve(ref)).id}`, { title });
