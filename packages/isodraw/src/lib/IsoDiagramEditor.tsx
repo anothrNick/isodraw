@@ -6,7 +6,8 @@ import { exportJson, exportPng, exportSvg, downloadBlob, readFileAsDataUrl } fro
 import { Projector, type Pt, footprint, isFlat, shade, uid } from './geometry';
 import { endMarkerOf, lineStyleOf, startMarkerOf } from './routing';
 import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
-import { loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary } from './icons';
+import { loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary } from './icons';
+import { imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevel, markMoved, movesItem } from './layout';
 import { canHaveDetail, detailSize, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
@@ -31,6 +32,8 @@ export interface IsoDiagramEditorProps {
   gcpIcons?: boolean;
   /** Offer Microsoft's Azure architecture icons, loaded from the jsDelivr CDN when the tab is first opened (default true). */
   azureIcons?: boolean;
+  /** Offer the Lucide icons, loaded from the jsDelivr CDN when the tab is first opened (default true). */
+  lucideIcons?: boolean;
   /** Icons the user imported; persisted by the host if desired. */
   userIcons?: IconDef[];
   onUserIconsChange?: (icons: IconDef[]) => void;
@@ -75,14 +78,17 @@ const HISTORY_LIMIT = 200;
 /** Most icons the palette lists at once; images load lazily as they scroll into view. */
 const ICON_LIMIT = 1000;
 
-type CloudId = 'aws' | 'gcp' | 'azure';
+type CloudId = 'aws' | 'gcp' | 'azure' | 'lucide';
 type CloudLib = { status: 'loading' | 'ready' | 'error'; lib?: IconLibrary; error?: string };
-/** Built-in cloud icon sets, in palette tab order. */
+/** Built-in icon sets loaded from the CDN, in palette tab order. */
 const CLOUDS: { id: CloudId; name: string; load: () => Promise<IconLibrary> }[] = [
   { id: 'aws', name: 'AWS', load: () => loadAwsIconLibrary() },
   { id: 'gcp', name: 'GCP', load: () => loadGcpIconLibrary() },
   { id: 'azure', name: 'Azure', load: () => loadAzureIconLibrary() },
+  { id: 'lucide', name: 'Lucide', load: () => loadLucideIconLibrary() },
 ];
+/** IsoDraw's own isometric icons: drawn in code, so always there. */
+const ISO_LIBRARY = isoIconLibrary();
 
 /** Side panel widths. Today's sizes are the minimums; dragging a panel's inner border widens it. */
 /** The sidebar has one width, whichever tab is showing. */
@@ -115,7 +121,7 @@ interface PalettePayload {
 }
 
 export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
-  const { readOnly, awsIcons = true, gcpIcons = true, azureIcons = true } = props;
+  const { readOnly, awsIcons = true, gcpIcons = true, azureIcons = true, lucideIcons = true } = props;
   const theme = useResolvedTheme(props.theme);
   const [hist, setHist] = useState<History>(() => ({
     d: liftEmbeds(props.value ?? props.defaultValue ?? emptyDiagram()),
@@ -193,7 +199,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   }, [hist.d]);
 
   // Cloud icon sets load the first time their tab is opened (AWS, the default set, loads right away).
-  const enabledClouds = CLOUDS.filter((c) => ({ aws: awsIcons, gcp: gcpIcons, azure: azureIcons })[c.id]);
+  const enabledClouds = CLOUDS.filter((c) => ({ aws: awsIcons, gcp: gcpIcons, azure: azureIcons, lucide: lucideIcons })[c.id]);
   const loadCloud = useCallback((id: CloudId) => {
     const cloud = CLOUDS.find((c) => c.id === id)!;
     setCloudLibs((cur) => ({ ...cur, [id]: { status: 'loading' } }));
@@ -766,6 +772,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
   // ----- palette -----
   const libraries: IconLibrary[] = [
+    ISO_LIBRARY,
     ...enabledClouds.map((c) => cloudLibs[c.id]?.lib ?? { id: c.id, name: c.name, icons: [] }),
     ...(props.iconLibraries ?? []),
     { id: 'mine', name: 'My images', icons: userIcons },
@@ -1094,7 +1101,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                             onDragStart={dragStart({ type: 'icon', src: i.src, name: i.name })}
                             onClick={() => placePayload({ type: 'icon', src: i.src, name: i.name }, viewCenter())}
                           >
-                            <img src={i.src} alt="" loading="lazy" draggable={false} />
+                            <img src={imageHref(i.src)} alt="" loading="lazy" draggable={false} />
                             <span>{i.name.replace(/^(Amazon|AWS|Azure|Google Cloud) /, '')}</span>
                           </button>
                         ))}
@@ -1529,22 +1536,25 @@ function NodeInspector({
           </select>
         </Field>
       )}
-      {node.kind !== 'image' || node.imageStyle === 'tile' ? (
-        <Field label={node.kind === 'image' ? 'Tile color' : 'Color'}>
+      {node.kind !== 'image' || node.imageStyle === 'tile' || isIsoIcon(node.src) ? (
+        <Field label={node.kind === 'image' && !isIsoIcon(node.src) ? 'Tile color' : 'Color'}>
           <Swatches value={node.color} onChange={(color) => onChange({ color })} />
         </Field>
       ) : null}
       {node.kind === 'image' && (
         <>
-          <Field label="Style">
-            <select className="isd-input" value={node.imageStyle ?? 'tile'} onChange={(e) => onChange({ imageStyle: e.target.value as DiagramNode['imageStyle'] })}>
-              <option value="tile">Tile (icon on a block)</option>
-              <option value="flat">Flat (on the ground)</option>
-              <option value="standing">Standing (billboard)</option>
-            </select>
-          </Field>
+          {/* Isometric icons are objects already; the styles are for flat pictures. */}
+          {!isIsoIcon(node.src) && (
+            <Field label="Style">
+              <select className="isd-input" value={node.imageStyle ?? 'tile'} onChange={(e) => onChange({ imageStyle: e.target.value as DiagramNode['imageStyle'] })}>
+                <option value="tile">Tile (icon on a block)</option>
+                <option value="flat">Flat (on the ground)</option>
+                <option value="standing">Standing (billboard)</option>
+              </select>
+            </Field>
+          )}
           <div className="isd-image-preview">
-            <img src={node.src} alt="" />
+            <img src={imageHref(node.src, node.color)} alt="" />
           </div>
         </>
       )}

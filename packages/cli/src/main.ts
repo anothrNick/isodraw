@@ -4,7 +4,7 @@ import { CliError, Client, type DiagramMeta } from './client';
 import { clearConfig, configPath, loadConfig, saveConfig } from './config';
 import { describeText, outline } from './describe';
 import { GUIDE } from './guide';
-import { exportDocsMarkdown, iconTypes, importTerraform, isTerraformJson, layoutLevel, levelAt, parseDiagram, withLevel } from './lib';
+import { exportDocsMarkdown, iconTypes, importTerraform, isTerraformJson, isoIconLibrary, layoutLevel, levelAt, parseDiagram, withLevel } from './lib';
 import { browserLogin } from './login';
 import { applyOps, findNode, OpError, parseLevel, resolveLevel, type Op } from './ops';
 
@@ -322,7 +322,9 @@ async function main() {
 
     case 'icons': {
       const q = (sub ?? '').toLowerCase();
-      const list = iconTypes().filter((i) => !q || i.type.includes(q) || i.what.toLowerCase().includes(q));
+      // IsoDraw's own isometric icons first, then the cloud services by Terraform type.
+      const iso = isoIconLibrary().icons.map((i) => ({ type: i.src, what: `${i.name} (isometric icon, ${i.category})` }));
+      const list = [...iso, ...iconTypes()].filter((i) => !q || i.type.includes(q) || i.what.toLowerCase().includes(q));
       return out(list, list.length ? list.map((i) => `${i.type.padEnd(48)} ${i.what}`).join('\n') : `No icons match "${q}".`);
     }
   }

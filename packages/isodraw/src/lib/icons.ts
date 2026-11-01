@@ -186,3 +186,27 @@ export function cloudIconUrl(ref: string): string | null {
   if (lib === 'gcp' && key.startsWith('core/')) return `${GCP_CORE}/icons/${key.slice(5)}.svg`;
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Lucide
+// ---------------------------------------------------------------------------
+
+/** Lucide, the icon set the IsoDraw app itself uses (ISC), as Iconify JSON. */
+const LUCIDE = 'https://cdn.jsdelivr.net/npm/@iconify-json/lucide@1.2.148/icons.json';
+/** Lucide icons draw with `currentColor`, which is black inside an <img>; draw them in the app's blue. */
+const LUCIDE_COLOR = '#2563eb';
+
+/** Every Lucide icon, loaded from the jsDelivr CDN, alphabetically. */
+export async function loadLucideIconLibrary(opts: { signal?: AbortSignal } = {}): Promise<IconLibrary> {
+  const res = await fetch(LUCIDE, { signal: opts.signal });
+  if (!res.ok) throw new Error(`Could not load Lucide icons (${res.status})`);
+  const set = (await res.json()) as IconifyJson;
+  const icons: IconDef[] = Object.entries(set.icons)
+    .map(([key, icon]) => ({
+      id: `lucide:${key}`,
+      name: titleCase(key, {}),
+      src: iconifySvg({ ...icon, body: icon.body.replace(/currentColor/g, LUCIDE_COLOR) }, set),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { id: 'lucide', name: 'Lucide', icons };
+}
