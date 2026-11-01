@@ -27,9 +27,14 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
+	lifetime, err := s.store.HasLifetime(r.Context(), u.ID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
 	t := auth.Token(r.Context())
 	if t == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs})
+		writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs, "lifetime": lifetime})
 		return
 	}
 	// A token sees only its own organization, with the role it acts as there.
@@ -42,7 +47,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 			visible = append(visible, o)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": visible, "token": t})
+	writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": visible, "token": t, "lifetime": lifetime})
 }
 
 // roleIn is the role the request acts with in an organization: the user's
@@ -122,6 +127,9 @@ func (s *Server) diagramAccess(w http.ResponseWriter, r *http.Request, edit bool
 		writeError(w, http.StatusForbidden, "forbidden", "You can view this diagram but not change it.")
 		return d, false
 	}
+	if edit && !s.editable(w, r, d.OrgID) {
+		return d, false
+	}
 	return d, true
 }
 
@@ -173,6 +181,9 @@ func (s *Server) createDiagram(w http.ResponseWriter, r *http.Request) {
 		content = emptyContent
 	} else if msg := checkContent(content); msg != "" {
 		writeError(w, http.StatusBadRequest, "invalid_content", msg)
+		return
+	}
+	if !s.roomForDiagram(w, r, org) {
 		return
 	}
 	d, err := s.store.CreateDiagram(r.Context(), org, auth.User(r.Context()).ID, title, content)

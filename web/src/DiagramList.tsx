@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, Box, LayoutGrid, List, MoreHorizontal, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, type DiagramMeta, type Org } from './api';
+import { api, type DiagramMeta, type Org, type Plan } from './api';
 import { NewDiagramDialog } from './NewDiagramDialog';
 import { linkProps, navigate } from './router';
 import { useTheme } from './theme';
@@ -51,6 +51,7 @@ export function DiagramList({ org }: { org: Org }) {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<DiagramMeta | null>(null);
   const [view, setView] = useView();
+  const [plan, setPlan] = useState<Plan | null>(null);
   const { resolved } = useTheme();
 
   useEffect(() => {
@@ -58,7 +59,13 @@ export function DiagramList({ org }: { org: Org }) {
       .listDiagrams(org.id)
       .then((r) => setDiagrams(r.diagrams))
       .catch((e: Error) => setError(e.message));
+    // Only for the notes below; the API enforces the limits either way.
+    api.plan(org.id).then(setPlan, () => setPlan(null));
   }, [org.id]);
+  const limit = plan?.diagramLimit ?? 0;
+  const used = diagrams?.length ?? plan?.diagrams ?? 0;
+  const full = limit > 0 && used >= limit;
+  const readOnly = plan?.editable === false;
 
   const remove = async (d: DiagramMeta) => {
     try {
@@ -108,7 +115,7 @@ export function DiagramList({ org }: { org: Org }) {
                 </a>
               </Button>
             )}
-            {canEdit(org) && (
+            {canEdit(org) && !readOnly && (
               <Button onClick={() => setCreating(true)}>
                 <Plus />
                 New diagram
@@ -117,6 +124,18 @@ export function DiagramList({ org }: { org: Org }) {
           </div>
         </div>
 
+        {limit > 0 && (
+          <p className={cn('-mt-3 mb-6 text-sm', full ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
+            {full
+              ? `You're using all ${limit} diagrams of the free plan. Export one you're not working on (Download, then JSON) and delete it to make room; you can import it again any time.`
+              : `${used} of ${limit} diagrams on the free plan. Every feature is included.`}
+          </p>
+        )}
+        {readOnly && (
+          <p className="-mt-3 mb-6 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            This team is read-only because none of its owners has lifetime access any more. Everything is still here to view and export.
+          </p>
+        )}
         {error && <p className="text-destructive">{error}</p>}
 
         {!diagrams && !error && view === 'grid' ? (

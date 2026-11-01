@@ -15,6 +15,7 @@ import (
 	"github.com/anothrNick/isodraw/api/internal/config"
 	"github.com/anothrNick/isodraw/api/internal/store"
 	"github.com/anothrNick/isodraw/api/internal/testdb"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const appOrigin = "http://localhost:5190"
@@ -22,6 +23,7 @@ const appOrigin = "http://localhost:5190"
 type fixture struct {
 	t     *testing.T
 	store *store.Store
+	pool  *pgxpool.Pool
 	h     http.Handler
 }
 
@@ -39,7 +41,7 @@ func setup(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &fixture{t: t, store: s, h: New(cfg, s, a, blobs.Dir(t.TempDir()))}
+	return &fixture{t: t, store: s, pool: pool, h: New(cfg, s, a, blobs.Dir(t.TempDir()))}
 }
 
 // user signs a new user in and returns their session cookie and personal org id.

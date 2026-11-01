@@ -4,6 +4,8 @@ import type { Org, User } from './api';
 export interface Session {
   user: User;
   orgs: Org[];
+  /** Lifetime access: no diagram limit in the personal workspace, and team workspaces. */
+  lifetime: boolean;
   /** Fetch the user's organizations again, after joining or creating one. */
   reload: () => Promise<Session>;
 }
