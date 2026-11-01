@@ -15,9 +15,9 @@ import {
   shade,
   solidFaces,
 } from './geometry';
-import { depthMap } from './containers';
+import { depthMap, isContainer } from './containers';
 import { ISO_ICON_BOX, imageHref, isIsoIcon, isoIconPlacement, isoIconScale } from './isoIcons';
-import { INK, themedDiagram, useTheme } from './theme';
+import { CANVAS_BG, INK, themedDiagram, useTheme } from './theme';
 import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget, LineStyle, MarkerKind } from './types';
 
@@ -629,6 +629,69 @@ export function SceneContent({
   );
 }
 
+const SPOT = '#2563eb';
+
+/**
+ * Picks one component out of a diagram, as on its docs page: the rest dims, and
+ * the component and its connections are drawn again on top with a glow
+ * beneath and a soft shadow. An area keeps its contents bright and gets a
+ * glowing border instead.
+ */
+function Spotlight({ diagram: source, node: raw, proj, bounds, idPrefix }: { diagram: Diagram; node: DiagramNode; proj: Projector; bounds: { x: number; y: number; w: number; h: number }; idPrefix: string }) {
+  const theme = useTheme();
+  const diagram = useMemo(() => themedDiagram(source, theme), [source, theme]);
+  const node = diagram.nodes.find((n) => n.id === raw.id) ?? raw;
+  const base = footprint(node).map((q) => proj.project(q.x, q.y, node.z));
+  const glow = `${idPrefix}-spot-glow`;
+  const shadow = `${idPrefix}-spot-shadow`;
+  const defs = (
+    <defs>
+      <filter id={glow} x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="9" />
+      </filter>
+      <filter id={shadow} x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="5" stdDeviation="5" floodColor={SPOT} floodOpacity={theme === 'dark' ? 0.55 : 0.35} />
+      </filter>
+    </defs>
+  );
+  if (isContainer(node)) {
+    return (
+      <g pointerEvents="none">
+        {defs}
+        <polygon points={pointsAttr(base)} fill="none" stroke={SPOT} strokeWidth={8} strokeOpacity={0.45} filter={`url(#${glow})`} />
+        <polygon points={pointsAttr(base)} fill="none" stroke={SPOT} strokeWidth={2.5} strokeLinejoin="round" />
+      </g>
+    );
+  }
+  // A halo a little larger than the footprint, blurred into a glow on the ground.
+  const c = proj.project(center(node).x, center(node).y, node.z);
+  const halo = base.map((p) => ({ x: c.x + (p.x - c.x) * 1.35, y: c.y + (p.y - c.y) * 1.35 }));
+  const byId = new Map(diagram.nodes.map((n) => [n.id, n]));
+  const edges = diagram.edges.filter((e) => e.from === node.id || e.to === node.id);
+  return (
+    <>
+      {defs}
+      <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill={CANVAS_BG[theme]} opacity={0.62} pointerEvents="none" />
+      <polygon points={pointsAttr(halo)} fill={SPOT} opacity={theme === 'dark' ? 0.6 : 0.45} filter={`url(#${glow})`} pointerEvents="none" />
+      <polygon points={pointsAttr(base)} fill={SPOT} fillOpacity={0.12} stroke={SPOT} strokeWidth={2} strokeLinejoin="round" pointerEvents="none" />
+      {edges.map((e) => {
+        const a = byId.get(e.from);
+        const b = byId.get(e.to);
+        return a && b ? <EdgeShape key={e.id} edge={e} a={a} b={b} proj={proj} idPrefix={`${idPrefix}-spot`} animate={false} /> : null;
+      })}
+      <g filter={`url(#${shadow})`}>
+        <NodeShape node={node} proj={proj} idPrefix={`${idPrefix}-spot`} />
+      </g>
+      <Label node={node} proj={proj} />
+      {edges.map((e) => {
+        const a = byId.get(e.from);
+        const b = byId.get(e.to);
+        return a && b ? <EdgeLabel key={`l-${e.id}`} edge={e} a={a} b={b} proj={proj} /> : null;
+      })}
+    </>
+  );
+}
+
 /** Small preview used by the shape palette. */
 export function ShapePreview({ node, size = 44 }: { node: DiagramNode; size?: number }) {
   const proj = new Projector('3d', 0);
@@ -723,16 +786,7 @@ export function StaticDiagram({
       onClick={onClick}
     >
       <SceneContent diagram={diagram} proj={proj} idPrefix={idPrefix} animate={animate} />
-      {hl && (
-        <polygon
-          points={pointsAttr(footprint(hl).map((q) => proj.project(q.x, q.y, hl.z)))}
-          fill="rgba(37,99,235,0.1)"
-          stroke="#2563eb"
-          strokeWidth={2}
-          strokeDasharray="6 4"
-          pointerEvents="none"
-        />
-      )}
+      {hl && <Spotlight diagram={diagram} node={hl} proj={proj} bounds={b} idPrefix={idPrefix} />}
       {focus && <TargetHighlight target={focus} diagram={diagram} proj={proj} />}
     </svg>
   );
