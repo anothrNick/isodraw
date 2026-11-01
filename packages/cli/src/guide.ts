@@ -24,8 +24,10 @@ label is ambiguous the error lists the ids to use.
 
 ## Change
 - \`isodraw nodes add <diagram> --label "Redis" [--kind cylinder] [--icon aws_elasticache_cluster] [--in <area>] [--near <item>] [--doc-file doc.md]\`
-  The CLI places it; never pass coordinates. \`--icon\` takes a Terraform
-  resource type (\`isodraw icons <search>\` lists them) or an image URL.
+  The CLI places it; never pass coordinates. \`--icon\` takes one of
+  IsoDraw's isometric icons (\`isodraw:laptop\`, \`isodraw:database\`; they
+  take the item's \`--color\`), a Terraform resource type, or an image URL.
+  \`isodraw icons <search>\` lists them all.
   Kinds: block, cylinder, hexagon, pyramid, cone, sphere, area, circleArea, text.
 - \`isodraw nodes update <diagram> <item> [--label …] [--color #hex] [--icon …]\`
 - \`isodraw nodes remove <diagram> <item>\` (also removes its connections)

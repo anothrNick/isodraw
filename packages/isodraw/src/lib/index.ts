@@ -10,7 +10,8 @@ export { ThemeContext, inkFor, useResolvedTheme, type Theme, type ResolvedTheme 
 export type { IsoDiagramPublishedProps } from './Published';
 export { Projector, TILE, shade } from './geometry';
 export { SHAPES, SWATCHES, createShape, createImageNode, createEdge, emptyDiagram, parseDiagram } from './shapes';
-export { loadAwsIconLibrary, loadGcpIconLibrary, loadAzureIconLibrary, humanizeIconName } from './icons';
+export { loadAwsIconLibrary, loadGcpIconLibrary, loadAzureIconLibrary, loadLucideIconLibrary, humanizeIconName } from './icons';
+export { ISO_ICON_COLOR, ISO_ICON_NAMES, imageHref, isIsoIcon, isoIconLibrary, isoIconSvg } from './isoIcons';
 export { importTerraform, terraformToDiagram, isTerraformJson } from './terraform';
 export type { TerraformImportResult, TerraformImportSummary, TerraformImportOptions, TerraformSource } from './terraform';
 export { exportSvg, exportPng, exportJson, downloadBlob } from './export';

@@ -95,6 +95,16 @@ describe('applyOps', () => {
     expect(() => applyOps(base(), [{ op: 'addNode', label: 'X', icon: 'aws_nope' }])).toThrow(/Unknown icon/);
   });
 
+  it('uses isometric icons in the item\'s color', () => {
+    let { diagram } = applyOps(base(), [{ op: 'addNode', label: 'Laptop', icon: 'isodraw:laptop', color: '#10b981' }]);
+    const laptop = diagram.nodes.find((n) => n.id === 'laptop')!;
+    expect(laptop).toMatchObject({ kind: 'image', src: 'isodraw:laptop', color: '#10b981' });
+    expect(laptop.imageStyle).toBeUndefined();
+    ({ diagram } = applyOps(diagram, [{ op: 'updateNode', item: 'laptop', icon: 'isodraw:phone' }]));
+    expect(diagram.nodes.find((n) => n.id === 'laptop')!).toMatchObject({ src: 'isodraw:phone', color: '#3b82f6' });
+    expect(() => applyOps(base(), [{ op: 'addNode', label: 'X', icon: 'isodraw:nope' }])).toThrow(/Unknown icon/);
+  });
+
   it('says which change failed, and changes nothing when one does', () => {
     const d = base();
     let err: unknown;

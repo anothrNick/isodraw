@@ -16,6 +16,7 @@ import {
   solidFaces,
 } from './geometry';
 import { depthMap } from './containers';
+import { ISO_ICON_BOX, imageHref, isIsoIcon } from './isoIcons';
 import { INK, themedDiagram, useTheme } from './theme';
 import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget, LineStyle, MarkerKind } from './types';
@@ -74,6 +75,7 @@ function SolidFaces({ node, proj }: { node: DiagramNode; proj: Projector }) {
 }
 
 function ImageNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
+  if (isIsoIcon(node.src)) return <IsoIconNode node={node} proj={proj} />;
   const style = node.imageStyle ?? 'tile';
   const pad = style === 'tile' ? Math.min(node.w, node.d) * 0.12 : 0;
   if (style === 'standing' && proj.mode === '3d') {
@@ -105,6 +107,24 @@ function ImageNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
       </Ground>
     </>
   );
+}
+
+/** One of IsoDraw's isometric icons, drawn standing on the component's tiles. */
+function IsoIconNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
+  const href = imageHref(node.src, node.color);
+  const c = center(node);
+  if (proj.mode === '2d') {
+    const a = proj.project(node.x, node.y);
+    return <image href={href} x={a.x} y={a.y} width={node.w * TILE} height={node.d * TILE} preserveAspectRatio="xMidYMid meet" />;
+  }
+  const b = isoIconRect(node, proj.project(c.x, c.y, node.z));
+  return <image href={href} x={b.x} y={b.y} width={b.w} height={b.h} preserveAspectRatio="xMidYMid meet" />;
+}
+
+/** Where an isometric icon's picture goes: its footprint's middle on `base`, sized to the component (2×2 is 1:1). */
+function isoIconRect(node: DiagramNode, base: Pt) {
+  const k = Math.min(node.w, node.d) / 2;
+  return { x: base.x + ISO_ICON_BOX.x * k, y: base.y + ISO_ICON_BOX.y * k, w: ISO_ICON_BOX.w * k, h: ISO_ICON_BOX.h * k };
 }
 
 function Sphere({ node, proj, gradId }: { node: DiagramNode; proj: Projector; gradId: string }) {
@@ -156,7 +176,7 @@ function TextNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
 /** Scene-space anchor below a node for its label. */
 export function labelAnchor(node: DiagramNode, proj: Projector): Pt {
   const c = center(node);
-  if (node.kind === 'image' && node.imageStyle === 'standing' && proj.mode === '3d') {
+  if (node.kind === 'image' && node.imageStyle === 'standing' && !isIsoIcon(node.src) && proj.mode === '3d') {
     const p = proj.project(c.x, c.y, node.z);
     return { x: p.x, y: p.y + 16 };
   }
@@ -625,7 +645,9 @@ export function sceneBounds(d: Diagram, proj: Projector, pad = 28): { x: number;
     const top = n.z + (isFlat(n) ? 0 : n.kind === 'sphere' ? Math.min(n.w, n.d) : n.h);
     for (const q of footprint(n)) pts.push(proj.project(q.x, q.y, n.z), proj.project(q.x, q.y, top));
     if (n.label && n.kind !== 'text' && n.kind !== 'area') pts.push(labelAnchor(n, proj));
-    if (n.kind === 'image' && n.imageStyle === 'standing') {
+    if (n.kind === 'image' && isIsoIcon(n.src) && proj.mode === '3d') {
+      pts.push({ x: proj.project(center(n).x, center(n).y, n.z).x, y: isoIconRect(n, proj.project(center(n).x, center(n).y, n.z)).y });
+    } else if (n.kind === 'image' && n.imageStyle === 'standing') {
       const c = proj.project(center(n).x, center(n).y, n.z);
       pts.push({ x: c.x, y: c.y - Math.min(n.w, n.d) * TILE * 1.05 });
     }

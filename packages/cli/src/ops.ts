@@ -1,4 +1,5 @@
 import {
+  ISO_ICON_COLOR,
   catalogEntry,
   cloudIconUrl,
   containerOf,
@@ -7,6 +8,7 @@ import {
   createShape,
   edgeTitle,
   isContainer,
+  isIsoIcon,
   levelAt,
   levelNodes,
   nodeTitle,
@@ -123,9 +125,13 @@ function freeId(d: Diagram, base: string) {
   for (let i = 2; ; i++) if (!taken.has(`${base}-${i}`)) return `${base}-${i}`;
 }
 
-/** An icon reference: a Terraform resource type from the catalog, or a URL. */
+/** An icon reference: one of IsoDraw's isometric icons (`isodraw:laptop`), a Terraform resource type from the catalog, or a URL. */
 export function iconUrl(icon: string): string {
   if (/^https?:\/\//.test(icon)) return icon;
+  if (icon.startsWith('isodraw:')) {
+    if (!isIsoIcon(icon)) throw new OpError(`Unknown icon "${icon}". \`isodraw icons isodraw:\` lists the isometric icons.`, 'not_found');
+    return icon;
+  }
   const e = catalogEntry(icon);
   const ref = e.role === 'node' ? (typeof e.icon === 'string' ? e.icon : e.icon({})) : '';
   const url = ref ? cloudIconUrl(ref) : null;
@@ -257,7 +263,12 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
               if (!KINDS.has(op.kind)) throw new OpError(`Unknown kind "${op.kind}".`);
               patch.kind = op.kind;
             }
-            if (op.icon) Object.assign(patch, { kind: 'image', src: iconUrl(op.icon), imageStyle: n.imageStyle ?? 'tile' });
+            if (op.icon) {
+              const src = iconUrl(op.icon);
+              // Isometric icons stand on their tiles in the component's color; other images sit on a tile.
+              if (isIsoIcon(src)) Object.assign(patch, { kind: 'image', src, h: 1, imageStyle: undefined, color: op.color ?? ISO_ICON_COLOR });
+              else Object.assign(patch, { kind: 'image', src, imageStyle: n.imageStyle ?? 'tile' });
+            }
             changes.push(`changed ${n.id} (${Object.keys(patch).join(', ') || 'nothing'})${where}`);
             return { ...d, nodes: d.nodes.map((x) => (x.id === n.id ? { ...x, ...patch } : x)) };
           }

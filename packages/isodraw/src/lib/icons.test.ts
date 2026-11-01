@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { humanizeIconName, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary } from './icons';
+import { humanizeIconName, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary } from './icons';
 
 /** Stub `fetch` with a JSON body per URL substring; anything else is a 404. */
 function stubFetch(routes: Record<string, unknown>) {
@@ -123,5 +123,28 @@ describe('loadAzureIconLibrary', () => {
   it('fails when the pack cannot be fetched', async () => {
     stubFetch({});
     await expect(loadAzureIconLibrary()).rejects.toThrow(/Could not load Azure icons/);
+  });
+});
+
+describe('loadLucideIconLibrary', () => {
+  it('lists every icon, drawn in blue instead of currentColor', async () => {
+    stubFetch({
+      '@iconify-json/lucide': {
+        width: 24,
+        height: 24,
+        icons: { 'server-cog': { body: '<path stroke="currentColor" d="M1 1"/>' }, 'arrow-up': { body: '<path stroke="currentColor"/>' } },
+      },
+    });
+    const lib = await loadLucideIconLibrary();
+    expect(lib.id).toBe('lucide');
+    expect(lib.icons.map((i) => i.name)).toEqual(['Arrow Up', 'Server Cog']);
+    const svg = decodeURIComponent(lib.icons[1].src.replace('data:image/svg+xml,', ''));
+    expect(svg).toContain('stroke="#2563eb"');
+    expect(svg).not.toContain('currentColor');
+  });
+
+  it('fails clearly when the CDN does', async () => {
+    stubFetch({});
+    await expect(loadLucideIconLibrary()).rejects.toThrow(/Lucide/);
   });
 });

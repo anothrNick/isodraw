@@ -30,6 +30,13 @@ describe('renderSvg', () => {
     expect(renderSvg(diagram, { theme: 'dark' })).toContain('#0b1220');
   });
 
+  it('draws isometric icons inline, in their color', () => {
+    const svg = renderSvg({ version: 1, nodes: [{ id: 'l', kind: 'image', x: 0, y: 0, w: 2, d: 2, h: 1, z: 0, color: '#10b981', src: 'isodraw:laptop', label: 'Laptop' }], edges: [] });
+    expect(svg).toContain('href="data:image/svg+xml,');
+    expect(svg).toContain('%2310b981');
+    expect(svg).not.toContain('isodraw:laptop');
+  });
+
   it('refuses something that is not a diagram', () => {
     expect(() => renderSvg({ hello: 1 })).toThrow();
   });
