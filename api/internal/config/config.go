@@ -37,6 +37,8 @@ type Config struct {
 	// reached with the usual AWS_* variables. Without it, images are files under ImageDir.
 	BucketName string
 	ImageDir   string
+	// AdminGroup is the identity provider group whose members are platform admins (Cognito: a user pool group).
+	AdminGroup string
 }
 
 // FromEnv reads the configuration, reporting every missing or invalid setting at once.
@@ -54,6 +56,7 @@ func FromEnv() (Config, error) {
 		WebDir:           os.Getenv("WEB_DIR"),
 		BucketName:       os.Getenv("BUCKET_NAME"),
 		ImageDir:         env("IMAGE_DIR", ".data/images"),
+		AdminGroup:       env("ADMIN_GROUP", "admins"),
 	}
 	var errs []error
 	ttl, err := time.ParseDuration(env("SESSION_TTL", "720h"))

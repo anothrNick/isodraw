@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
  *   /cli/login?port&state  → authorize the CLI (isodraw login opens this)
  *   /connect?client_id&…   → connect an AI app to the MCP server (OAuth consent)
  *   /settings/tokens       → API tokens for the CLI, agents and CI
+ *   /admin[/users|/workspaces|/log][/:id] → platform admin (admins only)
  *   /login /signup /verify /forgot /reset → sign-in pages, before there's a session
  */
 export type Route =
@@ -24,8 +25,11 @@ export type Route =
   | { page: 'cli-login' }
   | { page: 'connect' }
   | { page: 'tokens' }
+  | { page: 'admin'; section: AdminSection; id?: string }
   | { page: 'login' | 'signup' | 'verify' | 'forgot' | 'reset' }
   | { page: 'missing' };
+
+export type AdminSection = 'overview' | 'users' | 'workspaces' | 'log';
 
 export function parseRoute(path: string): Route {
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
@@ -35,6 +39,12 @@ export function parseRoute(path: string): Route {
   if (parts.length === 2 && parts[0] === 'cli' && parts[1] === 'login') return { page: 'cli-login' };
   if (parts.length === 1 && parts[0] === 'connect') return { page: 'connect' };
   if (parts.length === 2 && parts[0] === 'settings' && parts[1] === 'tokens') return { page: 'tokens' };
+  // "admin" is reserved too.
+  if (parts[0] === 'admin' && parts.length <= 3) {
+    if (parts.length === 1) return { page: 'admin', section: 'overview' };
+    if (['users', 'workspaces', 'log'].includes(parts[1]) && (parts.length === 2 || parts[1] !== 'log'))
+      return { page: 'admin', section: parts[1] as AdminSection, id: parts[2] };
+  }
   // Also reserved slugs.
   if (parts.length === 1 && ['login', 'signup', 'verify', 'forgot', 'reset'].includes(parts[0]))
     return { page: parts[0] as 'login' | 'signup' | 'verify' | 'forgot' | 'reset' };

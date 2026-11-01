@@ -64,6 +64,7 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth, files blobs.Store) htt
 	api.HandleFunc("DELETE /api/diagrams/{id}", srv.deleteDiagram)
 	api.HandleFunc("GET /api/diagrams/{id}/preview", srv.previewLink)
 	srv.imageRoutes(api)
+	srv.adminRoutes(api)
 	srv.memberRoutes(api)
 	srv.tokenRoutes(api)
 	srv.oauthRoutes(mux, api)

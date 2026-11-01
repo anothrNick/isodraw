@@ -6,6 +6,8 @@ export interface Session {
   orgs: Org[];
   /** Lifetime access: no diagram limit in the personal workspace, and team workspaces. */
   lifetime: boolean;
+  /** A platform admin, who gets the admin screens (/admin). */
+  admin?: boolean;
   /** Fetch the user's organizations again, after joining or creating one. */
   reload: () => Promise<Session>;
 }

@@ -116,6 +116,18 @@ fly secrets unset DATABASE_URL -a isodraw-api
 fly mpg attach <cluster-id> -a isodraw-api   # sets the new DATABASE_URL and restarts the API
 ```
 
+## Platform admins
+
+People in the Cognito group `admins` get the admin screens (`/admin`, and "Platform admin" in the account menu): every user and workspace, granting lifetime access, grandfathering teams, and a log of those changes. Admins see who and what exists, never diagram content.
+
+The group is in Terraform (`aws_cognito_user_group.admins`); `terraform apply` creates it. Then add someone and have them sign out and in again, since membership is read at sign-in:
+
+```bash
+aws cognito-idp admin-add-user-to-group --user-pool-id us-east-1_USbMk6E6n --username you@example.com --group-name admins
+```
+
+Removing someone from the group takes effect at their next sign-in. `ADMIN_GROUP` changes the group's name. With local accounts (`AUTH_MODE=local`), use `isodraw admin grant <email>` instead.
+
 ## Lifetime access by hand
 
 Until checkout exists, grant or take back lifetime access (no diagram limit, team workspaces) for an account by email:

@@ -92,3 +92,13 @@ resource "aws_cognito_user_pool_client" "isodraw" {
     refresh_token = "days"
   }
 }
+
+# Platform admins: people in this group get IsoDraw's admin screens (/admin)
+# for all users and workspaces. Membership is read from the ID token at each
+# sign-in, so adding or removing someone takes effect the next time they sign in:
+#   aws cognito-idp admin-add-user-to-group --user-pool-id <pool> --username <email> --group-name admins
+resource "aws_cognito_user_group" "admins" {
+  name         = "admins"
+  user_pool_id = local.pool_id
+  description  = "IsoDraw platform admins"
+}

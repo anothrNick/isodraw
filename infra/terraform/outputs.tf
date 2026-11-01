@@ -18,3 +18,8 @@ output "hosted_signin_domain" {
   description = "The Cognito hosted sign-in page (only when this config created the pool)."
   value       = local.create_pool ? "https://${var.domain_prefix}.auth.${var.region}.amazoncognito.com" : "the existing pool's domain"
 }
+
+output "admin_group" {
+  description = "Cognito group whose members are IsoDraw platform admins (the API's ADMIN_GROUP)."
+  value       = aws_cognito_user_group.admins.name
+}
