@@ -69,19 +69,16 @@ describe('messageSvg', () => {
 });
 
 describe('PNG pictures', () => {
-  it('are up to twice the picture width, smaller when icons would make them slow', async () => {
+  it('are up to twice the picture width, within a time budget', async () => {
     const { pngWidth } = await import('./raster');
     const svg = (w: number, h: number, icons = 0) => `<svg xmlns="x" width="${w}" height="${h}">` + '<image href="x"/>'.repeat(icons) + '</svg>';
     expect(pngWidth(svg(500, 300))).toBe(1000);
     expect(pngWidth(svg(200, 100))).toBe(600);
-    expect(pngWidth(svg(2000, 1200))).toBe(2400);
-    // IsoDraw's own architecture diagram: 13 icons. It took 2 s of CPU at 2400 px, over the limit.
-    const arch = pngWidth(svg(1507, 938, 13));
-    expect(arch).toBeGreaterThan(1200);
-    expect(arch).toBeLessThan(1600);
-    // Many icons: smaller, but never below 600 px.
-    expect(pngWidth(svg(1507, 938, 40))).toBeLessThan(1000);
-    expect(pngWidth(svg(3000, 3000, 200))).toBe(600);
+    // IsoDraw's own architecture diagram (13 icons) in 2.5D: wide and short, so it stays large.
+    expect(pngWidth(svg(1400, 483, 13))).toBeGreaterThan(2000);
+    // Big, square, and full of icons: smaller, never below 600 px.
+    expect(pngWidth(svg(3000, 3000, 13))).toBeLessThan(1700);
+    expect(pngWidth(svg(3000, 3000, 400))).toBe(600);
   });
 
   it('rasterize a diagram with the bundled font', async () => {
@@ -91,7 +88,9 @@ describe('PNG pictures', () => {
     const require = createRequire(import.meta.url);
     const font = (f: string) => readFileSync(require.resolve(`@expo-google-fonts/inter/${f}`));
     const toPng = rasterizer(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')), [font('600SemiBold/Inter_600SemiBold.ttf')]);
-    const svg = renderSvg(diagram, { title: 'Shop' });
+    // Its icon is an embedded SVG, drawn first as a small PNG.
+    const svg = renderSvg({ ...diagram, nodes: [...diagram.nodes, { id: 'phone', kind: 'image', x: 8, y: 0, w: 1, d: 1, h: 1, z: 0, color: '#3b82f6', src: 'isodraw:phone' }] }, { title: 'Shop' });
+    expect(svg).toContain('data:image/svg+xml,');
     const png = await toPng(svg, 400);
     expect([...png.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
     // The PNG's width (big-endian, bytes 16–19) is what was asked for.
