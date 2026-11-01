@@ -86,7 +86,7 @@ Preview pictures (`/p/{id}.svg` and `.png`, and the app's grid thumbnails) are d
    npx wrangler@4.156.0 r2 bucket lifecycle add isodraw-previews expire-previews previews/ --expire-days 30 --force
    ```
 
-3. Uncomment the `[[r2_buckets]]` block in `web/wrangler.toml` and run `npm run deploy:web`. Responses then carry `X-Preview: drawn` the first time and `X-Preview: stored` after.
+3. Keep the `[[r2_buckets]]` block in `web/wrangler.toml` (binding `PREVIEWS`) and run `npm run deploy:web`. Responses then carry `X-Preview: drawn` the first time and `X-Preview: stored` after. (`isodraw.sjostrom.io` has this set up.)
 
 ## 4. Check it
 
