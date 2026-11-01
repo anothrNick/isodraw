@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, BookOpen, Check, CloudOff, Loader2 } from 'lucide-react';
+import { AlertCircle, BookOpen, Check, CloudOff, Copy, ExternalLink, Image, Link2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IsoDiagramEditor, type LevelPath } from 'isodraw';
-import { ApiError, api, type Org, type StoredDiagram } from './api';
+import { ApiError, api, type Org, type PreviewLink, type StoredDiagram } from './api';
 import { useAutosave, type SaveStatus } from './autosave';
 import { Loading, Message } from './App';
 import { docsHashForLevel, navigate } from './router';
 import { useTheme } from './theme';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
@@ -99,6 +100,7 @@ function Editor({ org, initial, readOnly }: { org: Org; initial: StoredDiagram; 
             />
             {!readOnly && <SaveIndicator status={status} onRetry={saveNow} />}
             <span className="flex-1" />
+            <ShareMenu id={initial.id} level={level} beforeLink={readOnly ? undefined : saveAndWait} />
             {/* Read the docs, starting on the component whose detail diagram is open. */}
             <Button variant="outline" size="sm" onClick={async () => {
                 // The docs load from the server, so it must have the latest edits first.
@@ -123,6 +125,73 @@ function Editor({ org, initial, readOnly }: { org: Org; initial: StoredDiagram; 
         className="min-h-0 flex-1 rounded-none border-0"
       />
     </div>
+  );
+}
+
+/**
+ * Copy a preview link: a picture of the open level that shows in chat and
+ * Markdown without signing in. The link is made when the menu opens, after
+ * saving, so copying happens right on click (Safari refuses clipboard writes
+ * that come after waiting on the network).
+ */
+function ShareMenu({ id, level, beforeLink }: { id: string; level: LevelPath; beforeLink?: () => Promise<unknown> }) {
+  const [link, setLink] = useState<Promise<PreviewLink> | null>(null);
+  const make = () => {
+    const p = (async () => {
+      await beforeLink?.();
+      return api.previewLink(id, level);
+    })();
+    p.catch(() => setLink(null)); // Try again next time the menu opens.
+    setLink(p);
+    return p;
+  };
+  const copy = async (what: string, text: (l: PreviewLink) => string) => {
+    try {
+      const l = await (link ?? make());
+      await navigator.clipboard.writeText(text(l));
+      toast.success(`${what} copied`, { description: `Anyone with the link can see this picture until ${new Date(l.expiresAt).toLocaleDateString()}. Docs aren't included.` });
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : `Couldn't copy the ${what.toLowerCase()}`);
+    }
+  };
+  const open = async () => {
+    // Open the tab now, while the click still counts, and point it at the picture once the link is ready.
+    const tab = window.open('', '_blank');
+    try {
+      const l = await (link ?? make());
+      if (tab) tab.location.href = l.svg;
+    } catch (e) {
+      tab?.close();
+      toast.error((e as Error).message);
+    }
+  };
+  return (
+    <DropdownMenu onOpenChange={(o) => o && make()}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Link2 />
+          Share
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          Preview link{level.length ? ` · ${level[level.length - 1]}` : ''}, good for 7 days
+        </DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => copy('Image link', (l) => l.svg)}>
+          <Image />
+          Copy image link
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => copy('Markdown', (l) => `[![${l.title.replace(/[[\]]/g, '\\$&')}](${l.svg})](${l.url})`)}>
+          <Copy />
+          Copy as Markdown
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={open}>
+          <ExternalLink />
+          Open preview
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
