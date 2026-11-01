@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, BookOpen, Check, CloudOff, Copy, ExternalLink, Image, Link2, Loader2 } from 'lucide-react';
+import { AlertCircle, BookOpen, Check, CloudOff, Copy, ExternalLink, Eye, Image, Link2, Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { IsoDiagramEditor, type LevelPath } from 'isodraw';
 import { ApiError, api, type Org, type PreviewLink, type StoredDiagram } from './api';
@@ -26,7 +26,7 @@ export function EditorPage({ org, id }: { org: Org; id: string }) {
   }
   if (error) return <Message title="Couldn't open the diagram" body={error.message} />;
   if (!loaded) return <Loading label="Opening…" />;
-  return <Editor org={org} initial={loaded} readOnly={org.role === 'viewer'} />;
+  return <Editor org={org} initial={loaded} canEdit={org.role !== 'viewer'} />;
 }
 
 /** The level inside detail diagrams lives in the hash: #in/<component>/<component>. */
@@ -35,14 +35,34 @@ function readLevel(): LevelPath {
   return m ? m[1].split('/').filter(Boolean).map(decodeURIComponent) : [];
 }
 
-function Editor({ org, initial, readOnly }: { org: Org; initial: StoredDiagram; readOnly: boolean }) {
+/** View mode lives in the URL (`?view`), so a link can open the diagram for reading. */
+function readViewing(): boolean {
+  return new URLSearchParams(location.search).has('view');
+}
+
+function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; canEdit: boolean }) {
   const { diagram, change, status, notice, dismissNotice, saveNow, saveAndWait } = useAutosave(initial);
+  // Editors can switch to View to browse the diagram and its docs without changing anything; viewers always view.
+  const [viewing, setViewing] = useState(readViewing);
+  const readOnly = !canEdit || viewing;
+  const switchMode = async (view: boolean) => {
+    // Leave nothing unsaved behind when switching to reading.
+    if (view && canEdit) await saveAndWait();
+    setViewing(view);
+    const url = new URL(location.href);
+    if (view) url.searchParams.set('view', '');
+    else url.searchParams.delete('view');
+    history.replaceState(null, '', url.pathname + url.search.replace(/=(?=&|$)/g, '') + url.hash);
+  };
   const { resolved } = useTheme();
   const [title, setTitle] = useState(initial.title);
   const [level, setLevel] = useState<LevelPath>(readLevel);
 
   useEffect(() => {
-    const on = () => setLevel(readLevel());
+    const on = () => {
+      setLevel(readLevel());
+      setViewing(readViewing());
+    };
     window.addEventListener('popstate', on);
     window.addEventListener('hashchange', on);
     return () => {
@@ -53,7 +73,7 @@ function Editor({ org, initial, readOnly }: { org: Org; initial: StoredDiagram; 
   const changeLevel = (next: LevelPath) => {
     setLevel(next);
     const hash = next.length ? `#in/${next.map(encodeURIComponent).join('/')}` : '';
-    if (location.hash !== hash) history.pushState(null, '', hash || location.pathname);
+    if (location.hash !== hash) history.pushState(null, '', location.pathname + location.search + hash);
   };
 
   // Merges after a conflicting save are worth knowing about, but not worth blocking on.
@@ -100,6 +120,7 @@ function Editor({ org, initial, readOnly }: { org: Org; initial: StoredDiagram; 
             />
             {!readOnly && <SaveIndicator status={status} onRetry={saveNow} />}
             <span className="flex-1" />
+            {canEdit && <ModeSwitch viewing={viewing} onChange={switchMode} />}
             <ShareMenu id={initial.id} level={level} beforeLink={readOnly ? undefined : saveAndWait} />
             {/* Read the docs, starting on the component whose detail diagram is open. */}
             <Button variant="outline" size="sm" onClick={async () => {
@@ -192,6 +213,36 @@ function ShareMenu({ id, level, beforeLink }: { id: string; level: LevelPath; be
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Edit or View: view hides the drawing tools and opens docs read-only when you select something. */
+function ModeSwitch({ viewing, onChange }: { viewing: boolean; onChange: (view: boolean) => void }) {
+  const modes = [
+    { view: false, label: 'Edit', icon: <Pencil />, hint: 'Draw and document' },
+    { view: true, label: 'View', icon: <Eye />, hint: 'Browse the diagram and its docs without editing' },
+  ];
+  return (
+    <div role="radiogroup" aria-label="Mode" className="inline-flex h-8 items-center rounded-md border bg-muted/50 p-0.5">
+      {modes.map((m) => (
+        <button
+          key={m.label}
+          type="button"
+          role="radio"
+          aria-checked={viewing === m.view}
+          aria-label={m.label}
+          title={m.hint}
+          onClick={() => viewing !== m.view && onChange(m.view)}
+          className={cn(
+            'inline-flex h-full items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium text-muted-foreground transition-colors [&_svg]:size-3.5',
+            viewing === m.view ? 'bg-background text-foreground shadow-xs' : 'hover:text-foreground',
+          )}
+        >
+          {m.icon}
+          {m.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
