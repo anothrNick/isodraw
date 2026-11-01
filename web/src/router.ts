@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
  *   /:org/members          → an organization's members and invites
  *   /invite/:token         → an invite to join an organization
  *   /cli/login?port&state  → authorize the CLI (isodraw login opens this)
+ *   /connect?client_id&…   → connect an AI app to the MCP server (OAuth consent)
  *   /settings/tokens       → API tokens for the CLI, agents and CI
  *   /login /signup /verify /forgot /reset → sign-in pages, before there's a session
  */
@@ -21,6 +22,7 @@ export type Route =
   | { page: 'members'; org: string }
   | { page: 'invite'; token: string }
   | { page: 'cli-login' }
+  | { page: 'connect' }
   | { page: 'tokens' }
   | { page: 'login' | 'signup' | 'verify' | 'forgot' | 'reset' }
   | { page: 'missing' };
@@ -31,6 +33,7 @@ export function parseRoute(path: string): Route {
   // "invite" is a reserved slug, so it never names an organization.
   if (parts.length === 2 && parts[0] === 'invite') return { page: 'invite', token: parts[1] };
   if (parts.length === 2 && parts[0] === 'cli' && parts[1] === 'login') return { page: 'cli-login' };
+  if (parts.length === 1 && parts[0] === 'connect') return { page: 'connect' };
   if (parts.length === 2 && parts[0] === 'settings' && parts[1] === 'tokens') return { page: 'tokens' };
   // Also reserved slugs.
   if (parts.length === 1 && ['login', 'signup', 'verify', 'forgot', 'reset'].includes(parts[0]))

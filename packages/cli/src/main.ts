@@ -6,7 +6,7 @@ import { describeText, outline } from './describe';
 import { GUIDE } from './guide';
 import { exportDocsMarkdown, iconTypes, importTerraform, isTerraformJson, isoIconLibrary, layoutLevel, levelAt, parseDiagram, withLevel } from './lib';
 import { browserLogin } from './login';
-import { serveStdio } from './mcp';
+import { serveStdio } from './mcpStdio';
 import { applyOps, OpError, parseLevel, readDoc, resolveLevel, type Op } from './ops';
 
 const HELP = `isodraw: work with IsoDraw diagrams and their docs from the command line.

@@ -2,7 +2,8 @@
 
 ```
 browser ──▶ Cloudflare Pages  (the web app, your domain)
-               │  /api/* and /auth/* are forwarded by Pages Functions (web/functions)
+               │  /api/*, /auth/*, /oauth/* and /.well-known/oauth-* are forwarded by Pages Functions (web/functions);
+               │  /mcp (AI apps) and /p/*.svg (preview pictures) run in Pages Functions and call the API
                ▼
             Fly.io app  (the Go API, api/)  ──▶ Postgres on Fly (its own small app)
                │                             └─▶ Tigris on Fly (S3, for uploaded images)
@@ -78,6 +79,7 @@ Then in the Cloudflare dashboard, add your domain to the Pages project (*Custom 
 1. Open your domain: you're sent to `/login`. Create an account, enter the code Cognito emails you, and you land on your diagrams.
 2. Create a diagram, reload, and it's still there.
 3. From a terminal: `npx isodraw login --server https://isodraw.example.com`.
+4. AI apps: `https://isodraw.example.com/.well-known/oauth-authorization-server` answers JSON, and `curl -i -X POST https://isodraw.example.com/mcp` answers 401 with a `WWW-Authenticate` header. Then add the URL as a connector in Claude (see the README) and approve it.
 
 ## Postgres
 

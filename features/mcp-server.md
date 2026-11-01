@@ -88,8 +88,14 @@ The point of a visual product is seeing it, so every write ends with a picture.
 
 ## Progress
 
-- **Done (phase 1):** `isodraw mcp` serves the eight tools over stdio from `packages/cli/src/mcp.ts`, built on the official TypeScript SDK and the CLI's operations, with server instructions, read-only and destructive hints, docs returned as quoted content, and errors that name the tool to call next. Tested over real stdio with the SDK's client (create with changes, describe, docs, dry run, save, preview, errors) and in unit tests with an in-memory transport. Setup for Claude Code, Claude Desktop and Cursor is in the README.
-- **Next:** try it in Claude Desktop and Cursor on real tasks and tune tool descriptions; then phase 2, the hosted `/mcp` with OAuth.
+- **Done (phase 1):** `isodraw mcp` serves the eight tools over stdio from `packages/cli/src/mcp.ts`, built on the official TypeScript SDK and the CLI's operations, with server instructions, read-only and destructive hints, docs returned as quoted content, and errors that name the tool to call next. Setup for Claude Code, Claude Desktop and Cursor is in the README.
+- **Done (phase 2, not yet deployed):** the hosted `/mcp` and OAuth.
+  - `/mcp` is a stateless Streamable HTTP endpoint in a Pages Function (`mcpHttp.ts`, using the SDK's web-standard transport and the Workers-safe JSON Schema validator), served by the Vite dev server locally.
+  - The Go API is the authorization server: discovery documents, dynamic registration, authorize, token with PKCE S256, and one-time codes. Approving creates an ordinary API token named after the app.
+  - The consent page (`/connect`) shares its workspace, access and expiry controls with the CLI's sign-in page.
+  - Tested end to end with the MCP SDK's own OAuth client (discover, register, consent, exchange, tools over HTTP), in Cloudflare's runtime with `wrangler pages dev`, and in Go and TypeScript unit tests.
+- **Decided:** one workspace per connection, chosen at consent, defaulting to read and write for 90 days. No refresh tokens for now: the access token lasts as long as the person chose, and the app asks them to connect again after that.
+- **Next:** deploy (API migration, then web), connect the live site in Claude and ChatGPT and tune tool descriptions on real tasks; then phase 3, pictures in chat (PNG).
 
 ## Phases
 
