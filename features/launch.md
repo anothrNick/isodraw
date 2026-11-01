@@ -30,10 +30,11 @@ Still open:
 
 ## 2. Billing and access
 
-- [ ] `purchases` table: user, provider's payment and customer ids, amount, currency, cohort seat number, created and refunded times.
-- [ ] Checkout: "Buy lifetime access" creates a one-time Checkout session for the signed-in user, then returns to a success page that waits for the webhook.
-- [ ] Webhook endpoint: verify the signature, handle each event once (store event ids), grant on payment and revoke on refund or dispute. Reconcile against the provider daily in case a webhook was missed.
-- [ ] Cohort cap enforced on the server: reserve a seat when checkout starts, release it when the session expires, show "sold out" once full. Two buyers must not get the last seat.
+- [x] `purchases` table: user, provider's payment and customer ids, amount, currency, cohort seat number, created and refunded times.
+- [x] Checkout: "Buy lifetime access" creates a one-time Checkout session for the signed-in user, then returns to a success page that waits for the webhook.
+- [x] Webhook endpoint: verify the signature, handle each event once (store event ids), grant on payment and revoke on refund or dispute.
+- [ ] Reconcile against Stripe daily in case a webhook was missed (Stripe retries failed webhooks for three days, so this is a backstop).
+- [x] Cohort cap enforced on the server: reserve a seat when checkout starts, release it when the session expires, show "sold out" once full. Two buyers must not get the last seat.
 - [x] Entitlements checked in the API, not just hidden in the UI, and so the same for API tokens, the CLI and MCP (`api/internal/httpapi/plans.go`; limits answer 402 `plan_limit`):
   - free: 10 diagrams in the personal workspace and no team workspaces;
   - lifetime (`users.lifetime_since`): team workspaces, 5 editor seats each (members who edit plus open invites to edit; invites and role changes past that are refused), unlimited viewers;
@@ -43,7 +44,7 @@ Still open:
 - [x] Clear messages at each limit, with the way out: the app shows "n of 10 diagrams", seats used on the Members page, and a create-team dialog that explains lifetime. The buy button comes with checkout.
 - [x] `isodraw lifetime grant|revoke <email>` on the server, for comps and testing before checkout exists (DEPLOY.md).
 - [ ] Docs: how to export a diagram (JSON, Markdown docs, PNG/SVG) and import it back, so free users can keep 10 active and archive the rest.
-- [ ] Account page: plan, purchase date, receipt link, seat number ("Founding member #42").
+- [x] Account page (`/settings/plan`): plan, purchase date, seat number ("Founding member #42"). Stripe emails the receipt and invoice; a receipt link on the page is still to do.
 - [ ] Launch codes or coupons, if there'll be any.
 - [ ] Stripe Tax: turn it on, set product tax codes (software, downloadable or SaaS), add tax registrations where needed, and put the business address on receipts.
 - [ ] End-to-end in test mode: buy, get access, refund, lose access, webhook retried, cohort full.

@@ -27,7 +27,10 @@ type fixture struct {
 	h     http.Handler
 }
 
-func setup(t *testing.T) *fixture {
+func setup(t *testing.T) *fixture { return setupWith(t, nil) }
+
+// setupWith is setup with changes to the configuration.
+func setupWith(t *testing.T, change func(*config.Config)) *fixture {
 	pool, _ := testdb.New(t)
 	cfg := config.Config{
 		PublicURL:     appOrigin,
@@ -35,6 +38,9 @@ func setup(t *testing.T) *fixture {
 		OIDCClientID:  "test",
 		SessionSecret: "test-secret-0123456789",
 		SessionTTL:    time.Hour,
+	}
+	if change != nil {
+		change(&cfg)
 	}
 	s := store.New(pool)
 	a, err := auth.New(cfg, s)

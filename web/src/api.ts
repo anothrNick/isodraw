@@ -67,6 +67,38 @@ export interface Plan {
   editors: number;
 }
 
+// ---------- billing ----------
+
+export interface Purchase {
+  id: string;
+  email: string;
+  status: 'pending' | 'paid' | 'expired' | 'refunded';
+  amount: number | null;
+  currency: string | null;
+  /** The buyer's place in the founding cohort. */
+  seat: number | null;
+  createdAt: string;
+  paidAt: string | null;
+  refundedAt: string | null;
+}
+
+export interface Billing {
+  /** Lifetime access can be bought (Stripe is set up). */
+  available: boolean;
+  lifetime: boolean;
+  /** In the currency's smallest unit (cents). */
+  price: { amount: number; currency: string };
+  seats: { total: number; sold: number; left: number };
+  /** The paid purchase behind the user's lifetime access, if they bought it. */
+  purchase: Purchase | null;
+}
+
+/** "$99" for 9900 usd. */
+export function formatPrice(p: { amount: number; currency: string }) {
+  const n = new Intl.NumberFormat(undefined, { style: 'currency', currency: p.currency.toUpperCase(), minimumFractionDigits: 0 }).format(p.amount / 100);
+  return n.replace(/\.00$/, '');
+}
+
 // ---------- platform admin ----------
 
 export interface AdminStats {
@@ -90,6 +122,12 @@ export interface AdminUser {
   platformAdmin: boolean;
   workspaces: number;
   diagrams: number;
+}
+
+export interface AdminUserDetail {
+  user: AdminUser;
+  workspaces: AdminWorkspace[];
+  purchases: Purchase[];
 }
 
 export interface AdminWorkspace {
@@ -244,13 +282,22 @@ export const api = {
     request<{ token: ApiToken; secret: string }>('POST', '/api/tokens', { name, orgId, scope, expiresInDays }),
   deleteToken: (id: string) => request<void>('DELETE', `/api/tokens/${id}`),
 
+  billing: () => request<Billing>('GET', '/api/billing'),
+  /** Starts Stripe Checkout for lifetime access; the answer is where to send the browser. */
+  checkout: () => request<{ url: string }>('POST', '/api/billing/checkout', {}),
+  /** Gives back the seat held by an unfinished checkout. */
+  cancelCheckout: () => request<void>('POST', '/api/billing/cancel', {}),
+
   /** Platform admin: every user and workspace (404 for everyone else). */
   admin: {
-    stats: () => request<{ stats: AdminStats; events: AdminEvent[] }>('GET', '/api/admin/stats'),
+    stats: () =>
+      request<{ stats: AdminStats; events: AdminEvent[]; seats: { total: number; sold: number; pending: number }; checkout: boolean }>(
+        'GET',
+        '/api/admin/stats',
+      ),
     users: (q: string) => request<{ users: AdminUser[]; limit: number }>('GET', `/api/admin/users?${new URLSearchParams({ q })}`),
-    user: (id: string) => request<{ user: AdminUser; workspaces: AdminWorkspace[] }>('GET', `/api/admin/users/${id}`),
-    updateUser: (id: string, change: { lifetime?: boolean }) =>
-      request<{ user: AdminUser; workspaces: AdminWorkspace[] }>('PATCH', `/api/admin/users/${id}`, change),
+    user: (id: string) => request<AdminUserDetail>('GET', `/api/admin/users/${id}`),
+    updateUser: (id: string, change: { lifetime?: boolean }) => request<AdminUserDetail>('PATCH', `/api/admin/users/${id}`, change),
     workspaces: (q: string, kind: '' | 'team' | 'personal') =>
       request<{ workspaces: AdminWorkspace[]; limit: number }>('GET', `/api/admin/orgs?${new URLSearchParams({ q, kind })}`),
     workspace: (id: string) =>

@@ -127,8 +127,12 @@ export function DiagramList({ org }: { org: Org }) {
         {limit > 0 && (
           <p className={cn('-mt-3 mb-6 text-sm', full ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
             {full
-              ? `You're using all ${limit} diagrams of the free plan. Export one you're not working on (Download, then JSON) and delete it to make room; you can import it again any time.`
-              : `${used} of ${limit} diagrams on the free plan. Every feature is included.`}
+              ? `You're using all ${limit} diagrams of the free plan. Export one you're not working on (Download, then JSON) and delete it to make room; you can import it again any time. `
+              : `${used} of ${limit} diagrams on the free plan. Every feature is included. `}
+            <a className="font-medium text-primary hover:underline" {...linkProps('/settings/plan')}>
+              Lifetime access
+            </a>{' '}
+            removes the limit.
           </p>
         )}
         {readOnly && (

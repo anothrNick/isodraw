@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
  *   /cli/login?port&state  → authorize the CLI (isodraw login opens this)
  *   /connect?client_id&…   → connect an AI app to the MCP server (OAuth consent)
  *   /settings/tokens       → API tokens for the CLI, agents and CI
+ *   /settings/plan         → your plan, and buying lifetime access (Stripe Checkout returns here)
  *   /admin[/users|/workspaces|/log][/:id] → platform admin (admins only)
  *   /login /signup /verify /forgot /reset → sign-in pages, before there's a session
  */
@@ -25,6 +26,7 @@ export type Route =
   | { page: 'cli-login' }
   | { page: 'connect' }
   | { page: 'tokens' }
+  | { page: 'plan' }
   | { page: 'admin'; section: AdminSection; id?: string }
   | { page: 'login' | 'signup' | 'verify' | 'forgot' | 'reset' }
   | { page: 'missing' };
@@ -39,6 +41,7 @@ export function parseRoute(path: string): Route {
   if (parts.length === 2 && parts[0] === 'cli' && parts[1] === 'login') return { page: 'cli-login' };
   if (parts.length === 1 && parts[0] === 'connect') return { page: 'connect' };
   if (parts.length === 2 && parts[0] === 'settings' && parts[1] === 'tokens') return { page: 'tokens' };
+  if (parts.length === 2 && parts[0] === 'settings' && parts[1] === 'plan') return { page: 'plan' };
   // "admin" is reserved too.
   if (parts[0] === 'admin' && parts.length <= 3) {
     if (parts.length === 1) return { page: 'admin', section: 'overview' };

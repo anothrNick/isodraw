@@ -116,6 +116,27 @@ fly secrets unset DATABASE_URL -a isodraw-api
 fly mpg attach <cluster-id> -a isodraw-api   # sets the new DATABASE_URL and restarts the API
 ```
 
+## Selling lifetime access (Stripe)
+
+Without Stripe settings nothing can be bought (the Plan page says lifetime access "opens soon"), and admins can still grant it. To sell it:
+
+1. In Stripe (test mode first), copy the secret key, and add a webhook endpoint at `https://isodraw-api.fly.dev/stripe/webhook` (straight to the API, not through Pages) with these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`, `charge.dispute.closed`. Copy its signing secret.
+2. Set them on the API (paste the values in your terminal, not into chat or files):
+
+   ```bash
+   fly secrets set -a isodraw-api STRIPE_SECRET_KEY=sk_test_… STRIPE_WEBHOOK_SECRET=whsec_…
+   ```
+
+3. Optional: `LIFETIME_PRICE` (cents, default `9900`), `LIFETIME_CURRENCY` (default `usd`), `LIFETIME_SEATS` (default `100`), and `STRIPE_AUTOMATIC_TAX=true` once Stripe Tax is set up in the dashboard (origin address and registrations), or checkout fails.
+
+Buying starts Stripe Checkout and holds a founding seat for 31 minutes. Access is granted only by the signed webhook, never by the browser coming back. Refund in the Stripe dashboard; the `charge.refunded` event takes lifetime access back (unless they have another paid purchase), as does a lost dispute. Payments and refunds show in the admin log, and each user's purchases on their admin page. Switch to live keys and a live webhook when going live.
+
+Locally, put the test key in `.env` and forward events with the Stripe CLI, which prints the signing secret to use as `STRIPE_WEBHOOK_SECRET`:
+
+```bash
+stripe listen --forward-to localhost:8080/stripe/webhook
+```
+
 ## Platform admins
 
 People in the Cognito group `admins` get the admin screens (`/admin`, and "Platform admin" in the account menu): every user and workspace, granting lifetime access, grandfathering teams, and a log of those changes. Admins see who and what exists, never diagram content.
