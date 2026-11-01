@@ -12,7 +12,7 @@ Decided 2026-11-01:
 | Question | Decision |
 | --- | --- |
 | Who pays, for what | **Free:** everything in your personal workspace, MCP writes included, up to **10 diagrams**, with fair-use image storage. The aim is to be sticky for engineers, so no feature is held back. **Lifetime ($99, one-time):** team workspaces. |
-| What lifetime covers | **The buyer.** They can create team workspaces with up to **5 editors** (the buyer plus 4 teammates, who don't need to buy) and unlimited viewers, and their personal workspace has no diagram limit. |
+| What lifetime covers | **The buyer.** They can create team workspaces with up to **5 editors** (the buyer plus 4 teammates, who don't need to buy) and unlimited viewers, and their personal workspace has no diagram limit. **No limit on the number of teams** (decided 2026-11-01): the 5-editor cap is per team, which is generous on purpose for the founding cohort. |
 | Not included, in writing | **Metered AI** (features that call a model on our bill, like AI in the editor; MCP stays included because it uses the user's own AI), **enterprise features** (SSO/SAML, audit logs, teams over 5 editors) and storage beyond **fair use**. |
 | Cohort | **100 seats**, no end date; it closes when they're gone. Seats left shown on the pricing page. |
 | Refunds | **30 days, no questions.** A refund ends team access; the personal workspace drops back to the free limits. |
