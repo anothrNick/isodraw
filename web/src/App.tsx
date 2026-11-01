@@ -113,14 +113,9 @@ export function App() {
   );
 }
 
-export function Logo() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
-      <path d="M12 2 3 7l9 5 9-5-9-5Z" fill="#60a5fa" />
-      <path d="M3 7v10l9 5V12L3 7Z" fill="#2563eb" />
-      <path d="M21 7v10l-9 5V12l9-5Z" fill="#1d4ed8" />
-    </svg>
-  );
+/** The IsoDraw mark: an isometric capital I (also the favicon). */
+export function Logo({ size = 22 }: { size?: number }) {
+  return <img src="/favicon.svg" width={size} height={size} alt="" aria-hidden className="flex-none" />;
 }
 
 function Shell({ session, org, children }: { session: Session; org?: Org; children: React.ReactNode }) {
