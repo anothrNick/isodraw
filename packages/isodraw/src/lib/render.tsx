@@ -53,11 +53,25 @@ function Ground({ proj, z, children }: { proj: Projector; z: number; children: R
   );
 }
 
+/** The bold outline around shapes, as on the isometric icons: a dark shade of the shape's own color. */
+const OUTLINE_WIDTH = 2.4;
+export const outlineColor = (color: string) => shade(color, 0.25);
+
 function SolidFaces({ node, proj }: { node: DiagramNode; proj: Projector }) {
   const curved = CURVED.has(node.kind);
+  const faces = solidFaces(node, proj);
+  const ink = outlineColor(node.color);
   return (
     <>
-      {solidFaces(node, proj).map((f, i) => {
+      {/* Solids are convex, so their outline is the hull of their faces, drawn under them: the outer half shows. */}
+      <polygon
+        points={pointsAttr(hull(faces.flatMap((f) => f.points)))}
+        fill={ink}
+        stroke={ink}
+        strokeWidth={OUTLINE_WIDTH}
+        strokeLinejoin="round"
+      />
+      {faces.map((f, i) => {
         const fill = shade(node.color, f.light);
         return (
           <polygon
@@ -147,6 +161,7 @@ function Sphere({ node, proj, gradId }: { node: DiagramNode; proj: Projector; gr
         </radialGradient>
       </defs>
       <polygon points={pointsAttr(footprint(node).map((q) => proj.project(q.x, q.y, node.z)))} fill="#000" opacity={0.1} />
+      <circle cx={p.x} cy={p.y} r={r * TILE + OUTLINE_WIDTH / 2} fill={outlineColor(node.color)} />
       <circle cx={p.x} cy={p.y} r={r * TILE} fill={`url(#${gradId})`} />
     </>
   );
