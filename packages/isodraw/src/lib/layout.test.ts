@@ -55,6 +55,53 @@ describe('layoutLevel', () => {
   });
 });
 
+// IsoDraw's own architecture, cut down: things outside an area feed components in its middle.
+const platform = (): Diagram => ({
+  version: 1,
+  nodes: [
+    node('agents'),
+    node('cli'),
+    node('people'),
+    node('ai'),
+    node('site', { kind: 'area', w: 4, d: 4, h: 0, x: 40, y: 0 }),
+    node('preview', { x: 41, y: 1 }),
+    node('web', { x: 41, y: 1 }),
+    node('mcp', { x: 41, y: 1 }),
+    node('proxy', { x: 41, y: 1 }),
+    node('fly', { kind: 'area', w: 4, d: 4, h: 0, x: 60, y: 0 }),
+    node('api', { x: 61, y: 1 }),
+    node('cdn'),
+  ],
+  edges: [edge('agents', 'cli'), edge('cli', 'proxy'), edge('people', 'web'), edge('ai', 'mcp'), edge('web', 'proxy'), edge('mcp', 'api'),
+    edge('proxy', 'api'), edge('preview', 'api'), edge('web', 'cdn')],
+});
+
+describe('layoutLevel with areas', () => {
+  const d = layoutLevel(platform());
+  const at = (id: string) => d.nodes.find((n) => n.id === id)!;
+  const right = (n: DiagramNode) => n.x + n.w;
+
+  it('puts what feeds an area before it, and what it feeds after it', () => {
+    expect(right(at('cli'))).toBeLessThanOrEqual(at('site').x);
+    expect(right(at('people'))).toBeLessThanOrEqual(at('site').x);
+    expect(right(at('site'))).toBeLessThanOrEqual(at('fly').x);
+    expect(right(at('site'))).toBeLessThanOrEqual(at('cdn').x);
+  });
+
+  it('pulls starting points next to what they feed', () => {
+    // agents → cli → site: agents first; people and ai feed the site directly, so they share the cli's column.
+    expect(at('agents').x).toBeLessThan(at('cli').x);
+    expect(at('people').x).toBe(at('cli').x);
+    expect(at('ai').x).toBe(at('cli').x);
+  });
+
+  it("orders an area's contents by where their outside neighbours are", () => {
+    const outside = ['cli', 'people', 'ai'].sort((a, b) => at(a).y - at(b).y);
+    const inside = ['web', 'mcp'].sort((a, b) => at(a).y - at(b).y);
+    expect(inside).toEqual(outside.filter((o) => o !== 'cli').map((o) => (o === 'people' ? 'web' : 'mcp')));
+  });
+});
+
 describe('settleLevel', () => {
   it('lays out a level only when the platform placed everything on it', () => {
     expect(settleLevel(messy())).not.toBe(messy());
