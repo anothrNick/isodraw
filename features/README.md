@@ -26,6 +26,7 @@ Keep the status and priority current, and record decisions in the file as they'r
 | Priority | Feature | Summary |
 | --- | --- | --- |
 | high · in progress | [CLI for people and AI agents](cli.md) | A command line tool built for Claude, ChatGPT and scripts to read and change diagrams and docs. |
+| high · planned | [MCP server](mcp-server.md) | IsoDraw as a connector in Claude, ChatGPT and Cursor: read, draw and document diagrams in plain words, with pictures in the chat. |
 | next | [Diagram from a code repo](diagram-from-repo.md) | A GitHub Action in the customer's CI keeps a repo's diagram in step with its code, and comments on PRs with the architecture change. |
 | next | [Version history](version-history.md) | Snapshots as autosave runs, a History panel, and restore. |
 | next | [Share links](share-links.md) | Read-only public links to a diagram's docs page, with expiry and revoke. |

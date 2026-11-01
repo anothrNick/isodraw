@@ -66,7 +66,7 @@ This needs **API tokens** on the backend: an `api_tokens` table (hashed, like se
 
 ### Chat apps: an MCP server on the same operations
 
-Claude Desktop and ChatGPT reach tools through MCP, not a shell. After the CLI, the API can expose a remote MCP endpoint (`/mcp`, signed in with OAuth) offering the same operations as tools: `list_diagrams`, `describe_diagram`, `get_docs`, `set_docs`, `add_nodes`, `connect`, `apply_changes`. The CLI and MCP share one operations module, so behavior matches.
+Claude Desktop and ChatGPT reach tools through MCP, not a shell. After the CLI, the API can expose a remote MCP endpoint (`/mcp`, signed in with OAuth) offering the same operations as tools: `list_diagrams`, `describe_diagram`, `get_docs`, `set_docs`, `add_nodes`, `connect`, `apply_changes`. The CLI and MCP share one operations module, so behavior matches. Planned in detail in [MCP server](mcp-server.md).
 
 ## Progress
 
