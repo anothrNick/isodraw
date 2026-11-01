@@ -62,8 +62,10 @@ export function docOf(t: DocTarget, d: Diagram): string {
   return d.edges.find((e) => e.id === t.id)?.doc ?? '';
 }
 
+/** The diagram with one doc changed; the same diagram when the doc is unchanged (trailing whitespace aside), so undo gets no empty step. */
 export function withDoc(d: Diagram, t: DocTarget, md: string): Diagram {
   const doc = hasDoc(md) ? md : undefined;
+  if ((doc ?? '').trimEnd() === docOf(t, d).trimEnd()) return d;
   if (t.kind === 'diagram') return { ...d, doc };
   if (t.kind === 'node') return { ...d, nodes: d.nodes.map((n) => (n.id === t.id ? { ...n, doc } : n)) };
   return { ...d, edges: d.edges.map((e) => (e.id === t.id ? { ...e, doc } : e)) };

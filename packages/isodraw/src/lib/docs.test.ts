@@ -87,6 +87,12 @@ describe('withDoc', () => {
     const cleared = withDoc(d, { kind: 'node', id: 'db' }, '  \n');
     expect(cleared.nodes.find((n) => n.id === 'db')!.doc).toBeUndefined();
   });
+
+  it('returns the same diagram when the doc does not change', () => {
+    const d = withDoc(diagram, { kind: 'node', id: 'db' }, 'Postgres 16');
+    expect(withDoc(d, { kind: 'node', id: 'db' }, 'Postgres 16\n')).toBe(d);
+    expect(withDoc(d, { kind: 'edge', id: 'e1' }, '')).toBe(d);
+  });
 });
 
 describe('breadcrumbs', () => {
