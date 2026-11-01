@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Infinity as InfinityIcon, Loader2, Search, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, type AdminEvent, type AdminStats, type AdminUser, type AdminWorkspace, type Invite, type Member, type Plan } from './api';
+import { api, formatPrice, type AdminEvent, type AdminUser, type AdminUserDetail, type AdminWorkspace, type Invite, type Member, type Plan } from './api';
 import { Loading, Message } from './App';
 import { ago } from './DiagramList';
 import { linkProps, navigate, type AdminSection } from './router';
@@ -77,7 +77,7 @@ export function AdminPage({ section, id }: { section: AdminSection; id?: string 
 // ---------- overview ----------
 
 function Overview() {
-  const [data, setData] = useState<{ stats: AdminStats; events: AdminEvent[] } | null>(null);
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.admin.stats>> | null>(null);
   useEffect(() => {
     api.admin.stats().then(setData, (e: Error) => toast.error(e.message));
   }, []);
@@ -89,6 +89,11 @@ function Overview() {
         <Stat label="Users" value={s.users} note={`${s.usersLastWeek} new this week`} href="/admin/users" />
         <Stat label="Active this week" value={s.activeWeek} note="signed in in the last 7 days" />
         <Stat label="Lifetime" value={s.lifetime} note="accounts with lifetime access" />
+        <Stat
+          label="Founding seats sold"
+          value={data.seats.sold}
+          note={`of ${data.seats.total}${data.seats.pending ? `, ${data.seats.pending} in checkout` : ''}${data.checkout ? '' : ' · checkout off'}`}
+        />
         <Stat label="Teams" value={s.teams} note="team workspaces" href="/admin/workspaces" />
         <Stat label="Diagrams" value={s.diagrams} note="not deleted" />
         <Stat label="Images" value={s.images} note={`${bytes(s.imageBytes)} stored`} />
@@ -198,7 +203,7 @@ const LifetimeBadge = () => (
 
 function UserDetail({ id }: { id: string }) {
   const session = useSession();
-  const [data, setData] = useState<{ user: AdminUser; workspaces: AdminWorkspace[] } | null>(null);
+  const [data, setData] = useState<AdminUserDetail | null>(null);
   const [confirm, setConfirm] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -257,6 +262,30 @@ function UserDetail({ id }: { id: string }) {
           }))}
         />
       </section>
+      {data.purchases.length > 0 && (
+        <section className="mt-8">
+          <h3 className="mb-3 text-sm font-semibold">Purchases · {data.purchases.length}</h3>
+          <Table
+            head={['Started', 'Status', 'Amount', 'Seat']}
+            rows={data.purchases.map((p) => ({
+              key: p.id,
+              cells: [
+                new Date(p.createdAt).toLocaleString(),
+                p.status === 'paid' && p.paidAt
+                  ? `Paid ${new Date(p.paidAt).toLocaleDateString()}`
+                  : p.status === 'refunded' && p.refundedAt
+                    ? `Refunded ${new Date(p.refundedAt).toLocaleDateString()}`
+                    : p.status === 'pending'
+                      ? 'In checkout'
+                      : 'Expired',
+                p.amount != null && p.currency ? formatPrice({ amount: p.amount, currency: p.currency }) : '—',
+                p.seat ? `#${p.seat}` : '—',
+              ],
+            }))}
+          />
+          <p className="mt-2 text-xs text-muted-foreground">Refunds are made in the Stripe dashboard; access is taken back when Stripe reports it.</p>
+        </section>
+      )}
       <Confirm
         open={confirm !== null}
         title={confirm ? 'Grant lifetime access?' : 'Take back lifetime access?'}
@@ -450,6 +479,8 @@ const ACTIONS: Record<string, string> = {
   'lifetime.revoke': 'Took back lifetime access from',
   'team.grandfather': 'Grandfathered',
   'team.ungrandfather': 'Removed grandfathering from',
+  'purchase.paid': 'Lifetime bought by',
+  'purchase.refunded': 'Lifetime refunded for',
 };
 
 function Events({ events }: { events: AdminEvent[] }) {
@@ -463,7 +494,7 @@ function Events({ events }: { events: AdminEvent[] }) {
           <span key="t" title={new Date(e.createdAt).toLocaleString()}>
             {ago(e.createdAt)}
           </span>,
-          e.admin || '—',
+          e.admin || 'Stripe',
           `${ACTIONS[e.action] ?? e.action} ${e.target}${e.detail ? ` (${e.detail})` : ''}`,
         ],
       }))}

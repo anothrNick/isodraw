@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { ChevronsUpDown, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, ShieldCheck, Sun, Users } from 'lucide-react';
+import { ChevronsUpDown, Infinity as InfinityIcon, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, ShieldCheck, Sun, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiError, api, signIn, type Org, type User } from './api';
+import { ApiError, api, signIn, type Billing, type Org, type User } from './api';
 import { AuthPages } from './AuthPages';
 import { CliLoginPage } from './CliLoginPage';
 import { ConnectPage } from './ConnectPage';
@@ -14,6 +14,7 @@ import { linkProps, navigate, useRoute } from './router';
 import { SessionContext, type Session } from './session';
 import { TokensPage } from './TokensPage';
 import { AdminPage } from './AdminPage';
+import { BuyLifetime, PlanPage } from './PlanPage';
 import { setThemeSetting, useTheme, type ThemeSetting } from './theme';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -67,7 +68,14 @@ export function App() {
   if (!session) return <Loading />;
 
   // Account-level pages, outside any workspace.
-  if (route.page === 'invite' || route.page === 'cli-login' || route.page === 'connect' || route.page === 'tokens' || route.page === 'admin') {
+  if (
+    route.page === 'invite' ||
+    route.page === 'cli-login' ||
+    route.page === 'connect' ||
+    route.page === 'tokens' ||
+    route.page === 'plan' ||
+    route.page === 'admin'
+  ) {
     return (
       <SessionContext.Provider value={session}>
         <Shell session={session}>
@@ -77,6 +85,8 @@ export function App() {
             <CliLoginPage />
           ) : route.page === 'connect' ? (
             <ConnectPage />
+          ) : route.page === 'plan' ? (
+            <PlanPage />
           ) : route.page === 'admin' ? (
             <AdminPage section={route.section} id={route.id} />
           ) : (
@@ -183,11 +193,13 @@ function CreateTeamDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [busy, setBusy] = useState(false);
   const session = useContext(SessionContext);
   const reload = session?.reload;
+  const [billing, setBilling] = useState<Billing | null>(null);
   useEffect(() => {
     if (!open) return;
     setName('');
     // Lifetime access may have changed since the page loaded (a purchase, or an admin's grant).
     reload?.().catch(() => undefined);
+    api.billing().then(setBilling, () => setBilling(null));
   }, [open, reload]);
   const create = async () => {
     setBusy(true);
@@ -214,8 +226,11 @@ function CreateTeamDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               one-time purchase. Your personal workspace keeps every feature for free.
             </DialogDescription>
           </DialogHeader>
+          {billing && <BuyLifetime billing={billing} />}
           <DialogFooter>
-            <Button onClick={() => onOpenChange(false)}>Got it</Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Not now
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -294,6 +309,10 @@ function UserMenu({ user, admin }: { user: User; admin: boolean }) {
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <DropdownMenuItem onSelect={() => navigate('/settings/plan')}>
+          <InfinityIcon />
+          Plan
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => navigate('/settings/tokens')}>
           <KeyRound />
           API tokens

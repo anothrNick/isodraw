@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -39,6 +40,17 @@ type Config struct {
 	ImageDir   string
 	// AdminGroup is the identity provider group whose members are platform admins (Cognito: a user pool group).
 	AdminGroup string
+	// Stripe, for buying lifetime access. Without a key there's nothing to buy (admins can still grant it).
+	StripeSecretKey     string
+	StripeWebhookSecret string
+	// StripeAPI is Stripe's address (tests point it at a fake).
+	StripeAPI string
+	// StripeAutomaticTax has Stripe Tax add sales tax or VAT at checkout (set it up in the dashboard first).
+	StripeAutomaticTax bool
+	// The founding lifetime offer: price in the currency's smallest unit, and how many seats there are.
+	LifetimePrice    int
+	LifetimeCurrency string
+	LifetimeSeats    int
 }
 
 // FromEnv reads the configuration, reporting every missing or invalid setting at once.
@@ -57,8 +69,25 @@ func FromEnv() (Config, error) {
 		BucketName:       os.Getenv("BUCKET_NAME"),
 		ImageDir:         env("IMAGE_DIR", ".data/images"),
 		AdminGroup:       env("ADMIN_GROUP", "admins"),
+
+		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
+		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		StripeAPI:           env("STRIPE_API", "https://api.stripe.com"),
+		StripeAutomaticTax:  os.Getenv("STRIPE_AUTOMATIC_TAX") == "true",
+		LifetimeCurrency:    env("LIFETIME_CURRENCY", "usd"),
 	}
 	var errs []error
+	for name, p := range map[string]*int{"LIFETIME_PRICE": &c.LifetimePrice, "LIFETIME_SEATS": &c.LifetimeSeats} {
+		def := map[string]string{"LIFETIME_PRICE": "9900", "LIFETIME_SEATS": "100"}[name]
+		n, err := strconv.Atoi(env(name, def))
+		if err != nil || n <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be a positive whole number", name))
+		}
+		*p = n
+	}
+	if c.StripeSecretKey != "" && c.StripeWebhookSecret == "" {
+		errs = append(errs, errors.New("STRIPE_WEBHOOK_SECRET is required with STRIPE_SECRET_KEY, or payments would never be recorded"))
+	}
 	ttl, err := time.ParseDuration(env("SESSION_TTL", "720h"))
 	if err != nil {
 		errs = append(errs, fmt.Errorf("SESSION_TTL: %w", err))

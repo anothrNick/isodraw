@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/billing"
 	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
 	"github.com/anothrNick/isodraw/api/internal/store"
@@ -25,10 +26,18 @@ type Server struct {
 	store *store.Store
 	auth  *auth.Auth
 	files blobs.Store
+	// stripe is nil when no Stripe key is set: lifetime access then can't be bought.
+	stripe *billing.Stripe
 }
 
 func New(cfg config.Config, s *store.Store, a *auth.Auth, files blobs.Store) http.Handler {
 	srv := &Server{cfg: cfg, store: s, auth: a, files: files}
+	if cfg.StripeSecretKey != "" {
+		srv.stripe = billing.New(cfg.StripeSecretKey)
+		if cfg.StripeAPI != "" {
+			srv.stripe.API = cfg.StripeAPI
+		}
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
@@ -65,6 +74,7 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth, files blobs.Store) htt
 	api.HandleFunc("GET /api/diagrams/{id}/preview", srv.previewLink)
 	srv.imageRoutes(api)
 	srv.adminRoutes(api)
+	srv.billingRoutes(mux, api)
 	srv.memberRoutes(api)
 	srv.tokenRoutes(api)
 	srv.oauthRoutes(mux, api)

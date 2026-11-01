@@ -67,7 +67,13 @@ func (s *Server) adminStats(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"stats": stats, "events": events})
+	sold, pending, err := s.store.Seats(r.Context())
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	seats := map[string]int{"total": s.cfg.LifetimeSeats, "sold": sold, "pending": pending}
+	writeJSON(w, http.StatusOK, map[string]any{"stats": stats, "events": events, "seats": seats, "checkout": s.stripe != nil})
 }
 
 func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +113,12 @@ func (s *Server) adminUser(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": u, "workspaces": orgs})
+	purchases, err := s.store.UserPurchases(r.Context(), u.ID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": u, "workspaces": orgs, "purchases": purchases})
 }
 
 func (s *Server) adminUpdateUser(w http.ResponseWriter, r *http.Request) {

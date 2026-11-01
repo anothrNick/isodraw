@@ -182,7 +182,8 @@ type AdminEvent struct {
 
 // RecordAdminEvent keeps a line in the admin log.
 func (s *Store) RecordAdminEvent(ctx context.Context, adminID, action, target, detail string) error {
-	_, err := s.db.Exec(ctx, `insert into admin_events (admin_id, action, target, detail) values ($1, $2, $3, $4)`, adminID, action, target, detail)
+	// An empty adminID is the system itself, like a Stripe webhook.
+	_, err := s.db.Exec(ctx, `insert into admin_events (admin_id, action, target, detail) values (nullif($1, '')::uuid, $2, $3, $4)`, adminID, action, target, detail)
 	return err
 }
 
