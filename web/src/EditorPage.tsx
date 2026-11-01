@@ -143,7 +143,8 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
         theme={resolved}
         // The top bar links to the docs page; writing docs happens in the sidebar's Docs tab.
         docsButton={false}
-        className="min-h-0 flex-1 rounded-none border-0"
+        // The library's own styles round and border the editor; full-bleed under the app bar, it needs neither.
+        className="min-h-0 flex-1 rounded-none! border-0!"
       />
     </div>
   );
