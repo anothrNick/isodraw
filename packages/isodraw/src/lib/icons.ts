@@ -97,11 +97,11 @@ const titleCase = (kebab: string, words: Record<string, string>) =>
 
 type IconifyJson = { width?: number; height?: number; icons: Record<string, { body: string; width?: number; height?: number }> };
 
-/** An Iconify icon as a standalone SVG data URL. */
-function iconifySvg(icon: { body: string; width?: number; height?: number }, set: IconifyJson): string {
+/** An Iconify icon as a standalone SVG data URL; `color` is what its `currentColor` draws in. */
+function iconifySvg(icon: { body: string; width?: number; height?: number }, set: IconifyJson, color?: string): string {
   const w = icon.width ?? set.width ?? 24;
   const h = icon.height ?? set.height ?? 24;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w * 4}" height="${h * 4}">${icon.body}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w * 4}" height="${h * 4}"${color ? ` color="${color}"` : ''}>${icon.body}</svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
@@ -193,7 +193,7 @@ export function cloudIconUrl(ref: string): string | null {
 
 /** Lucide, the icon set the IsoDraw app itself uses (ISC), as Iconify JSON. */
 const LUCIDE = 'https://cdn.jsdelivr.net/npm/@iconify-json/lucide@1.2.148/icons.json';
-/** Lucide icons draw with `currentColor`, which is black inside an <img>; draw them in the app's blue. */
+/** Lucide icons draw with `currentColor`, which is black inside an <img>; they start in the app's blue. */
 const LUCIDE_COLOR = '#2563eb';
 
 /** Every Lucide icon, loaded from the jsDelivr CDN, alphabetically. */
@@ -205,8 +205,31 @@ export async function loadLucideIconLibrary(opts: { signal?: AbortSignal } = {})
     .map(([key, icon]) => ({
       id: `lucide:${key}`,
       name: titleCase(key, {}),
-      src: iconifySvg({ ...icon, body: icon.body.replace(/currentColor/g, LUCIDE_COLOR) }, set),
+      src: iconifySvg(icon, set, LUCIDE_COLOR),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
   return { id: 'lucide', name: 'Lucide', icons };
+}
+
+const SVG_DATA = 'data:image/svg+xml,';
+const ROOT_COLOR = /^(<svg\b[^>]*?\scolor=")(#[0-9a-f]{6})"/i;
+
+/**
+ * The color a recolorable icon draws in: an SVG data URL whose root sets
+ * `color`, like the Lucide icons. Null for anything else.
+ */
+export function iconColor(src: string | undefined): string | null {
+  if (!src?.startsWith(SVG_DATA)) return null;
+  try {
+    return ROOT_COLOR.exec(decodeURIComponent(src.slice(SVG_DATA.length)))?.[2] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The same icon in another color (see iconColor); other sources come back unchanged. */
+export function withIconColor(src: string, color: string): string {
+  if (!iconColor(src) || !/^#[0-9a-f]{6}$/i.test(color)) return src;
+  const svg = decodeURIComponent(src.slice(SVG_DATA.length)).replace(ROOT_COLOR, `$1${color}"`);
+  return SVG_DATA + encodeURIComponent(svg);
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { humanizeIconName, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary } from './icons';
+import { humanizeIconName, iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary, withIconColor } from './icons';
 
 /** Stub `fetch` with a JSON body per URL substring; anything else is a 404. */
 function stubFetch(routes: Record<string, unknown>) {
@@ -127,7 +127,7 @@ describe('loadAzureIconLibrary', () => {
 });
 
 describe('loadLucideIconLibrary', () => {
-  it('lists every icon, drawn in blue instead of currentColor', async () => {
+  it('lists every icon, drawn in blue and recolorable', async () => {
     stubFetch({
       '@iconify-json/lucide': {
         width: 24,
@@ -138,13 +138,25 @@ describe('loadLucideIconLibrary', () => {
     const lib = await loadLucideIconLibrary();
     expect(lib.id).toBe('lucide');
     expect(lib.icons.map((i) => i.name)).toEqual(['Arrow Up', 'Server Cog']);
-    const svg = decodeURIComponent(lib.icons[1].src.replace('data:image/svg+xml,', ''));
-    expect(svg).toContain('stroke="#2563eb"');
-    expect(svg).not.toContain('currentColor');
+    const src = lib.icons[1].src;
+    expect(decodeURIComponent(src.replace('data:image/svg+xml,', ''))).toMatch(/^<svg [^>]*color="#2563eb"/);
+    expect(iconColor(src)).toBe('#2563eb');
+    const green = withIconColor(src, '#10b981');
+    expect(iconColor(green)).toBe('#10b981');
+    expect(decodeURIComponent(green)).toContain('stroke="currentColor" d="M1 1"');
   });
 
   it('fails clearly when the CDN does', async () => {
     stubFetch({});
     await expect(loadLucideIconLibrary()).rejects.toThrow(/Lucide/);
+  });
+});
+
+describe('iconColor', () => {
+  it('only reads SVG data URLs whose root sets a color', () => {
+    expect(iconColor('https://x/icon.svg')).toBeNull();
+    expect(iconColor('data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"><path fill="#123456"/></svg>'))).toBeNull();
+    expect(iconColor('data:image/png;base64,AAAA')).toBeNull();
+    expect(withIconColor('https://x/icon.svg', '#10b981')).toBe('https://x/icon.svg');
   });
 });
