@@ -100,6 +100,18 @@ export function findNode(d: Diagram, ref: string): DiagramNode {
 }
 
 /** Connections from one item to another (either direction if none run that way). */
+/** A doc's Markdown: an item's (component or connection id or label), or without one the level's overview. */
+export function readDoc(root: Diagram, level: LevelPath, item?: string): string {
+  const at = levelAt(root, level)!;
+  if (item) {
+    const edge = at.edges.find((e) => e.id === item);
+    return edge ? (edge.doc ?? '') : (findNode(at, item).doc ?? '');
+  }
+  // A detail diagram's overview is its component's doc.
+  if (level.length) return levelAt(root, level.slice(0, -1))!.nodes.find((n) => n.id === level[level.length - 1])?.doc ?? '';
+  return root.doc ?? '';
+}
+
 export function findEdges(d: Diagram, from: string, to: string): DiagramEdge[] {
   const a = findNode(d, from).id;
   const b = findNode(d, to).id;

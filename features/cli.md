@@ -77,7 +77,7 @@ Claude Desktop and ChatGPT reach tools through MCP, not a shell. After the CLI, 
   - Layout around manual items: today, once a level has any manual item, automatic layout only places new items beside what they connect to. Laying out all the auto items with the manual ones as fixed points would keep mixed levels tidy too.
   - The open editor doesn't show CLI changes until it saves (merging them) or reloads. Polling for a newer version, or a "changed elsewhere, reload" notice, would close that gap.
   - Publish to npm, and decide the name (see below).
-  - Remote MCP for Claude Desktop and ChatGPT.
+  - Remote MCP for Claude Desktop and ChatGPT (`isodraw mcp` over stdio is done; see [MCP server](mcp-server.md)).
 
 ## Phases
 

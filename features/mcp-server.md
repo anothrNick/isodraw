@@ -1,6 +1,6 @@
 # MCP server: IsoDraw in Claude, ChatGPT and other AI apps
 
-**Status:** planned · **Priority:** high
+**Status:** in progress · **Priority:** high
 **Summary:** IsoDraw as an MCP connector, so people can ask Claude, ChatGPT, Cursor and other assistants to read, create, change and document their diagrams in plain words, and see the result inline. It shares the CLI's operations, uses OAuth for sign-in, and grants the same workspace-scoped tokens the CLI uses.
 
 ## Why
@@ -85,6 +85,11 @@ The point of a visual product is seeing it, so every write ends with a picture.
 - **Images in tool results.** MCP tool results can include images, but chat apps generally want PNG, not SVG. The preview function renders PNG too (`/p/{id}.png`) by rasterizing its SVG with resvg (WebAssembly). Tool results include the PNG plus the links.
 - **Links** to the editor and the docs page, so a person can take over.
 - **Later: an interactive view in the chat.** MCP's UI extension (MCP Apps, which ChatGPT's apps build on) lets a tool return a small web view the app shows inline: the diagram with the docs site's level crumbs and spotlight, read-only, with "Open in IsoDraw". Worth it once the basics are in use; client support needs checking first.
+
+## Progress
+
+- **Done (phase 1):** `isodraw mcp` serves the eight tools over stdio from `packages/cli/src/mcp.ts`, built on the official TypeScript SDK and the CLI's operations, with server instructions, read-only and destructive hints, docs returned as quoted content, and errors that name the tool to call next. Tested over real stdio with the SDK's client (create with changes, describe, docs, dry run, save, preview, errors) and in unit tests with an in-memory transport. Setup for Claude Code, Claude Desktop and Cursor is in the README.
+- **Next:** try it in Claude Desktop and Cursor on real tasks and tune tool descriptions; then phase 2, the hosted `/mcp` with OAuth.
 
 ## Phases
 
