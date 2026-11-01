@@ -74,6 +74,20 @@ npm run deploy:web        # builds web/ and deploys it with its functions
 
 Then in the Cloudflare dashboard, add your domain to the Pages project (*Custom domains*). `API_ORIGIN` comes from `web/wrangler.toml`.
 
+### Preview pictures in R2 (optional, recommended)
+
+Preview pictures (`/p/{id}.svg` and `.png`, and the app's grid thumbnails) are drawn on demand. With an R2 bucket bound as `PREVIEWS`, each version of a diagram is drawn once per size, theme and format and kept, so views cost almost nothing until the next edit. Without it, every cache miss draws again (fine for light use; PNGs take a few hundred ms of CPU).
+
+1. In the Cloudflare dashboard, open **R2** once and enable it (it has a free tier; Cloudflare may ask for a payment method).
+2. Create the bucket and a rule that deletes pictures after 30 days:
+
+   ```bash
+   npx wrangler@4.156.0 r2 bucket create isodraw-previews
+   npx wrangler@4.156.0 r2 bucket lifecycle add isodraw-previews expire-previews previews/ --expire-days 30 --force
+   ```
+
+3. Uncomment the `[[r2_buckets]]` block in `web/wrangler.toml` and run `npm run deploy:web`. Responses then carry `X-Preview: drawn` the first time and `X-Preview: stored` after.
+
 ## 4. Check it
 
 1. Open your domain: you're sent to `/login`. Create an account, enter the code Cognito emails you, and you land on your diagrams.

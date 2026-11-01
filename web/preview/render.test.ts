@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { inlineImages, messageSvg, renderSvg } from './render';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { inlineImages, messageSvg, previewImage, renderSvg, type PreviewStore } from './render';
 
 const diagram = {
   version: 1,
@@ -95,5 +95,70 @@ describe('PNG pictures', () => {
     expect([...png.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
     // The PNG's width (big-endian, bytes 16–19) is what was asked for.
     expect(new DataView(png.buffer, png.byteOffset).getUint32(16)).toBe(400);
+  });
+});
+
+describe('previewImage', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** The API answers for one diagram, at the version given. */
+  function api(version: () => number) {
+    vi.stubGlobal('fetch', async (u: string | URL) => {
+      const url = new URL(String(u));
+      if (url.searchParams.get('s') !== 'ok') return Response.json({ error: {} }, { status: 403 });
+      return Response.json({ title: 'Shop', version: version(), diagram: { version: 1, nodes: diagram.nodes.slice(0, 2), edges: [] } });
+    });
+  }
+  const store = () => {
+    const kept = new Map<string, Uint8Array>();
+    const s: PreviewStore = { get: async (k) => kept.get(k) ?? null, put: async (k, b) => void kept.set(k, b) };
+    return { s, kept };
+  };
+  const link = (q: string, ext = 'png') => new URL(`https://isodraw.test/p/d1.${ext}?e=9&s=ok${q}`);
+
+  it('draws each version once, then sends the kept picture', async () => {
+    let v = 3;
+    api(() => v);
+    const { s, kept } = store();
+    const toPng = vi.fn(async (_svg: string, width?: number) => new Uint8Array([0x89, 0x50, width ?? 0]));
+
+    const first = await previewImage(link(''), 'https://api.test', { store: s, toPng });
+    expect(first.status).toBe(200);
+    expect(first.headers['X-Preview']).toBe('drawn');
+    expect([...kept.keys()]).toEqual(['previews/d1/v3/_/light-full.png']);
+
+    const again = await previewImage(link('&theme=light'), 'https://api.test', { store: s, toPng });
+    expect(again.headers['X-Preview']).toBe('stored');
+    expect(toPng).toHaveBeenCalledTimes(1);
+
+    v = 4; // an edit
+    const edited = await previewImage(link(''), 'https://api.test', { store: s, toPng });
+    expect(edited.headers['X-Preview']).toBe('drawn');
+    expect(kept.has('previews/d1/v4/_/light-full.png')).toBe(true);
+  });
+
+  it('keeps thumbnails, themes and SVGs apart, and lets browsers keep versioned links', async () => {
+    api(() => 1);
+    const { s, kept } = store();
+    const toPng = vi.fn(async (_svg: string, width?: number) => new Uint8Array([width ?? 0]));
+    const thumb = await previewImage(link('&size=thumb&v=1&theme=dark'), 'https://api.test', { store: s, toPng });
+    expect(toPng).toHaveBeenLastCalledWith(expect.any(String), 640);
+    expect(thumb.headers['Cache-Control']).toBe('public, max-age=86400');
+    const svg = await previewImage(link('', 'svg'), 'https://api.test', { store: s, toPng });
+    expect(String(svg.body)).toMatch(/^<svg /);
+    expect(svg.headers['Cache-Control']).toBe('public, max-age=60');
+    expect([...kept.keys()].sort()).toEqual(['previews/d1/v1/_/dark-thumb.png', 'previews/d1/v1/_/light-full.svg']);
+    // The kept SVG comes back as text.
+    const stored = await previewImage(link('', 'svg'), 'https://api.test', { store: s, toPng });
+    expect(stored.body).toBe(svg.body);
+  });
+
+  it('never keeps error pictures', async () => {
+    api(() => 1);
+    const { s, kept } = store();
+    const bad = await previewImage(new URL('https://isodraw.test/p/d1.svg?e=9&s=forged'), 'https://api.test', { store: s });
+    expect(bad.status).toBe(403);
+    expect(bad.headers['Cache-Control']).toBe('no-store');
+    expect(kept.size).toBe(0);
   });
 });

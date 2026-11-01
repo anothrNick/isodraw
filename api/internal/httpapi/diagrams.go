@@ -135,7 +135,15 @@ func (s *Server) listDiagrams(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"diagrams": list})
+	type listed struct {
+		store.DiagramMeta
+		Thumbnail string `json:"thumbnail"`
+	}
+	out := make([]listed, len(list))
+	for i, d := range list {
+		out[i] = listed{DiagramMeta: d, Thumbnail: s.thumbnailLink(d.ID, d.Version)}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"diagrams": out})
 }
 
 func (s *Server) createDiagram(w http.ResponseWriter, r *http.Request) {

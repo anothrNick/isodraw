@@ -79,7 +79,10 @@ export function rasterizer(wasm: WebAssembly.Module | ArrayBuffer | Uint8Array, 
     }
   };
   return async (svg: string, width = pngWidth(svg)): Promise<Uint8Array> => {
-    ready ??= initWasm(wasm as Parameters<typeof initWasm>[0]);
+    // resvg can only start once per process; a reloaded copy of this module (the dev server) finds it running.
+    ready ??= initWasm(wasm as Parameters<typeof initWasm>[0]).catch((e: Error) => {
+      if (!/already initialized/i.test(e.message)) throw e;
+    });
     await ready;
     const own = Number(/^<svg\b[^>]*?\swidth="(\d+(?:\.\d+)?)"/.exec(svg)?.[1] ?? width);
     // Icons have no text, so they don't need the fonts.

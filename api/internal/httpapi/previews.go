@@ -98,6 +98,19 @@ func (s *Server) previewLink(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// thumbnailLink is a signed PNG link to a small picture of a diagram's top level, for the
+// app's grid of diagrams. Its expiry is rounded to a day, and the version is in the link, so
+// the browser can keep the image until the diagram changes.
+func (s *Server) thumbnailLink(id string, version int64) string {
+	exp := time.Now().UTC().Truncate(24 * time.Hour).Add(48 * time.Hour).Unix()
+	q := url.Values{}
+	q.Set("e", strconv.FormatInt(exp, 10))
+	q.Set("s", s.previewSig(id, "", exp))
+	q.Set("size", "thumb")
+	q.Set("v", strconv.FormatInt(version, 10))
+	return s.cfg.PublicURL + "/p/" + id + ".png?" + q.Encode()
+}
+
 // parseTTL reads Go durations plus days: "36h", "7d".
 func parseTTL(v string) (time.Duration, error) {
 	if days, ok := strings.CutSuffix(v, "d"); ok {
@@ -139,7 +152,8 @@ func (s *Server) publicPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	// Short, so edits show up soon; the link itself stays valid until it expires.
 	w.Header().Set("Cache-Control", "public, max-age=60")
-	writeJSON(w, http.StatusOK, map[string]any{"title": d.Title, "diagram": lvl})
+	// The version lets the picture function keep one rendering per version of the diagram.
+	writeJSON(w, http.StatusOK, map[string]any{"title": d.Title, "version": d.Version, "diagram": lvl})
 }
 
 // levelOf picks a level out of diagram content and keeps only what drawing it

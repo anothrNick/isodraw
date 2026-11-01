@@ -25,6 +25,8 @@ export interface DiagramMeta {
   version: number;
   createdAt: string;
   updatedAt: string;
+  /** In lists: a signed link to a small PNG of the diagram, for the grid. */
+  thumbnail?: string;
 }
 
 export interface StoredDiagram extends DiagramMeta {
