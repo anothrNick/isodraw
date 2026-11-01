@@ -31,6 +31,13 @@ export interface StoredDiagram extends DiagramMeta {
   content: Diagram;
 }
 
+export interface PreviewLink {
+  svg: string;
+  url: string;
+  title: string;
+  expiresAt: string;
+}
+
 export interface Member {
   userId: string;
   email: string;
@@ -126,6 +133,9 @@ export const api = {
     request<DiagramMeta>('PUT', `/api/diagrams/${id}/content`, content, { 'If-Match': `"${version}"` }),
   rename: (id: string, title: string) => request<DiagramMeta>('PATCH', `/api/diagrams/${id}`, { title }),
   deleteDiagram: (id: string) => request<void>('DELETE', `/api/diagrams/${id}`),
+  /** A signed link to a picture of the diagram (or one detail level), viewable without signing in. */
+  previewLink: (id: string, level: string[]) =>
+    request<PreviewLink>('GET', `/api/diagrams/${id}/preview?${new URLSearchParams(level.length ? { level: level.join('/') } : {})}`),
   signOut: () => request<void>('POST', '/auth/logout'),
 
   createTeam: (name: string) => request<Org>('POST', '/api/orgs', { name }),
