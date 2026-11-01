@@ -90,7 +90,8 @@ export default defineConfig({
   server: {
     port: 5190,
     strictPort: true,
-    proxy: { '/api': API, '/auth': API, '/oauth': API, '/.well-known/oauth-': API },
+    // '^/i/' is a pattern, so the app's own paths starting with /i (like /index.html) stay here.
+    proxy: { '/api': API, '/auth': API, '/oauth': API, '/.well-known/oauth-': API, '^/i/': API },
   },
   build: { outDir: 'dist' },
 });

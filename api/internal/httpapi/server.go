@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
 	"github.com/anothrNick/isodraw/api/internal/store"
 )
@@ -23,10 +24,11 @@ type Server struct {
 	cfg   config.Config
 	store *store.Store
 	auth  *auth.Auth
+	files blobs.Store
 }
 
-func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
-	srv := &Server{cfg: cfg, store: s, auth: a}
+func New(cfg config.Config, s *store.Store, a *auth.Auth, files blobs.Store) http.Handler {
+	srv := &Server{cfg: cfg, store: s, auth: a, files: files}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
@@ -37,6 +39,8 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 	mux.HandleFunc("GET /auth/config", a.Config)
 	// Anyone with a signed preview link; the web app's /p/{id}.svg calls it.
 	mux.HandleFunc("GET /public/previews/{id}", srv.publicPreview)
+	// Uploaded images, for anyone with the link (see images.go).
+	mux.HandleFunc("GET /i/{file}", srv.publicImage)
 	if a.HasPasswordPages() {
 		for pattern, h := range map[string]http.HandlerFunc{
 			"POST /auth/signup": a.SignUp,
@@ -59,6 +63,7 @@ func New(cfg config.Config, s *store.Store, a *auth.Auth) http.Handler {
 	api.HandleFunc("PATCH /api/diagrams/{id}", srv.updateDiagram)
 	api.HandleFunc("DELETE /api/diagrams/{id}", srv.deleteDiagram)
 	api.HandleFunc("GET /api/diagrams/{id}/preview", srv.previewLink)
+	srv.imageRoutes(api)
 	srv.memberRoutes(api)
 	srv.tokenRoutes(api)
 	srv.oauthRoutes(mux, api)

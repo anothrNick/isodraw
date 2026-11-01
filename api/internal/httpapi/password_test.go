@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
 	"github.com/anothrNick/isodraw/api/internal/store"
 	"github.com/anothrNick/isodraw/api/internal/testdb"
@@ -44,7 +45,7 @@ func setupLocal(t *testing.T) (*fixture, *codes) {
 		inbox.last[email+"|"+purpose] = code
 		inbox.mu.Unlock()
 	})
-	return &fixture{t: t, store: s, h: New(cfg, s, a)}, inbox
+	return &fixture{t: t, store: s, h: New(cfg, s, a, blobs.Dir(t.TempDir()))}, inbox
 }
 
 func sessionFrom(t *testing.T, res *http.Response) *http.Cookie {
