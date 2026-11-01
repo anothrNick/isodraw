@@ -1,4 +1,4 @@
-import type { IconDef, IconLibrary } from './types';
+import type { Diagram, IconDef, IconLibrary } from './types';
 
 const AWS_PKG = 'aws-icons';
 const AWS_VERSION = '3.3.0';
@@ -232,4 +232,35 @@ export function withIconColor(src: string, color: string): string {
   if (!iconColor(src) || !/^#[0-9a-f]{6}$/i.test(color)) return src;
   const svg = decodeURIComponent(src.slice(SVG_DATA.length)).replace(ROOT_COLOR, `$1${color}"`);
   return SVG_DATA + encodeURIComponent(svg);
+}
+
+// ---------------------------------------------------------------------------
+// The user's own images
+// ---------------------------------------------------------------------------
+
+/**
+ * An image the user brought: an uploaded file (a base64 data URL) or a link
+ * they added. Not one of IsoDraw's icons, a cloud icon from the CDN or a Lucide icon.
+ */
+export function isUserImage(src: string | undefined): boolean {
+  if (!src) return false;
+  if (src.startsWith('data:')) return src.includes(';base64,');
+  return /^https?:\/\//.test(src) && !src.startsWith('https://cdn.jsdelivr.net/npm/');
+}
+
+/** The user's images placed anywhere in a diagram, detail diagrams included, once each. */
+export function diagramImages(d: Diagram): IconDef[] {
+  const seen = new Set<string>();
+  const out: IconDef[] = [];
+  const walk = (level: Diagram) => {
+    for (const n of level.nodes) {
+      if (n.kind === 'image' && isUserImage(n.src) && !seen.has(n.src!)) {
+        seen.add(n.src!);
+        out.push({ id: `used:${n.id}`, name: n.label || 'Image', src: n.src!, category: 'In this diagram' });
+      }
+      if (n.detail) walk(n.detail);
+    }
+  };
+  walk(d);
+  return out;
 }

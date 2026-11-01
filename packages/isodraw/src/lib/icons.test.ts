@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { humanizeIconName, iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary, withIconColor } from './icons';
+import { diagramImages, humanizeIconName, iconColor, isUserImage, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary, withIconColor } from './icons';
 
 /** Stub `fetch` with a JSON body per URL substring; anything else is a 404. */
 function stubFetch(routes: Record<string, unknown>) {
@@ -158,5 +158,37 @@ describe('iconColor', () => {
     expect(iconColor('data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"><path fill="#123456"/></svg>'))).toBeNull();
     expect(iconColor('data:image/png;base64,AAAA')).toBeNull();
     expect(withIconColor('https://x/icon.svg', '#10b981')).toBe('https://x/icon.svg');
+  });
+});
+
+describe('the user\'s images', () => {
+  const png = 'data:image/png;base64,iVBORw0KGgo=';
+  const lucide = 'data:image/svg+xml,%3Csvg%20color%3D%22%232563eb%22%3E%3C%2Fsvg%3E';
+  const aws = 'https://cdn.jsdelivr.net/npm/aws-icons@3.3.0/icons/architecture-service/AmazonCognito.svg';
+
+  it('tells uploads and links from library icons', () => {
+    expect(isUserImage(png)).toBe(true);
+    expect(isUserImage('https://example.com/logo.png')).toBe(true);
+    expect(isUserImage(lucide)).toBe(false);
+    expect(isUserImage(aws)).toBe(false);
+    expect(isUserImage('isodraw:server')).toBe(false);
+    expect(isUserImage(undefined)).toBe(false);
+  });
+
+  it('lists the images placed in a diagram and its detail diagrams, once each', () => {
+    const img = (id: string, src: string, label?: string) => ({ id, kind: 'image' as const, x: 0, y: 0, z: 0, w: 2, d: 2, h: 0.35, color: '#fff', src, label });
+    const d = {
+      version: 1 as const,
+      nodes: [
+        img('a', png, 'Logo'),
+        img('b', aws),
+        { ...img('c', lucide), detail: { version: 1 as const, nodes: [img('d', png), img('e', 'https://example.com/x.svg')], edges: [] } },
+      ],
+      edges: [],
+    };
+    expect(diagramImages(d).map((i) => [i.name, i.src])).toEqual([
+      ['Logo', png],
+      ['Image', 'https://example.com/x.svg'],
+    ]);
   });
 });
