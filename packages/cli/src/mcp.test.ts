@@ -1,6 +1,6 @@
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CliError, type Client, type DiagramMeta, type StoredDiagram } from './client';
 import type { Diagram } from './lib';
 import { createMcpServer, forTools } from './mcp';
@@ -30,11 +30,13 @@ function fakeClient() {
       d.version++;
       return { meta: meta(d), result, merged: false };
     },
-    request: async (_m: string, path: string) => {
-      const id = /\/api\/diagrams\/([^/]+)\/preview/.exec(path)?.[1];
-      if (!id) throw new Error(`unexpected request ${path}`);
-      return { svg: `https://isodraw.test/p/${id}.svg?s=x`, url: `https://isodraw.test/w/d/${id}`, title: find(id).title, expiresAt: '2026-11-08T00:00:00Z' };
-    },
+    preview: async (id: string) => ({
+      svg: `https://isodraw.test/p/${id}.svg?s=x`,
+      png: `https://isodraw.test/p/${id}.png?s=x`,
+      url: `https://isodraw.test/w/d/${id}`,
+      title: find(id).title,
+      expiresAt: '2026-11-08T00:00:00Z',
+    }),
   };
   return { client: client as unknown as Client, store };
 }
@@ -47,10 +49,15 @@ async function connect() {
   await mcp.connect(b);
   const call = async (name: string, args: Record<string, unknown>) => {
     const r = await mcp.callTool({ name, arguments: args });
-    return { error: !!r.isError, text: (r.content as { text: string }[]).map((c) => c.text).join('\n') };
+    const content = r.content as { type: string; text?: string; data?: string; mimeType?: string }[];
+    return { error: !!r.isError, text: content.filter((c) => c.type === 'text').map((c) => c.text).join('\n'), images: content.filter((c) => c.type === 'image') };
   };
   return { mcp, call, ...fake };
 }
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('the MCP server', () => {
   it('offers the tools, with instructions, and marks which ones only read', async () => {
@@ -66,6 +73,11 @@ describe('the MCP server', () => {
   });
 
   it('creates, describes, changes and shows a diagram', async () => {
+    const fetched: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      fetched.push(url);
+      return new Response(PNG, { headers: { 'content-type': 'image/png' } });
+    });
     const { call, store } = await connect();
     const created = await call('create_diagram', {
       title: 'Shop',
@@ -77,7 +89,10 @@ describe('the MCP server', () => {
     });
     expect(created.error).toBe(false);
     expect(created.text).toContain('added web (Web)');
-    expect(created.text).toMatch(/\[!\[Shop\]\(https:\/\/isodraw\.test\/p\/d1\.svg\?s=x\)\]\(https:\/\/isodraw\.test\/w\/d\/d1\)/);
+    // The picture: Markdown with the PNG linking to the editor, and the PNG itself as an image.
+    expect(created.text).toContain('[![Shop](https://isodraw.test/p/d1.png?s=x)](https://isodraw.test/w/d/d1)');
+    expect(created.images).toEqual([{ type: 'image', mimeType: 'image/png', data: btoa(String.fromCharCode(...PNG)) }]);
+    expect(fetched).toEqual(['https://isodraw.test/p/d1.png?s=x']);
 
     const described = await call('describe_diagram', { diagram: 'Shop' });
     expect(described.text).toContain('web → db "SQL"');
@@ -88,6 +103,13 @@ describe('the MCP server', () => {
 
     const saved = await call('apply_changes', { diagram: 'd1', changes: [{ op: 'setDoc', item: 'Web', markdown: 'The storefront.' }] });
     expect(saved.text).toMatch(/Saved "Shop"/);
+    expect(saved.images).toHaveLength(1);
+
+    // A picture that can't be fetched leaves just the link.
+    vi.stubGlobal('fetch', async () => new Response('nope', { status: 500 }));
+    const shown = await call('preview_diagram', { diagram: 'Shop' });
+    expect(shown.text).toContain('.png?s=x');
+    expect(shown.images).toEqual([]);
     expect(store.get('d1')!.content.nodes.find((n) => n.id === 'web')!.doc).toBe('The storefront.');
   });
 
@@ -101,7 +123,7 @@ describe('the MCP server', () => {
   it('turns failures into messages that name the tools', async () => {
     const { call } = await connect();
     const missing = await call('describe_diagram', { diagram: 'nope' });
-    expect(missing).toEqual({ error: true, text: 'No diagram "nope". Call list_diagrams to see them.' });
+    expect(missing).toEqual({ error: true, text: 'No diagram "nope". Call list_diagrams to see them.', images: [] });
     await call('create_diagram', { title: 'Shop' });
     const bad = await call('apply_changes', { diagram: 'Shop', changes: [{ op: 'removeNode', item: 'ghost' }] });
     expect(bad.error).toBe(true);

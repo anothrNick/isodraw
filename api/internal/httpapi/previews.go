@@ -18,7 +18,7 @@ import (
 // Preview links: a signed, expiring URL to a picture of one diagram level,
 // for places that can't sign in (a chat window, a wiki, a pull request).
 //
-//	GET /api/diagrams/{id}/preview?level=a/b&ttl=168h   (signed in, can read the diagram)
+//	GET /api/diagrams/{id}/preview?level=a/b&ttl=168h   (signed in, can read the diagram) → svg and png links
 //	  → {"svg": ".../p/{id}.svg?l=a/b&e=…&s=…", "url": ".../org/d/{id}#in/a/b", "expiresAt": …}
 //	GET /public/previews/{id}?l=a/b&e=…&s=…              (anyone with the link)
 //	  → {"title": …, "diagram": …} the level only, without docs or deeper levels
@@ -89,7 +89,9 @@ func (s *Server) previewLink(w http.ResponseWriter, r *http.Request) {
 		app += "#in/" + level
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"svg":       s.cfg.PublicURL + "/p/" + d.ID + ".svg?" + pq.Encode(),
+		"svg": s.cfg.PublicURL + "/p/" + d.ID + ".svg?" + pq.Encode(),
+		// The same picture as PNG, for apps that don't show SVG (chat apps).
+		"png":       s.cfg.PublicURL + "/p/" + d.ID + ".png?" + pq.Encode(),
 		"url":       app,
 		"title":     d.Title,
 		"expiresAt": time.Unix(exp, 0).UTC(),

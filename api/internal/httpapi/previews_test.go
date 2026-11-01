@@ -34,6 +34,9 @@ func TestPreviewLinks(t *testing.T) {
 	res, out = f.do(req{method: "GET", path: "/api/diagrams/" + id + "/preview", cookie: c})
 	expect(t, res, 200, out)
 	svg := out["svg"].(string)
+	if out["png"] != strings.Replace(svg, ".svg?", ".png?", 1) {
+		t.Fatalf("png link: %v", out["png"])
+	}
 	if !strings.HasPrefix(svg, appOrigin+"/p/"+id+".svg?") || !strings.HasPrefix(out["url"].(string), appOrigin+"/") || out["title"] != "Payments" {
 		t.Fatalf("link: %v", out)
 	}

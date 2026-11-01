@@ -92,9 +92,10 @@ const MESSAGES: Record<number, [string, string]> = {
 };
 
 /**
- * Answer GET /p/{id}.svg?l=&e=&s=[&theme=dark]: ask the API for the level the
- * signed link names (it checks the signature and leaves out docs), draw it,
- * and inline its icons. Links that don't work get a picture saying why.
+ * Answer GET /p/{id}.svg (or .png, which rasterizes this SVG) ?l=&e=&s=[&theme=dark]:
+ * ask the API for the level the signed link names (it checks the signature and
+ * leaves out docs), draw it, and inline its icons. Links that don't work get a
+ * picture saying why.
  */
 export async function previewSvg(
   requestUrl: URL,
@@ -102,7 +103,7 @@ export async function previewSvg(
   getImage: (url: string) => Promise<Response> = fetch,
 ): Promise<{ status: number; svg: string; cacheable: boolean }> {
   const theme: PreviewTheme = requestUrl.searchParams.get('theme') === 'dark' ? 'dark' : 'light';
-  const id = /^\/p\/([^/]+)\.svg$/.exec(requestUrl.pathname)?.[1];
+  const id = /^\/p\/([^/]+)\.(?:svg|png)$/.exec(requestUrl.pathname)?.[1];
   const fail = (status: number) => {
     const [heading, detail] = MESSAGES[status] ?? ['Preview unavailable', 'Try again in a moment.'];
     return { status, svg: messageSvg(heading, detail, theme), cacheable: false };
@@ -129,9 +130,9 @@ export async function previewSvg(
 }
 
 /** Headers for a preview picture: an image, nothing active in it. */
-export function previewHeaders(cacheable: boolean): Record<string, string> {
+export function previewHeaders(cacheable: boolean, type: 'svg' | 'png' = 'svg'): Record<string, string> {
   return {
-    'Content-Type': 'image/svg+xml; charset=utf-8',
+    'Content-Type': type === 'png' ? 'image/png' : 'image/svg+xml; charset=utf-8',
     // A minute, like the API: edits show up soon after.
     'Cache-Control': cacheable ? 'public, max-age=60' : 'no-store',
     'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'",
@@ -144,3 +145,8 @@ function toBase64(bytes: Uint8Array): string {
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(s);
 }
+
+/** Whether a preview request asks for a PNG. */
+export const wantsPng = (url: URL) => url.pathname.endsWith('.png');
+
+export { pngWidth, rasterizer } from './raster';

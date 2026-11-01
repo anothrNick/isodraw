@@ -38,7 +38,7 @@ Usage: isodraw <command> [options]   (add --json to any command for JSON output)
 
   import terraform <state-or-plan.json> [--title T]
   export <diagram> --format json|md
-  preview <diagram> [--level a/b] [--expires 7d]   A picture link (SVG) to show anywhere, plus the app link
+  preview <diagram> [--level a/b] [--expires 7d]   Picture links (PNG and SVG) to show anywhere, plus the app link
   icons [search]                  Icons for --icon, by Terraform resource type
   guide                           How AI agents should use this CLI
   mcp                             Serve IsoDraw's tools to AI apps over stdio (Claude Desktop, Claude Code, Cursor)
@@ -300,20 +300,18 @@ async function main() {
     case 'preview': {
       const d = await client.get(need(sub, 'a diagram'));
       const level = resolveLevel(d.content, parseLevel(opt.level));
-      const q = new URLSearchParams();
-      if (level.length) q.set('level', level.join('/'));
-      if (opt.expires) q.set('ttl', opt.expires);
-      const p = await client.request<{ svg: string; url: string; title: string; expiresAt: string }>('GET', `/api/diagrams/${d.id}/preview?${q}`);
+      const p = await client.preview(d.id, level, opt.expires);
       return out(
         p,
         [
-          `Picture (SVG, anyone with the link, until ${new Date(p.expiresAt).toLocaleString()}):`,
-          `  ${p.svg}`,
+          `Picture (anyone with the link, until ${new Date(p.expiresAt).toLocaleString()}):`,
+          `  PNG  ${p.png}`,
+          `  SVG  ${p.svg}`,
           `Open in IsoDraw (signed in):`,
           `  ${p.url}`,
           '',
           'Markdown:',
-          `  [![${p.title}](${p.svg})](${p.url})`,
+          `  [![${p.title}](${p.png})](${p.url})`,
         ].join('\n'),
       );
     }
