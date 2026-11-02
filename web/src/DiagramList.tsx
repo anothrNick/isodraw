@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Box, Copy, FolderInput, LayoutGrid, List, MoreHorizontal, Plus, Trash2, Users } from 'lucide-react';
+import { BookOpen, Box, Copy, FolderInput, LayoutGrid, List, MoreHorizontal, Plus, Sparkles, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type DiagramMeta, type Org, type Plan } from './api';
+import { ConnectAiDialog } from './ConnectAiDialog';
 import { NewDiagramDialog } from './NewDiagramDialog';
 import { TransferDialog, type Transfer } from './TransferDialog';
 import { linkProps, navigate } from './router';
@@ -50,6 +51,7 @@ export function DiagramList({ org }: { org: Org }) {
   const [diagrams, setDiagrams] = useState<DiagramMeta[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [deleting, setDeleting] = useState<DiagramMeta | null>(null);
   const [transfer, setTransfer] = useState<Transfer | null>(null);
   const [view, setView] = useView();
@@ -172,11 +174,18 @@ export function DiagramList({ org }: { org: Org }) {
             <p className="font-medium">No diagrams yet</p>
             <p className="mt-1 text-sm text-muted-foreground">Draw your architecture and document each part of it.</p>
             {canEdit(org) && (
-              <Button variant="outline" className="mt-5" onClick={() => setCreating(true)}>
-                <Plus />
-                Draw your first diagram
-              </Button>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <Button variant="outline" onClick={() => setCreating(true)}>
+                  <Plus />
+                  Draw your first diagram
+                </Button>
+                <Button variant="ghost" onClick={() => setConnecting(true)}>
+                  <Sparkles />
+                  Or have Claude draw it
+                </Button>
+              </div>
             )}
+            <ConnectAiDialog open={connecting} onOpenChange={setConnecting} />
           </div>
         ) : diagrams && view === 'grid' ? (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronsUpDown, Infinity as InfinityIcon, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, ShieldCheck, Sun, Users } from 'lucide-react';
+import { ChevronsUpDown, Infinity as InfinityIcon, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, ShieldCheck, Sparkles, Sun, Users } from 'lucide-react';
 import { ApiError, api, signIn, type Org, type User } from './api';
 import { AuthPages } from './AuthPages';
 import { CliLoginPage } from './CliLoginPage';
+import { ConnectAiDialog } from './ConnectAiDialog';
 import { ConnectPage } from './ConnectPage';
 import { DiagramList } from './DiagramList';
 import { DocsPage } from './DocsPage';
@@ -137,6 +138,7 @@ export function Logo({ size = 22 }: { size?: number }) {
 }
 
 function Shell({ session, org, children }: { session: Session; org?: Org; children: React.ReactNode }) {
+  const route = useRoute();
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-12 flex-none items-center gap-2 border-b bg-card px-3">
@@ -148,6 +150,7 @@ function Shell({ session, org, children }: { session: Session; org?: Org; childr
         <OrgSwitcher orgs={session.orgs} current={org} />
         {/* The editor and docs pages put the diagram's title and actions here. */}
         <div id="app-bar-slot" className="flex min-w-0 flex-1 items-center gap-2" />
+        <ConnectAiButton compact={route.page === 'diagram' || route.page === 'docs'} />
         <UserMenu user={session.user} admin={!!session.admin} />
       </header>
       <main className="flex min-h-0 flex-1 flex-col">{children}</main>
@@ -189,6 +192,28 @@ function OrgSwitcher({ orgs, current }: { orgs: Org[]; current?: Org }) {
         </DropdownMenuContent>
       </DropdownMenu>
       <NewWorkspaceDialog open={creating} onOpenChange={setCreating} />
+    </>
+  );
+}
+
+/** Opens the guide to adding IsoDraw to Claude and other AI apps. */
+function ConnectAiButton({ compact }: { compact: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      {/* The editor's bar is full of its own actions, so there it's just the icon. */}
+      <Button
+        variant="ghost"
+        size={compact ? 'icon' : 'sm'}
+        className="flex-none text-muted-foreground"
+        aria-label="Connect to Claude"
+        title="Connect to Claude"
+        onClick={() => setOpen(true)}
+      >
+        <Sparkles />
+        {!compact && <span className="hidden sm:inline">Connect to Claude</span>}
+      </Button>
+      <ConnectAiDialog open={open} onOpenChange={setOpen} />
     </>
   );
 }
