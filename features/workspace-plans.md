@@ -10,6 +10,8 @@
 - **One free workspace per person:** the personal one. Creating any other workspace means choosing a plan and paying for it.
 - **Pro allows 4 people,** counting everyone in the workspace (owner, editors and viewers) and open invites.
 - **Lifetime = Pro limits, forever, on one workspace.** The founding purchase is the Pro plan paid once instead of monthly.
+- **The personal workspace stays free and just you.** It can't be upgraded or take members; Pro (or any paid plan) always means a new workspace.
+- **Diagrams can be moved or copied between workspaces,** so work started in the personal workspace can go to a Pro or Team workspace (and back), within the target's limits.
 - **Limits apply to new changes only.** Nobody is ever removed: a workspace over its plan's limits can't add people or diagrams until it's back under, or upgrades. Grandfathered teams (from before plans) stay free and unlimited.
 
 ## The plans
@@ -30,7 +32,14 @@ Yearly billing gets about two months free. Metered AI (features that call a mode
 
 **A workspace's billing page** (`/:org/billing`, owners and admins): the plan, what it allows and what's used (people, diagrams, storage), change plan, and Stripe's customer portal for the payment method, invoices and cancelling.
 
-**Upgrading the personal workspace.** Personal stays just you. "Unlimited personal diagrams" means upgrading it to Pro, which also lets it have members, so it stops being purely personal. Alternative: personal can't be upgraded, and you make a Pro workspace instead. (Open question 1.)
+**The personal workspace** stays free and just you, with its 10-diagram limit; it can't be upgraded. Someone who wants more makes a Pro workspace and moves diagrams into it.
+
+**Moving and copying diagrams between workspaces.** From a diagram's menu (and the diagram list): "Move to…" and "Copy to…", listing the workspaces where you can edit.
+- *Move* changes the diagram's workspace. It keeps its id, content, docs and version, so its links keep working for people who can see the new workspace; preview links already shared keep working too. You need to be able to edit in both workspaces.
+- *Copy* makes a new diagram in the target with the same content and docs, titled "… (copy)"; the original stays. You need to be able to read the source and edit in the target.
+- Both count against the target's plan (a free personal workspace at 10 diagrams refuses one more), and both are refused into a read-only workspace.
+- Uploaded images are links (`/i/…`) that work anywhere, so the diagram looks the same; they're also added to the target workspace's Images tab so its members can reuse them.
+- Moving out of a workspace takes the diagram away from that workspace's members; the confirmation says so.
 
 **Cancelling or failing to pay.** At the end of the paid period (after Stripe's retries for failed payments) the workspace drops to read-only: everything stays viewable and exportable, nothing is deleted, and resubscribing brings it back.
 
@@ -50,15 +59,14 @@ So nobody is affected; only the lifetime grant on the owner's own account needs 
 
 ## Open questions
 
-1. Can the personal workspace be upgraded to Pro (and so take members), or does Pro always mean a new workspace?
-2. Should new workspaces get a free trial (say 14 days of Team) before choosing, or is choosing a plan up front the point?
-3. After the founding 100 seats: retire the lifetime offer, or keep a Pro lifetime at a higher price for short windows?
-4. Exact prices, and the storage cap per plan.
-5. Founders who outgrow 4 people: a discount on Team, and does their lifetime purchase count toward it?
+1. Should new workspaces get a free trial (say 14 days of Team) before choosing, or is choosing a plan up front the point?
+2. After the founding 100 seats: retire the lifetime offer, or keep a Pro lifetime at a higher price for short windows?
+3. Exact prices, and the storage cap per plan.
+4. Founders who outgrow 4 people: a discount on Team, and does their lifetime purchase count toward it?
 
 ## Phases
 
 1. Workspace plans in the data and the plan checks (with the personal free limit and Pro's 4 people), admin can set plans, the founding lifetime offer moved onto workspaces.
-2. Creating a workspace with a plan, through Checkout; the workspace billing page.
+2. Creating a workspace with a plan, through Checkout; the workspace billing page; moving and copying diagrams between workspaces (useful already, so it can come first).
 3. Subscriptions for Pro, Team and Business: Stripe subscriptions, the customer portal, upgrades and downgrades, failed payments and cancelling.
 4. Business features (SSO, audit log) as customers ask for them.
