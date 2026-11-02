@@ -229,6 +229,17 @@ describe('sequence diagrams', () => {
     for (const n of d.nodes) expect(n.lifeline).toBeGreaterThanOrEqual(last);
   });
 
+  it('gives every message its own row, however long the sequence', () => {
+    const line = (d: Diagram) => d.edges.map((e) => e.fromAnchor!.line!);
+    const rising = (ys: number[]) => ys.every((y, i) => i === 0 || y > ys[i - 1]);
+    const many = Array.from({ length: 12 }, (_, i) => ({ from: i % 2 ? 'B' : 'A', to: i % 2 ? 'A' : 'B', label: `m${i}` }));
+    const long = applyOps(empty, [{ op: 'addSequence', participants: [{ label: 'A' }, { label: 'B' }], messages: many }]).diagram;
+    expect(rising(line(long))).toBe(true);
+    // A message added past the end of the lifelines lands below the last one, not on it.
+    const more = applyOps(long, [{ op: 'addMessage', from: 'A', to: 'B', label: 'one more' }]).diagram;
+    expect(rising(line(more))).toBe(true);
+  });
+
   it('adds messages below the last one, and reuses existing items as participants', () => {
     const more = applyOps(seq.diagram, [{ op: 'addMessage', from: 'Browser', to: 'DB', label: 'GET /cache', kind: 'async' }]).diagram;
     const o = outline(more, { title: 'Orders', version: 1 });

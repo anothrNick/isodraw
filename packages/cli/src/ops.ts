@@ -404,6 +404,9 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
             }
             const byId = () => new Map(next.nodes.map((n) => [n.id, n]));
             const y0 = nextMessageY(next, ids.map((id) => byId().get(id)!));
+            const last = y0 + Math.max(0, (op.messages?.length ?? 0) - 1) * ROW;
+            // Lifelines reach the last message first: an anchor can't sit below the end of its line.
+            next = { ...next, nodes: next.nodes.map((n) => (ids.includes(n.id) ? reach(n, last) : n)) };
             for (const [i, m] of (op.messages ?? []).entries()) {
               const a = findNode(next, m.from);
               const b = findNode(next, m.to);
@@ -412,8 +415,6 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
               added.push(edge.id);
               next = { ...next, edges: [...next.edges, edge] };
             }
-            const last = y0 + Math.max(0, (op.messages?.length ?? 0) - 1) * ROW;
-            next = { ...next, nodes: next.nodes.map((n) => (ids.includes(n.id) ? reach(n, last) : n)) };
             changes.push(`added a sequence: ${ids.length} participants, ${op.messages?.length ?? 0} messages${where}`);
             // A sequence on its own reads best flat.
             if (wasEmpty && !level.length) {
@@ -426,14 +427,14 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
             const a = findNode(d, op.from);
             const b = findNode(d, op.to);
             const withLine = (n: DiagramNode) => (n.lifeline ? n : { ...n, lifeline: 2 });
-            const [la, lb] = [withLine(a), withLine(b)];
-            const y = nextMessageY(d, a.id === b.id ? [la] : [la, lb]);
+            const y = nextMessageY(d, a.id === b.id ? [withLine(a)] : [withLine(a), withLine(b)]);
+            const [la, lb] = [reach(withLine(a), y), reach(withLine(b), y)];
             const edge = messageEdge(freeId(d, `${a.id}-${b.id}`), la, lb, y, op);
             added.push(edge.id);
             changes.push(`added message ${a.id} → ${b.id}${op.label ? ` "${op.label}"` : ''} (${a.id === b.id ? 'self' : (op.kind ?? 'call')})${where}`);
             return {
               ...d,
-              nodes: d.nodes.map((n) => (n.id === a.id ? reach(la, y) : n.id === b.id ? reach(lb, y) : n)),
+              nodes: d.nodes.map((n) => (n.id === a.id ? la : n.id === b.id ? lb : n)),
               edges: [...d.edges, edge],
             };
           }
