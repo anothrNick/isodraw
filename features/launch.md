@@ -19,7 +19,7 @@ Decided 2026-11-01:
 | Cohort | **100 seats**, no end date; it closes when they're gone. Seats left shown on the pricing page. |
 | Refunds | **30 days, no questions.** A refund ends team access; the personal workspace drops back to the free limits. |
 | Payments | **Stripe Checkout + Stripe Tax.** We register for and file sales tax and VAT ourselves where thresholds are crossed. |
-| Domain | **isodraw.app** (bought 2026-11-02, on Cloudflare). `isodraw.sjostrom.io` redirects to it for good. |
+| Domain | **isodraw.app** (bought 2026-11-02, on Cloudflare). `isodraw.sjostrom.io` is retired, not redirected. |
 | Teams that exist before launch | **Grandfathered:** they keep working free, at their current size. |
 
 Still open:
@@ -75,7 +75,7 @@ Still open:
 - [ ] Rate limits on sign-up, sign-in, uploads, preview drawing and the public API, not just sign-in and OAuth registration.
 - [ ] Upload abuse: public image links can host anything. Add a way to report an image and to take one down (set `removed_at` and delete the bytes).
 - [ ] Security headers on the app (CSP, HSTS, frame options).
-- [ ] Domain move: buy it, point Pages and the API at it (`PUBLIC_URL`), update Cognito callbacks and the SES sender, OAuth metadata and MCP docs, and redirect the old domain permanently.
+- [x] Domain move to isodraw.app (2026-11-02): Pages, the API's `PUBLIC_URL`, Cognito's app client, OAuth metadata, the CLI default and the docs; stored image links rewritten. The SES sender still to do with email.
 - [ ] Dependency audit (`npm audit`, `govulncheck`) and a habit of updating.
 - [ ] Rotate the secrets set up during development, and write down who can reach production and how.
 

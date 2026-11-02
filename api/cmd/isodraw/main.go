@@ -4,6 +4,8 @@
 //	isodraw migrate                  only migrate the database
 //	isodraw lifetime grant <email>   give someone lifetime access by hand (comps, testing)
 //	isodraw lifetime revoke <email>  take it back
+//	isodraw relink <old> <new> [--apply]  rewrite links to an old origin inside diagrams
+//	                                   (after a domain move); counts unless --apply
 //	isodraw admin grant|revoke <email>  make someone a platform admin (local accounts;
 //	                                   with Cognito, use the admins group instead)
 package main
@@ -14,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -60,8 +63,10 @@ func run() error {
 		return lifetime(ctx, cfg, os.Args[2:])
 	case "admin":
 		return admin(ctx, cfg, os.Args[2:])
+	case "relink":
+		return relink(ctx, cfg, os.Args[2:])
 	default:
-		return fmt.Errorf("unknown command %q (use serve, migrate, lifetime or admin)", cmd)
+		return fmt.Errorf("unknown command %q (use serve, migrate, lifetime, admin or relink)", cmd)
 	}
 }
 
@@ -82,6 +87,33 @@ func lifetime(ctx context.Context, cfg config.Config, args []string) error {
 		return fmt.Errorf("no account with the email %s", args[1])
 	}
 	slog.Info(map[string]string{"grant": "lifetime access granted", "revoke": "lifetime access revoked"}[args[0]], "email", args[1])
+	return nil
+}
+
+func relink(ctx context.Context, cfg config.Config, args []string) error {
+	apply := len(args) == 3 && args[2] == "--apply"
+	if len(args) != 2 && !apply {
+		return errors.New("usage: isodraw relink <old origin> <new origin> [--apply], e.g. isodraw relink https://old.example https://new.example")
+	}
+	for _, o := range args[:2] {
+		if u, err := url.Parse(o); err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" {
+			return fmt.Errorf("%q isn't an origin like https://example.com", o)
+		}
+	}
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	n, err := store.New(pool).Relink(ctx, args[0], args[1], apply)
+	if err != nil {
+		return err
+	}
+	if apply {
+		slog.Info("rewrote links", "diagrams", n, "from", args[0], "to", args[1])
+	} else {
+		slog.Info("diagrams with links to rewrite (add --apply to rewrite them)", "diagrams", n, "from", args[0])
+	}
 	return nil
 }
 

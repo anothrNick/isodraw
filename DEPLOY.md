@@ -149,6 +149,17 @@ aws cognito-idp admin-add-user-to-group --user-pool-id us-east-1_USbMk6E6n --use
 
 Removing someone from the group takes effect at their next sign-in. `ADMIN_GROUP` changes the group's name. With local accounts (`AUTH_MODE=local`), use `isodraw admin grant <email>` instead.
 
+## Moving to another domain
+
+Add the new domain to the Pages project (Custom domains), set `PUBLIC_URL` in `api/fly.toml` and deploy the API, and point the Cognito app client's callback and sign-out URLs at it. Uploaded images are stored in diagrams as full links, so rewrite them (it counts first; `--apply` rewrites and bumps each changed diagram's version):
+
+```bash
+fly ssh console -a isodraw-api -C "/isodraw relink https://old.example https://new.example"
+fly ssh console -a isodraw-api -C "/isodraw relink https://old.example https://new.example --apply"
+```
+
+Everyone signs in again on the new domain, and AI apps reconnect to its `/mcp`.
+
 ## Lifetime access by hand
 
 Until checkout exists, grant or take back lifetime access (no diagram limit, team workspaces) for an account by email:

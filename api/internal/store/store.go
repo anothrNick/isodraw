@@ -264,6 +264,22 @@ func (s *Store) SaveContent(ctx context.Context, id, userID string, from int64, 
 	return DiagramMeta{}, &ConflictError{Current: cur}
 }
 
+// Relink rewrites links to one origin into another inside every diagram, as
+// after moving the app to a new domain (uploaded images are stored as full
+// links). Changed diagrams get a new version, so open editors reload them
+// instead of saving the old links back. With apply false it only counts.
+func (s *Store) Relink(ctx context.Context, from, to string, apply bool) (int64, error) {
+	if !apply {
+		var n int64
+		err := s.db.QueryRow(ctx, `select count(*) from diagrams where strpos(content::text, $1) > 0`, from+"/").Scan(&n)
+		return n, err
+	}
+	tag, err := s.db.Exec(ctx, `
+		update diagrams set content = replace(content::text, $1, $2)::jsonb, version = version + 1, updated_at = now()
+		where strpos(content::text, $1) > 0`, from+"/", to+"/")
+	return tag.RowsAffected(), err
+}
+
 // MoveDiagram puts a diagram in another organization. Its id, content and
 // version stay, so links to it keep working for people who can see it there.
 func (s *Store) MoveDiagram(ctx context.Context, id, orgID string) (DiagramMeta, error) {

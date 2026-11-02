@@ -5,7 +5,7 @@
 
 ## Where it stands
 
-Live at https://isodraw.app since 2026-11-02 (first at https://isodraw.sjostrom.io from 2026-10-31, which now redirects there):
+Live at https://isodraw.app since 2026-11-02 (first at https://isodraw.sjostrom.io from 2026-10-31; that domain was retired, with stored links rewritten by `isodraw relink`):
 
 - **Web app** on Cloudflare Pages (project `isodraw`), deployed with `npm run deploy:web`. Pages Functions forward `/api` and `/auth` to the API, so the browser sees one origin.
 - **API** on Fly.io (`isodraw-api`, Personal org, `iad`), deployed with `npm run deploy:api`; migrations run as the release command.
