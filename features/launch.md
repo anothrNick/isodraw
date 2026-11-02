@@ -7,6 +7,8 @@ The app is live (see [hosting](hosting.md)): sign-in, workspaces and invites, di
 
 ## 1. Decide
 
+> **Changed 2026-11-02:** plans and billing move to workspaces, with no seat-based pricing, and lifetime becomes the Pro plan (up to 4 people) forever on one workspace. See [workspace plans](workspace-plans.md); the table below is the earlier, user-based version that was built first.
+
 Decided 2026-11-01:
 
 | Question | Decision |
