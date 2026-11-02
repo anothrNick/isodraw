@@ -306,6 +306,13 @@ export const api = {
       request<{ workspaces: AdminWorkspace[]; limit: number }>('GET', `/api/admin/orgs?${new URLSearchParams({ q, kind })}`),
     workspace: (id: string) =>
       request<{ workspace: AdminWorkspace; members: Member[]; invites: Invite[]; plan: Plan }>('GET', `/api/admin/orgs/${id}`),
+    /** Permanently deletes a team workspace; `confirm` must be its slug. */
+    deleteWorkspace: (id: string, confirm: string) =>
+      request<{ deleted: { diagrams: number; members: number; invites: number; images: number; tokens: number } }>(
+        'POST',
+        `/api/admin/orgs/${id}/delete`,
+        { confirm },
+      ),
     updateWorkspace: (id: string, change: { grandfathered?: boolean }) =>
       request<{ workspace: AdminWorkspace; members: Member[]; invites: Invite[]; plan: Plan }>('PATCH', `/api/admin/orgs/${id}`, change),
     events: () => request<{ events: AdminEvent[] }>('GET', '/api/admin/events'),

@@ -99,3 +99,46 @@ func TestAdminManagesUsersAndWorkspaces(t *testing.T) {
 		t.Fatal(ev)
 	}
 }
+
+func TestAdminDeletesATeam(t *testing.T) {
+	f := setup(t)
+	admin, _ := f.user("admin@example.com")
+	f.makeAdmin(admin)
+	ada, personal := f.user("ada@example.com")
+	team, slug := f.team(ada, "Shop")
+	res, d := newDiagram(f, ada, team, 1)
+	expect(t, res, 201, d)
+	f.invite(ada, team, "bob@example.com", "editor")
+	del := func(c *http.Cookie, org, confirm string) (*http.Response, map[string]any) {
+		return f.do(req{method: "POST", path: "/api/admin/orgs/" + org + "/delete", body: `{"confirm":"` + confirm + `"}`, cookie: c})
+	}
+
+	// Only platform admins, only with the exact address typed, never a personal workspace.
+	if res, _ := del(ada, team, slug); res.StatusCode != 404 {
+		t.Fatal(res.StatusCode)
+	}
+	if res, out := del(admin, team, "Shop"); res.StatusCode != 400 {
+		t.Fatal(out)
+	}
+	if res, out := del(admin, personal, "ada"); res.StatusCode != 409 {
+		t.Fatal(out)
+	}
+
+	res, out := del(admin, team, slug)
+	expect(t, res, 200, out)
+	if got := out["deleted"].(map[string]any); got["diagrams"].(float64) != 1 || got["members"].(float64) != 1 || got["invites"].(float64) != 1 {
+		t.Fatal(got)
+	}
+	// Gone for its members, and its diagrams with it.
+	_, me := f.do(req{method: "GET", path: "/api/me", cookie: ada})
+	if len(me["orgs"].([]any)) != 1 {
+		t.Fatal(me)
+	}
+	if res, _ := f.do(req{method: "GET", path: "/api/diagrams/" + d["id"].(string), cookie: ada}); res.StatusCode != 404 {
+		t.Fatal(res.StatusCode)
+	}
+	_, ev := f.do(req{method: "GET", path: "/api/admin/events", cookie: admin})
+	if e := ev["events"].([]any)[0].(map[string]any); e["action"] != "team.delete" || e["target"] != "Shop ("+slug+")" {
+		t.Fatal(e)
+	}
+}

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -25,7 +26,9 @@ func (s *Server) adminRoutes(api *http.ServeMux) {
 		"GET /api/admin/orgs":         s.adminOrgs,
 		"GET /api/admin/orgs/{id}":    s.adminOrg,
 		"PATCH /api/admin/orgs/{id}":  s.adminUpdateOrg,
-		"GET /api/admin/events":       s.adminEvents,
+		// POST, not DELETE, so the confirmation travels in the body.
+		"POST /api/admin/orgs/{id}/delete": s.adminDeleteOrg,
+		"GET /api/admin/events":            s.adminEvents,
 	} {
 		api.HandleFunc(pattern, s.platformAdmin(h))
 	}
@@ -221,6 +224,42 @@ func (s *Server) adminUpdateOrg(w http.ResponseWriter, r *http.Request) {
 		s.record(r, action, o.Name+" ("+o.Slug+")", "")
 	}
 	s.adminOrg(w, r)
+}
+
+// adminDeleteOrg permanently deletes a team workspace. The body must repeat
+// the workspace's slug exactly, so a stray click or a scripted call can't
+// delete the wrong one.
+func (s *Server) adminDeleteOrg(w http.ResponseWriter, r *http.Request) {
+	o, ok := s.adminOrgByPath(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Confirm string `json:"confirm"`
+	}
+	if !decode(w, r, 1024, &body) {
+		return
+	}
+	if o.Personal {
+		writeError(w, http.StatusConflict, "personal", "Personal workspaces go with their account; they can't be deleted on their own.")
+		return
+	}
+	if body.Confirm != o.Slug {
+		writeError(w, http.StatusBadRequest, "confirm", "Type the workspace's address ("+o.Slug+") exactly to delete it.")
+		return
+	}
+	d, err := s.store.DeleteOrg(r.Context(), o.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "No such workspace.")
+		return
+	}
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	s.record(r, "team.delete", o.Name+" ("+o.Slug+")",
+		fmt.Sprintf("%d diagrams, %d members, %d invites, %d images, %d tokens", d.Diagrams, d.Members, d.Invites, d.Images, d.Tokens))
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": d})
 }
 
 func (s *Server) adminEvents(w http.ResponseWriter, r *http.Request) {

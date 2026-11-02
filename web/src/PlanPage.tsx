@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { api, formatPrice, type Billing } from './api';
 import { Loading } from './App';
 import { useSession } from './session';
+import { createPendingWorkspace, forgetPendingWorkspace } from './NewWorkspaceDialog';
+import { navigate } from './router';
 import { Button } from '@/components/ui/button';
 
 const FREE = ['Every feature in your personal workspace', 'Up to 10 diagrams', 'The CLI and the MCP server for AI apps'];
@@ -24,6 +26,7 @@ export function PlanPage() {
     const clean = () => history.replaceState(null, '', location.pathname);
     if (params.has('canceled')) {
       clean();
+      forgetPendingWorkspace();
       api.cancelCheckout().catch(() => undefined).finally(() => api.billing().then(setBilling));
       return;
     }
@@ -40,8 +43,19 @@ export function PlanPage() {
         if (b?.lifetime) {
           clean();
           setConfirming(false);
+          const welcome = b.purchase?.seat ? `Welcome, founding member #${b.purchase.seat}!` : 'You have lifetime access.';
+          // The workspace they named before checkout, if they came from New workspace.
+          const org = await createPendingWorkspace().catch((e: Error) => {
+            toast.error(`Couldn't create the workspace: ${e.message}`);
+            return null;
+          });
           await session.reload();
-          toast.success(b.purchase?.seat ? `Welcome, founding member #${b.purchase.seat}!` : 'You have lifetime access.');
+          if (org) {
+            toast.success(`${welcome} ${org.name} is ready.`);
+            navigate(`/${org.slug}/members`);
+          } else {
+            toast.success(welcome);
+          }
           return;
         }
         await new Promise((r) => setTimeout(r, 2000));

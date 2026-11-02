@@ -2,12 +2,16 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
 // Platform administration: every user and workspace, for the people who run IsoDraw.
+
+// ErrPersonalOrg refuses deleting a personal workspace; that is deleting the account.
+var ErrPersonalOrg = errors.New("a personal workspace goes with its account")
 
 // SetPlatformAdmin records whether a user is a platform admin.
 func (s *Store) SetPlatformAdmin(ctx context.Context, userID string, on bool) error {
@@ -199,4 +203,42 @@ func (s *Store) AdminEvents(ctx context.Context, limit int) ([]AdminEvent, error
 		err := r.Scan(&e.ID, &e.Admin, &e.Action, &e.Target, &e.Detail, &e.CreatedAt)
 		return e, err
 	})
+}
+
+// DeletedOrg is what went with a deleted workspace, for the admin log.
+type DeletedOrg struct {
+	Diagrams int `json:"diagrams"`
+	Members  int `json:"members"`
+	Invites  int `json:"invites"`
+	Images   int `json:"images"`
+	Tokens   int `json:"tokens"`
+}
+
+// DeleteOrg permanently deletes a team workspace and everything in it:
+// diagrams (deleted ones too), memberships, invites, its image list and API
+// tokens. Image bytes stay, since the same links may be in other workspaces.
+// Personal workspaces can't be deleted this way.
+func (s *Store) DeleteOrg(ctx context.Context, orgID string) (DeletedOrg, error) {
+	var d DeletedOrg
+	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+		var personal bool
+		if err := tx.QueryRow(ctx, `select personal from orgs where id = $1 for update`, orgID).Scan(&personal); err != nil {
+			return notFound(err)
+		}
+		if personal {
+			return ErrPersonalOrg
+		}
+		if err := tx.QueryRow(ctx, `select
+			(select count(*) from diagrams where org_id = $1 and deleted_at is null),
+			(select count(*) from memberships where org_id = $1),
+			(select count(*) from invites where org_id = $1 and accepted_at is null),
+			(select count(*) from images where org_id = $1 and removed_at is null),
+			(select count(*) from api_tokens where org_id = $1)`, orgID,
+		).Scan(&d.Diagrams, &d.Members, &d.Invites, &d.Images, &d.Tokens); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `delete from orgs where id = $1`, orgID)
+		return err
+	})
+	return d, err
 }

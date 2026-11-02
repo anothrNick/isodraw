@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Infinity as InfinityIcon, Loader2, Search, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Infinity as InfinityIcon, Loader2, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, formatPrice, type AdminEvent, type AdminUser, type AdminUserDetail, type AdminWorkspace, type Invite, type Member, type Plan } from './api';
 import { Loading, Message } from './App';
@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
@@ -373,6 +374,7 @@ type WorkspaceData = { workspace: AdminWorkspace; members: Member[]; invites: In
 
 function WorkspaceDetail({ id }: { id: string }) {
   const [data, setData] = useState<WorkspaceData | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [confirm, setConfirm] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -448,6 +450,24 @@ function WorkspaceDetail({ id }: { id: string }) {
           />
         </section>
       )}
+      {!w.personal && (
+        <section className="mt-10 rounded-lg border border-destructive/40 p-4">
+          <h3 className="text-sm font-semibold text-destructive">Danger zone</h3>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">Permanently delete this workspace, its diagrams, members, invites, image list and API tokens.</p>
+            <Button variant="destructive" onClick={() => setDeleting(true)}>
+              <Trash2 />
+              Delete workspace…
+            </Button>
+          </div>
+        </section>
+      )}
+      <DeleteWorkspace
+        open={deleting}
+        data={data}
+        onClose={() => setDeleting(false)}
+        onDeleted={() => navigate('/admin/workspaces', { replace: true })}
+      />
       <Confirm
         open={confirm !== null}
         title={confirm ? 'Grandfather this team?' : 'Remove grandfathering?'}
@@ -461,6 +481,81 @@ function WorkspaceDetail({ id }: { id: string }) {
         onConfirm={() => setGrandfathered(!!confirm)}
       />
     </>
+  );
+}
+
+/**
+ * Deleting a team for good: says exactly what goes, and only enables the
+ * button once the workspace's address is typed and the warning is ticked.
+ * The API checks the typed address too.
+ */
+function DeleteWorkspace({ open, data, onClose, onDeleted }: { open: boolean; data: WorkspaceData; onClose: () => void; onDeleted: () => void }) {
+  const { workspace: w, plan: p } = data;
+  const [typed, setTyped] = useState('');
+  const [sure, setSure] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setTyped('');
+      setSure(false);
+    }
+  }, [open]);
+  const ready = typed === w.slug && sure;
+  const run = async () => {
+    setBusy(true);
+    try {
+      const { deleted: d } = await api.admin.deleteWorkspace(w.id, typed);
+      toast.success(`Deleted ${w.name}: ${d.diagrams} diagram${d.diagrams === 1 ? '' : 's'}, ${d.members} member${d.members === 1 ? '' : 's'}`);
+      onClose();
+      onDeleted();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete {w.name}?</DialogTitle>
+          <DialogDescription>This can't be undone. Everyone in it loses access, and its content is gone for good.</DialogDescription>
+        </DialogHeader>
+        <ul className="list-disc space-y-1 rounded-md border border-destructive/30 bg-destructive/5 py-3 pr-3 pl-8 text-sm">
+          <li>
+            {p.diagrams} diagram{p.diagrams === 1 ? '' : 's'}, with their docs and detail diagrams
+          </li>
+          <li>
+            {data.members.length} member{data.members.length === 1 ? '' : 's'}: {data.members.map((m) => m.email).join(', ')}
+          </li>
+          {data.invites.length > 0 && (
+            <li>
+              {data.invites.length} pending invite{data.invites.length === 1 ? '' : 's'}
+            </li>
+          )}
+          <li>Its image list and API tokens (image links used elsewhere keep working)</li>
+        </ul>
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span>
+            Type <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{w.slug}</code> to confirm
+          </span>
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} aria-label="Workspace address" />
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} className="mt-0.5 size-4 accent-destructive" />
+          I understand this deletes the workspace and its diagrams permanently.
+        </label>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={run} disabled={!ready || busy}>
+            {busy && <Loader2 className="animate-spin" />}
+            Delete workspace
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -481,6 +576,7 @@ const ACTIONS: Record<string, string> = {
   'team.ungrandfather': 'Removed grandfathering from',
   'purchase.paid': 'Lifetime bought by',
   'purchase.refunded': 'Lifetime refunded for',
+  'team.delete': 'Deleted the workspace',
 };
 
 function Events({ events }: { events: AdminEvent[] }) {

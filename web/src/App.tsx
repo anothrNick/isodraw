@@ -1,7 +1,6 @@
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronsUpDown, Infinity as InfinityIcon, KeyRound, Loader2, LogOut, Monitor, Moon, Plus, ShieldCheck, Sun, Users } from 'lucide-react';
-import { toast } from 'sonner';
-import { ApiError, api, signIn, type Billing, type Org, type User } from './api';
+import { ApiError, api, signIn, type Org, type User } from './api';
 import { AuthPages } from './AuthPages';
 import { CliLoginPage } from './CliLoginPage';
 import { ConnectPage } from './ConnectPage';
@@ -15,11 +14,11 @@ import { linkProps, navigate, useRoute } from './router';
 import { SessionContext, type Session } from './session';
 import { TokensPage } from './TokensPage';
 import { AdminPage } from './AdminPage';
-import { BuyLifetime, PlanPage } from './PlanPage';
+import { PlanPage } from './PlanPage';
+import { NewWorkspaceDialog } from './NewWorkspaceDialog';
 import { setThemeSetting, useTheme, type ThemeSetting } from './theme';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +32,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 
 export function App() {
   const route = useRoute();
@@ -186,93 +184,12 @@ function OrgSwitcher({ orgs, current }: { orgs: Org[]; current?: Org }) {
           )}
           <DropdownMenuItem onSelect={() => setCreating(true)}>
             <Plus />
-            Create team…
+            New workspace…
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <CreateTeamDialog open={creating} onOpenChange={setCreating} />
+      <NewWorkspaceDialog open={creating} onOpenChange={setCreating} />
     </>
-  );
-}
-
-function CreateTeamDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const session = useContext(SessionContext);
-  const reload = session?.reload;
-  const [billing, setBilling] = useState<Billing | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    setName('');
-    // Lifetime access may have changed since the page loaded (a purchase, or an admin's grant).
-    reload?.().catch(() => undefined);
-    api.billing().then(setBilling, () => setBilling(null));
-  }, [open, reload]);
-  const create = async () => {
-    setBusy(true);
-    try {
-      const org = await api.createTeam(name);
-      await session?.reload();
-      onOpenChange(false);
-      navigate(`/${org.slug}/members`);
-      toast.success(`Created ${org.name}. Invite people to work on diagrams together.`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (session && !session.lifetime) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Teams come with lifetime access</DialogTitle>
-            <DialogDescription>
-              A team is a shared workspace for you and up to four other editors, with as many viewers as you like. It comes with lifetime access, a
-              one-time purchase. Your personal workspace keeps every feature for free.
-            </DialogDescription>
-          </DialogHeader>
-          {billing && <BuyLifetime billing={billing} />}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Not now
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Create a team</DialogTitle>
-          <DialogDescription>A shared workspace: its diagrams belong to the team, and you choose who can edit or just read them.</DialogDescription>
-        </DialogHeader>
-        <form
-          id="create-team"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void create();
-          }}
-        >
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">Name</span>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Platform team" autoFocus />
-          </label>
-        </form>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button type="submit" form="create-team" disabled={busy || !name.trim()}>
-            {busy && <Loader2 className="animate-spin" />}
-            Create team
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
