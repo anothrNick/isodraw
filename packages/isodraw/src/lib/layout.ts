@@ -1,4 +1,5 @@
 import { isContainer, parentMap } from './containers';
+import { layoutSequence } from './sequenceLayout';
 import type { Diagram, DiagramNode } from './types';
 
 /**
@@ -269,10 +270,21 @@ const laidOut = (n: DiagramNode) => n.kind !== 'text';
  * Lay out a whole level: areas keep their contents, components go in columns
  * by flow, and every item is marked as placed by the platform. The result
  * starts where the old content did, so it doesn't jump away on the canvas.
- * Connections between moved items lose their manual bends and anchors.
+ * Connections between moved items lose their manual bends and anchors. A
+ * sequence (messages on lifelines) is laid out as one, with the rest beside it.
  */
 export function layoutLevel(d: Diagram): Diagram {
-  const items = d.nodes.filter(laidOut);
+  // A sequence gets its own layout, and everything else goes beside it.
+  const seq = layoutSequence(d);
+  if (seq) {
+    return layoutItems(seq.diagram, (n) => laidOut(n) && !seq.placed.has(n.id), { x: seq.right + COL_GAP, y: seq.top });
+  }
+  return layoutItems(d, laidOut);
+}
+
+/** Lay out some of a level's items by flow, starting at `at` (by default where they are now). */
+function layoutItems(d: Diagram, include: (n: DiagramNode) => boolean, at?: { x: number; y: number }): Diagram {
+  const items = d.nodes.filter(include);
   if (!items.length) return d;
   const ids = new Set(items.map((n) => n.id));
   const byId = new Map(items.map((n) => [n.id, n]));
@@ -294,8 +306,8 @@ export function layoutLevel(d: Diagram): Diagram {
     order: (id) => byId.get(id)!.y * 1000 + byId.get(id)!.x,
     links,
   });
-  const x0 = Math.min(...items.map((n) => n.x));
-  const y0 = Math.min(...items.map((n) => n.y));
+  const x0 = at?.x ?? Math.min(...items.map((n) => n.x));
+  const y0 = at?.y ?? Math.min(...items.map((n) => n.y));
   const moved = new Set<string>();
   const nodes = d.nodes.map((n) => {
     const p = placed.get(n.id);
@@ -306,8 +318,9 @@ export function layoutLevel(d: Diagram): Diagram {
   });
   const edges = d.edges.map((e) => {
     if (!moved.has(e.from) && !moved.has(e.to)) return e;
-    const { waypoints: _w, fromAnchor: _f, toAnchor: _t, ...rest } = e;
-    return rest;
+    const { waypoints: _w, fromAnchor: f, toAnchor: t, ...rest } = e;
+    // A message keeps its place on a lifeline.
+    return { ...rest, ...(f?.line !== undefined ? { fromAnchor: f } : {}), ...(t?.line !== undefined ? { toAnchor: t } : {}) };
   });
   return { ...d, nodes, edges };
 }
