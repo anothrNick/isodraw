@@ -1,4 +1,4 @@
-import { BAR, activations, lineTop } from './lifelines';
+import { BAR, lifelineBars, lineTop } from './lifelines';
 import { Fragment, useId, useMemo, type CSSProperties, type MouseEvent as RMouseEvent, type ReactNode } from 'react';
 import {
   TILE,
@@ -203,7 +203,10 @@ function Lifeline({ node, diagram, proj }: { node: DiagramNode; diagram: Diagram
   const len = node.lifeline ?? 0;
   const ink = node.lifelineColor ?? (theme === 'dark' ? '#64748b' : '#94a3b8');
   const style = node.lifelineStyle ?? 'dashed';
-  const bars = node.lifelineBars === false ? [] : activations(diagram, node);
+  // Index each bar before drawing deeper ones on top, so data-bar names the bar the canvas edits.
+  const bars = lifelineBars(diagram, node)
+    .map((b, i) => ({ ...b, i }))
+    .sort((a, b) => a.depth - b.depth);
   // data-lifeline: pressing on the line draws a message from that point (IsoCanvas).
   return (
     <g data-node-id={node.id} data-lifeline={node.id}>
@@ -221,10 +224,11 @@ function Lifeline({ node, diagram, proj }: { node: DiagramNode; diagram: Diagram
           strokeLinecap={style === 'dotted' ? 'round' : undefined}
           vectorEffect="non-scaling-stroke"
         />
-        {bars.map((b, i) => (
+        {bars.map((b) => (
           <rect
-            key={i}
-            x={(top.x - BAR / 2) * TILE}
+            key={b.i}
+            data-bar={`${node.id}:${b.i}`}
+            x={(top.x - BAR / 2 + b.depth * (BAR / 2)) * TILE}
             y={(top.y + b.from - 0.3) * TILE}
             width={BAR * TILE}
             height={(b.to - b.from + 0.6) * TILE}

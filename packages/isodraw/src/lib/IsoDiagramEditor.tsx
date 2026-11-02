@@ -10,7 +10,7 @@ import { diagramImages, iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loa
 import { fitIsoIcon, imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevel, markMoved, movesItem } from './layout';
-import { lineTop } from './lifelines';
+import { lineTop, withBars } from './lifelines';
 import { canHaveDetail, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
@@ -1353,6 +1353,14 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             {selNode ? (
               <NodeInspector
                 node={selNode}
+                onAddBar={() => {
+                  // Below the last bar, or near the top of an empty line.
+                  const next = withBars(diagram, { ...selNode, lifelineBars: undefined }, (bars) => {
+                    const start = bars.length ? Math.max(...bars.map((b) => b.to)) + 0.5 : 1;
+                    return [...bars, { from: start, to: start + 2, depth: 0 }];
+                  });
+                  updateNode(selNode.id, { activationBars: next.activationBars, lifelineBars: undefined });
+                }}
                 parent={containerOf(selNode, diagram.nodes)}
                 contents={isContainer(selNode) ? descendantsOf([selNode.id], diagram.nodes).size : 0}
                 onSelectNodes={(ids) => setSelection({ nodes: ids, edges: [] })}
@@ -1535,6 +1543,7 @@ function Swatches({ value, onChange }: { value: string; onChange: (c: string) =>
 
 function NodeInspector({
   node,
+  onAddBar,
   parent,
   contents,
   onChange,
@@ -1547,6 +1556,8 @@ function NodeInspector({
   onUngroup,
 }: {
   node: DiagramNode;
+  /** Adds an activation bar to its lifeline (turning automatic bars into placed ones first). */
+  onAddBar: () => void;
   /** Container this node sits in, if any. */
   parent?: DiagramNode;
   /** Number of items inside this node (containers only). */
@@ -1689,8 +1700,28 @@ function NodeInspector({
           </Field>
           <label className="isd-check">
             <input type="checkbox" checked={node.lifelineBars !== false} onChange={(e) => onChange({ lifelineBars: e.target.checked ? undefined : false })} />
-            Activation bars (from calls and their dashed returns)
+            Show activation bars
           </label>
+          {node.lifelineBars !== false && (
+            <>
+              <p className="isd-hint">
+                {node.activationBars
+                  ? `${node.activationBars.length} bar${node.activationBars.length === 1 ? '' : 's'} placed by hand.`
+                  : 'Automatic: a call arriving starts a bar, its dashed return ends it.'}{' '}
+                Double-click the line to add a bar (on a bar, a nested one); select a bar to drag it or its ends; Delete removes it.
+              </p>
+              <div className="isd-row">
+                <button type="button" className="isd-btn" onClick={onAddBar}>
+                  <Icon name="plus" /> Add activation bar
+                </button>
+                {node.activationBars && (
+                  <button type="button" className="isd-btn" onClick={() => onChange({ activationBars: undefined })} title="Work the bars out from the messages again">
+                    Back to automatic
+                  </button>
+                )}
+              </div>
+            </>
+          )}
           <p className="isd-hint">Drag from the line to draw a message; drag the handle at its end to change its length.</p>
         </>
       )}

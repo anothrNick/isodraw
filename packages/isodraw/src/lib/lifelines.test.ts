@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activations, lifelineRoute, lineTop, onLifeline } from './lifelines';
+import { activations, lifelineBars, lifelineRoute, lineTop, onLifeline, withBars } from './lifelines';
 import { anchorPoint } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode } from './types';
 
@@ -55,5 +55,46 @@ describe('lifelines', () => {
       { from: 5, to: 5.5 },
     ]);
     expect(activations(d, a)).toEqual([]);
+  });
+});
+
+describe('activation bars placed by hand', () => {
+  const msg = (id: string, from: string, to: string, line: number, dashed = false): DiagramEdge => ({
+    id,
+    from,
+    to,
+    color: '#000',
+    width: 1,
+    routing: 'straight',
+    ...(dashed ? { lineStyle: 'dashed' as const } : {}),
+    fromAnchor: { side: 'e', t: 0.5, line },
+    toAnchor: { side: 'w', t: 0.5, line },
+  });
+  const d: Diagram = { version: 1, nodes: [a, b], edges: [msg('m1', 'a', 'b', 1), msg('m2', 'b', 'a', 3, true)] };
+
+  it('start from the automatic ones, then stay as placed', () => {
+    expect(lifelineBars(d, b)).toEqual([{ from: 1, to: 3, depth: 0 }]);
+    // The first edit keeps what was showing, plus the change.
+    const placed = withBars(d, b, (bars) => [...bars, { from: 4, to: 5, depth: 0 }]);
+    expect(placed.activationBars).toEqual([
+      { from: 1, to: 3 },
+      { from: 4, to: 5 },
+    ]);
+    // Placed bars no longer follow the messages.
+    expect(lifelineBars({ ...d, edges: [] }, placed)).toHaveLength(2);
+    // Kept on the line, and never shorter than a quarter unit.
+    expect(withBars(d, b, () => [{ from: 9, to: 40 }, { from: 2, to: 1 }]).activationBars).toEqual([
+      { from: 9, to: 10 },
+      { from: 2, to: 2.25 },
+    ]);
+  });
+
+  it('put message ends at the edge of the outermost bar, or on the line where there is none', () => {
+    const nested = { ...b, activationBars: [{ from: 1, to: 5 }, { from: 2, to: 3, depth: 1 }] };
+    expect(anchorPoint(nested, { side: 'e', t: 0.5, line: 2.5 }).x).toBeCloseTo(7.36);
+    expect(anchorPoint(nested, { side: 'w', t: 0.5, line: 2.5 }).x).toBeCloseTo(6.82);
+    expect(anchorPoint(nested, { side: 'w', t: 0.5, line: 8 }).x).toBe(7);
+    // Hidden bars: no bars, so straight to the line's default offset.
+    expect(lifelineBars(d, { ...nested, lifelineBars: false })).toEqual([]);
   });
 });

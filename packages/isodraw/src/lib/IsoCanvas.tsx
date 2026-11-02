@@ -1,4 +1,4 @@
-import { lifelineRoute, lineAnchor, linePoint, lineTop, onLifeline, sideToward } from './lifelines';
+import { BAR, lifelineBars, lifelineRoute, lineAnchor, linePoint, lineTop, onLifeline, sideToward, withBars } from './lifelines';
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type Ref } from 'react';
 import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, snap } from './geometry';
 import { containerOf, descendantsOf, isContainer } from './containers';
@@ -80,8 +80,10 @@ type Drag =
   | { type: 'resize'; id: string; fixed: Pt; began: boolean }
   | { type: 'height'; id: string; sy: number; h0: number; began: boolean }
   | { type: 'lifeline'; id: string; began: boolean }
-  /** `line`: started on a lifeline, at trail[0]: a message from that point. */
-  | { type: 'connect'; from: string; fromSide?: Side; trail: Pt[]; cursor: Pt; target: string | null; line?: boolean }
+  /** An activation bar being moved, or one of its ends dragged (`start`: the pointer's distance down the line). */
+  | { type: 'bar'; id: string; index: number; mode: 'move' | 'from' | 'to'; start: number; orig: { from: number; to: number }; began: boolean }
+  /** `line`: started on a lifeline, at trail[0]: a message from that point; `bar`: on that activation bar. */
+  | { type: 'connect'; from: string; fromSide?: Side; trail: Pt[]; cursor: Pt; target: string | null; line?: boolean; bar?: number }
   | { type: 'edgeEnd'; edgeId: string; end: 'from' | 'to'; cursor: Pt; target: string | null }
   | { type: 'segment'; edgeId: string; index: number; start: Pt; base: ResolvedEdge; began: boolean }
   | { type: 'waypoint'; edgeId: string; index: number; began: boolean }
@@ -116,6 +118,11 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const svgEl = useRef<SVGSVGElement | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [drag, setDrag] = useState<Drag | null>(null);
+  // The activation bar picked on a selected lifeline (bars aren't items of their own).
+  const [selBar, setSelBar] = useState<{ node: string; index: number } | null>(null);
+  useEffect(() => {
+    if (selBar && !(selection.nodes.length === 1 && selection.nodes[0] === selBar.node)) setSelBar(null);
+  }, [selection.nodes.join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
   const [hover, setHover] = useState<string | null>(null);
   /** Item under the pointer as `node:id` / `edge:id`, for hover-only doc markers. */
   const [hoverItem, setHoverItem] = useState<string | null>(null);
@@ -277,6 +284,12 @@ export function IsoCanvas(props: IsoCanvasProps) {
         setDrag({ type: 'connect', from: n.id, fromSide: side as Side, trail: [w], cursor: w, target: null });
         return;
       }
+      if ((handle === 'bar-from' || handle === 'bar-to') && selBar) {
+        const ln = nodeById.get(selBar.node);
+        const b = ln && lifelineBars(diagram, ln)[selBar.index];
+        if (ln && b) setDrag({ type: 'bar', id: ln.id, index: selBar.index, mode: handle === 'bar-from' ? 'from' : 'to', start: 0, orig: b, began: false });
+        return;
+      }
       const n = nodeById.get(selection.nodes[0]);
       if (!n) return;
       if (handle === 'height') {
@@ -295,8 +308,16 @@ export function IsoCanvas(props: IsoCanvasProps) {
     if (lifeline && !readOnly) {
       const n = nodeById.get(lifeline);
       const w = n && toWorld(e.clientX, e.clientY, n.z);
-      if (n && w && onLifeline(n, w)) {
-        setDrag({ type: 'connect', from: n.id, trail: [w], cursor: w, target: null, line: true });
+      const barAttr = closestAttr(e.target, 'data-bar');
+      const bar = barAttr ? Number(barAttr.split(':')[1]) : undefined;
+      if (n && w && bar !== undefined && selBar?.node === n.id && selBar.index === bar) {
+        // The selected bar: drag it along the line.
+        const b = lifelineBars(diagram, n)[bar];
+        if (b) setDrag({ type: 'bar', id: n.id, index: bar, mode: 'move', start: snap(w.y - lineTop(n).y, 0.25), orig: b, began: false });
+        return;
+      }
+      if (n && w && (bar !== undefined || onLifeline(n, w))) {
+        setDrag({ type: 'connect', from: n.id, trail: [w], cursor: w, target: null, line: true, bar });
         return;
       }
     }
@@ -435,6 +456,33 @@ export function IsoCanvas(props: IsoCanvasProps) {
         updateNodes((m) => (m.id === drag.id ? { ...m, h } : m));
         break;
       }
+      case 'bar': {
+        const n = nodeById.get(drag.id);
+        if (!n) break;
+        const w = toWorld(e.clientX, e.clientY, n.z);
+        const dist = free ? w.y - lineTop(n).y : snap(w.y - lineTop(n).y, 0.25);
+        if (!drag.began) {
+          props.onBeginChange?.();
+          setDrag({ ...drag, began: true });
+        }
+        const { index, mode, orig, start } = drag;
+        updateNodes((m) =>
+          m.id !== drag.id
+            ? m
+            : withBars(diagram, m, (bars) =>
+                bars.map((b, i) =>
+                  i !== index
+                    ? b
+                    : mode === 'move'
+                      ? { ...b, from: orig.from + dist - start, to: orig.to + dist - start }
+                      : mode === 'from'
+                        ? { ...b, from: Math.min(dist, b.to - 0.25) }
+                        : { ...b, to: Math.max(dist, b.from + 0.25) },
+                ),
+              ),
+        );
+        break;
+      }
       case 'lifeline': {
         const n = nodeById.get(drag.id);
         if (!n) break;
@@ -513,8 +561,9 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const onPointerUp = (e: RPointerEvent<SVGSVGElement>) => {
     if (drag?.type === 'pan' && !drag.moved) onSelectionChange({ nodes: [], edges: [] });
     if (drag?.type === 'connect' && drag.line && Math.hypot(drag.cursor.x - drag.trail[0].x, drag.cursor.y - drag.trail[0].y) < 0.35) {
-      // A click on a lifeline, not a drag: select its participant.
+      // A click on a lifeline, not a drag: select its participant (and the bar clicked, if any).
       onSelectionChange({ nodes: [drag.from], edges: [] });
+      setSelBar(drag.bar !== undefined ? { node: drag.from, index: drag.bar } : null);
     } else if (drag?.type === 'connect') {
       const target = nodeAtPoint(e.clientX, e.clientY);
       const from = nodeById.get(drag.from);
@@ -549,6 +598,27 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const onDoubleClick = (e: React.MouseEvent) => {
     // Pointer capture retargets the click to the canvas itself, so look at what is under the pointer.
     const hit = (e.target === e.currentTarget && document.elementFromPoint?.(e.clientX, e.clientY)) || e.target;
+    // On a lifeline: add an activation bar there, or a nested one on a bar (a self call).
+    const life = closestAttr(hit, 'data-lifeline');
+    const ln = life ? nodeById.get(life) : undefined;
+    if (ln && !readOnly) {
+      const at = Math.max(0, snap(toWorld(e.clientX, e.clientY, ln.z).y - lineTop(ln).y, 0.25));
+      const barAttr = closestAttr(hit, 'data-bar');
+      const on = barAttr ? lifelineBars(diagram, ln)[Number(barAttr.split(':')[1])] : undefined;
+      let index = 0;
+      props.onBeginChange?.();
+      updateNodes((m) =>
+        m.id !== ln.id
+          ? m
+          : withBars(diagram, { ...m, lifelineBars: undefined }, (bars) => {
+              index = bars.length;
+              return [...bars, on ? { from: at, to: Math.min(at + 1, on.to), depth: on.depth + 1 } : { from: at, to: at + 2, depth: 0 }];
+            }),
+      );
+      onSelectionChange({ nodes: [ln.id], edges: [] });
+      setSelBar({ node: ln.id, index });
+      return;
+    }
     const handle = closestAttr(hit, 'data-handle');
     if (!handle) {
       const nodeId = closestAttr(hit, 'data-node-id');
@@ -779,6 +849,40 @@ export function IsoCanvas(props: IsoCanvasProps) {
     edgeHandles = <g>{items}</g>;
   }
 
+  // ----- the selected activation bar -----
+  let barOverlay = null;
+  const barNode = selBar ? nodeById.get(selBar.node) : undefined;
+  const selected = barNode && lifelineBars(diagram, barNode)[selBar!.index];
+  if (barNode && selected) {
+    const t = lineTop(barNode);
+    const x0 = t.x - BAR / 2 + selected.depth * (BAR / 2);
+    const y0 = t.y + selected.from - 0.3;
+    const y1 = t.y + selected.to + 0.3;
+    const corner = (x: number, y: number) => proj.project(x, y, barNode.z);
+    const top = corner(x0 + BAR / 2, y0);
+    const bottom = corner(x0 + BAR / 2, y1);
+    const r = 5 / camera.zoom;
+    barOverlay = (
+      <g>
+        <polygon
+          points={pointsAttr([corner(x0, y0), corner(x0 + BAR, y0), corner(x0 + BAR, y1), corner(x0, y1)])}
+          fill="none"
+          stroke={ACCENT}
+          strokeWidth={2}
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+        {!readOnly &&
+          ([
+            ['bar-from', top],
+            ['bar-to', bottom],
+          ] as const).map(([h, p]) => (
+            <circle key={h} data-handle={h} cx={p.x} cy={p.y} r={r} fill="#fff" stroke={ACCENT} strokeWidth={1.5} vectorEffect="non-scaling-stroke" style={{ cursor: 'ns-resize' }} />
+          ))}
+      </g>
+    );
+  }
+
   // ----- drag previews -----
   let preview = null;
   if (drag?.type === 'connect' && drag.line) {
@@ -961,6 +1065,18 @@ export function IsoCanvas(props: IsoCanvasProps) {
       tabIndex={0}
       style={{ cursor, touchAction: 'none' }}
       onPointerDown={onPointerDown}
+      onKeyDown={(e) => {
+        // A selected activation bar: Delete removes just the bar, Escape lets it go.
+        if (!selBar || readOnly) return;
+        if (e.key === 'Escape') setSelBar(null);
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        e.preventDefault();
+        e.stopPropagation();
+        const { node: id, index } = selBar;
+        props.onBeginChange?.();
+        updateNodes((m) => (m.id === id ? withBars(diagram, m, (bars) => bars.filter((_, i) => i !== index)) : m));
+        setSelBar(null);
+      }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => setDrag(null)}
@@ -1020,6 +1136,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
           {docBadges}
           {detailBadges}
           {handles}
+          {barOverlay}
           {edgeHandles}
           {preview}
         </g>

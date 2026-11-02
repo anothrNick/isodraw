@@ -59,6 +59,12 @@ export interface DiagramNode {
   lifelineStyle?: LineStyle;
   lifelineColor?: string;
   lifelineBars?: boolean;
+  /**
+   * Activation bars placed by hand, as distances down the lifeline; `depth`
+   * nests one inside another (a self call). Without it, bars are worked out
+   * from the messages; the first edit turns those into these.
+   */
+  activationBars?: ActivationBar[];
   /** Markdown documentation for this node. */
   doc?: string;
   /** The component's own diagram, opened by drilling into it. Its overview doc is this node's doc. */
@@ -76,6 +82,12 @@ export type EdgeRouting = 'straight' | 'orthogonal' | 'curved';
 export type Side = 'n' | 'e' | 's' | 'w';
 
 /** Where an edge attaches: a side, and a position along it (0..1, west→east or north→south). */
+export interface ActivationBar {
+  from: number;
+  to: number;
+  depth?: number;
+}
+
 export interface EdgeAnchor {
   side: Side;
   t: number;

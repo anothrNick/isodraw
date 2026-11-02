@@ -1,4 +1,4 @@
-import type { Diagram, DiagramEdge, DiagramNode, EdgeAnchor, Side } from './types';
+import type { ActivationBar, Diagram, DiagramEdge, DiagramNode, EdgeAnchor, Side } from './types';
 
 /**
  * Lifelines: any component can have a dashed line hanging below it (its
@@ -19,11 +19,21 @@ export function lineTop(n: DiagramNode) {
   return { x: n.x + n.w / 2, y: n.y + n.d + (n.label ? 0.9 : 0.2) };
 }
 
-/** The world point at a distance down a lifeline, nudged to the bar's edge on `side`. */
+/**
+ * The world point at a distance down a lifeline, at the edge of the bars
+ * there on `side`: nested bars sit to the right, so they push e-side ends
+ * out. With bars placed by hand, a point with no bar is on the line itself.
+ */
 export function linePoint(n: DiagramNode, a: EdgeAnchor) {
   const top = lineTop(n);
   const dist = Math.min(Math.max(a.line ?? 0, 0), n.lifeline ?? 0);
-  const dx = a.side === 'w' ? -BAR / 2 : a.side === 'e' ? BAR / 2 : 0;
+  let dx = a.side === 'w' ? -BAR / 2 : a.side === 'e' ? BAR / 2 : 0;
+  if (n.activationBars && n.lifelineBars !== false) {
+    const here = n.activationBars.filter((b) => dist >= b.from - 0.3 && dist <= b.to + 0.3);
+    const deepest = Math.max(-1, ...here.map((b) => b.depth ?? 0));
+    if (deepest < 0) dx = 0;
+    else if (a.side === 'e') dx = BAR / 2 + deepest * (BAR / 2);
+  }
   return { x: top.x + dx, y: top.y + dist };
 }
 
@@ -108,4 +118,30 @@ export function lifelineRoute(
     waypoints: [],
     routing: 'straight',
   };
+}
+
+/**
+ * The bars a lifeline shows: those placed by hand, or else the ones worked
+ * out from its messages (none when bars are turned off). Automatic bars come
+ * top to bottom; hand-placed ones in the order they're stored, so an index
+ * names the same bar while it's dragged.
+ */
+export function lifelineBars(d: Diagram, n: DiagramNode): Required<ActivationBar>[] {
+  if (!n.lifeline || n.lifelineBars === false) return [];
+  if (n.activationBars) return n.activationBars.map((b) => ({ from: b.from, to: b.to, depth: b.depth ?? 0 }));
+  return activations(d, n)
+    .sort((a, b) => a.from - b.from)
+    .map((b) => ({ ...b, depth: 0 }));
+}
+
+/** The node with its bars changed, turning automatic bars into hand-placed ones first. */
+export function withBars(d: Diagram, n: DiagramNode, fn: (bars: Required<ActivationBar>[]) => ActivationBar[]): DiagramNode {
+  const len = n.lifeline ?? 0;
+  const bars = fn(lifelineBars(d, { ...n, lifelineBars: true })).map((b) => {
+    const round = (v: number) => Math.round(v * 100) / 100;
+    const from = round(Math.min(Math.max(b.from, 0), len));
+    const to = round(Math.min(Math.max(b.to, from + 0.25), len));
+    return { from, to, ...(b.depth ? { depth: b.depth } : {}) };
+  });
+  return { ...n, activationBars: bars };
 }
