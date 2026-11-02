@@ -6,9 +6,11 @@ import streamingDocs from './docs/streaming.md?raw';
 import retailDocs from './docs/retail.md?raw';
 import zeroTrustDocs from './docs/zero-trust.md?raw';
 import aiAssistantDocs from './docs/ai-assistant.md?raw';
+import signInDocs from './docs/sign-in-sequence.md?raw';
 import { aiAssistant, retail, zeroTrust } from './mixedExamples';
 import { sampleDiagram } from './sample';
 import { terraformExample } from './terraform';
+import { signInSequence } from './sequence';
 
 // Layouts live here; each example's documentation is a Markdown file in ./docs.
 
@@ -263,6 +265,12 @@ export const EXAMPLES: Example[] = [
     name: 'AI support assistant',
     description: 'A retrieval-augmented chat assistant on Bedrock, with search over help articles and handoff to people.',
     diagram: withDocs(aiAssistant, aiAssistantDocs),
+  },
+  {
+    id: 'sign-in-sequence',
+    name: 'Sign-in sequence',
+    description: 'A sequence diagram drawn with ordinary shapes and connections: OAuth sign-in with PKCE, step by step.',
+    diagram: withDocs(signInSequence(), signInDocs),
   },
   {
     id: 'terraform',

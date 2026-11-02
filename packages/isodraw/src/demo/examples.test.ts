@@ -65,7 +65,8 @@ describe.each(EXAMPLES.map((e) => [e.id, e] as const))('example %s', (id, exampl
 
   it('has a doc for the diagram and every component', () => {
     expect(d.doc?.trim()).toBeTruthy();
-    const undocumented = d.nodes.filter((n) => n.kind !== 'text' && !n.doc?.trim()).map((n) => n.id);
+    // Unlabeled shapes are drawing aids (a sequence diagram's lifelines and activation bars), not components.
+    const undocumented = d.nodes.filter((n) => n.kind !== 'text' && n.label?.trim() && !n.doc?.trim()).map((n) => n.id);
     expect(undocumented).toEqual([]);
   });
 
