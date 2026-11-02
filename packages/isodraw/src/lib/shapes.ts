@@ -1,4 +1,3 @@
-import { cleanSequences, parseSequences } from './sequences';
 import { ISO_ICON_COLOR, isIsoIcon, isoIconMetrics } from './isoIcons';
 import { uid } from './geometry';
 import type { Diagram, DiagramEdge, DiagramNode, ShapeKind } from './types';
@@ -135,7 +134,7 @@ export function parseDiagram(json: unknown): Diagram {
     throw new Error('Not an IsoDraw diagram: expected { nodes: [], edges: [] }');
   }
   const ids = new Set(obj.nodes.map((n) => n.id));
-  const d: Diagram = {
+  return {
     version: 1,
     nodes: obj.nodes.map((n) => {
       const { detail, ...rest } = n;
@@ -153,8 +152,6 @@ export function parseDiagram(json: unknown): Diagram {
     ...(typeof obj.doc === 'string' ? { doc: obj.doc } : {}),
     ...(obj.view === '2d' || obj.view === '3d' ? { view: obj.view } : {}),
   };
-  const sequences = parseSequences((obj as { sequences?: unknown }).sequences);
-  return sequences?.length ? cleanSequences({ ...d, sequences }) : d;
 }
 
 export const KIND_NAMES: Record<ShapeKind, string> = {

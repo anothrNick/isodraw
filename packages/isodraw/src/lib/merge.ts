@@ -1,4 +1,3 @@
-import { cleanSequences } from './sequences';
 import type { Diagram, DiagramNode } from './types';
 
 /**
@@ -30,11 +29,7 @@ function mergeLevel(base: Diagram, mine: Diagram, theirs: Diagram, count: Counte
     if (v === undefined) delete out[key];
     else (out as unknown as Record<string, unknown>)[key] = v;
   }
-  // Each sequence merges as one item; steps naming components that are gone are dropped.
-  const sequences = mergeItems(base.sequences ?? [], mine.sequences ?? [], theirs.sequences ?? [], count);
-  if (sequences.length) out.sequences = sequences;
-  else delete out.sequences;
-  return cleanSequences(out);
+  return out;
 }
 
 /** A node's own fields merge as one value; its detail diagram merges item by item. */
