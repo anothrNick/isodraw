@@ -101,3 +101,25 @@ func (s *Server) seatFor(w http.ResponseWriter, r *http.Request, orgID, email, u
 	}
 	return true
 }
+
+// roomForPerson checks a workspace with a people limit (Pro) has room for one more person, by email.
+func (s *Server) roomForPerson(w http.ResponseWriter, r *http.Request, orgID, email string) bool {
+	p, err := s.store.OrgPlan(r.Context(), orgID)
+	if err != nil {
+		internalError(w, err)
+		return false
+	}
+	if p.PeopleLimit == 0 {
+		return true
+	}
+	n, err := s.store.PeopleIn(r.Context(), orgID, email)
+	if err != nil {
+		internalError(w, err)
+		return false
+	}
+	if n >= p.PeopleLimit {
+		planLimit(w, fmt.Sprintf("This Pro workspace holds up to %d people, counting open invites. Revoke an invite or remove someone to make room; Team has no limit.", p.PeopleLimit))
+		return false
+	}
+	return true
+}

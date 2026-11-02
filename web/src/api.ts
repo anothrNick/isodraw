@@ -60,12 +60,20 @@ export interface Plan {
   grandfathered: boolean;
   /** False for a team whose owners no longer have lifetime access: readable, not changeable. */
   editable: boolean;
+  /** The workspace's own plan, set by an admin for now; empty when it follows its owners' lifetime access. */
+  plan: '' | WorkspacePlan;
+  planSource: '' | 'comp' | 'subscription' | 'lifetime';
   diagramLimit: number;
   editorLimit: number;
+  /** Pro's limit on everyone in the workspace, open invites included. */
+  peopleLimit: number;
   diagrams: number;
   /** Seats in use: members who can edit plus open invites to edit. */
   editors: number;
+  people: number;
 }
+
+export type WorkspacePlan = 'pro' | 'team' | 'business';
 
 // ---------- billing ----------
 
@@ -136,6 +144,8 @@ export interface AdminWorkspace {
   slug: string;
   personal: boolean;
   grandfathered: boolean;
+  /** The workspace's own plan, '' when it has none. */
+  plan: '' | WorkspacePlan;
   createdAt: string;
   members: number;
   diagrams: number;
@@ -313,7 +323,10 @@ export const api = {
         `/api/admin/orgs/${id}/delete`,
         { confirm },
       ),
-    updateWorkspace: (id: string, change: { grandfathered?: boolean }) =>
+    /** A team workspace owned by a user, on a plan given without payment (for selling by hand and demos). */
+    createWorkspace: (b: { name: string; ownerId: string; plan: WorkspacePlan; note: string }) =>
+      request<AdminWorkspace>('POST', '/api/admin/orgs', b),
+    updateWorkspace: (id: string, change: { grandfathered?: boolean; plan?: '' | WorkspacePlan; note?: string }) =>
       request<{ workspace: AdminWorkspace; members: Member[]; invites: Invite[]; plan: Plan }>('PATCH', `/api/admin/orgs/${id}`, change),
     events: () => request<{ events: AdminEvent[] }>('GET', '/api/admin/events'),
   },

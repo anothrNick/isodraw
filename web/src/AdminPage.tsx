@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Infinity as InfinityIcon, Loader2, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowLeft, Infinity as InfinityIcon, Loader2, Plus, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, formatPrice, type AdminEvent, type AdminUser, type AdminUserDetail, type AdminWorkspace, type Invite, type Member, type Plan } from './api';
+import { api, formatPrice, type AdminEvent, type AdminUser, type AdminUserDetail, type AdminWorkspace,
+  type WorkspacePlan, type Invite, type Member, type Plan } from './api';
 import { Loading, Message } from './App';
 import { ago } from './DiagramList';
 import { linkProps, navigate, type AdminSection } from './router';
@@ -204,6 +205,7 @@ const LifetimeBadge = () => (
 
 function UserDetail({ id }: { id: string }) {
   const session = useSession();
+  const [creating, setCreating] = useState(false);
   const [data, setData] = useState<AdminUserDetail | null>(null);
   const [confirm, setConfirm] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -238,11 +240,18 @@ function UserDetail({ id }: { id: string }) {
           </h2>
           {u.name && <p className="text-muted-foreground">{u.name}</p>}
         </div>
-        <Button variant={u.lifetimeSince ? 'outline' : 'default'} disabled={busy} onClick={() => setConfirm(!u.lifetimeSince)}>
-          {busy && <Loader2 className="animate-spin" />}
-          {u.lifetimeSince ? 'Take back lifetime access' : 'Grant lifetime access'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setCreating(true)}>
+            <Plus />
+            Create workspace…
+          </Button>
+          <Button variant={u.lifetimeSince ? 'outline' : 'default'} disabled={busy} onClick={() => setConfirm(!u.lifetimeSince)}>
+            {busy && <Loader2 className="animate-spin" />}
+            {u.lifetimeSince ? 'Take back lifetime access' : 'Grant lifetime access'}
+          </Button>
+        </div>
       </div>
+      <CreateWorkspaceFor user={u} open={creating} onClose={() => setCreating(false)} />
       <Facts
         items={[
           ['Joined', new Date(u.createdAt).toLocaleString()],
@@ -363,6 +372,7 @@ function WorkspaceCell({ workspace: w }: { workspace: AdminWorkspace }) {
     <div className="min-w-0">
       <div className="flex items-center gap-1.5">
         <span className="truncate font-medium">{w.personal ? 'Personal' : w.name}</span>
+        {w.plan && <PlanBadge plan={w.plan} />}
         {w.grandfathered && <Badge variant="outline">Grandfathered</Badge>}
       </div>
       <div className="truncate text-xs text-muted-foreground">/{w.slug}</div>
@@ -375,6 +385,7 @@ type WorkspaceData = { workspace: AdminWorkspace; members: Member[]; invites: In
 function WorkspaceDetail({ id }: { id: string }) {
   const [data, setData] = useState<WorkspaceData | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const [confirm, setConfirm] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -394,7 +405,17 @@ function WorkspaceDetail({ id }: { id: string }) {
       setConfirm(null);
     }
   };
-  const planName = w.personal ? (p.lifetime ? 'Lifetime' : 'Free') : p.grandfathered ? 'Grandfathered team' : p.lifetime ? 'Lifetime team' : 'Read-only team (no lifetime owner)';
+  const planName = w.personal
+    ? p.lifetime
+      ? 'Lifetime'
+      : 'Free'
+    : p.plan
+      ? `${PLAN_NAMES[p.plan]}${p.planSource === 'comp' ? ' (given by an admin, no payment)' : ''}`
+      : p.grandfathered
+        ? 'Grandfathered team'
+        : p.lifetime
+          ? 'Lifetime team'
+          : 'Read-only team (no lifetime owner)';
   return (
     <>
       <Back href="/admin/workspaces" label="Workspaces" />
@@ -402,23 +423,33 @@ function WorkspaceDetail({ id }: { id: string }) {
         <div className="min-w-0">
           <h2 className="flex flex-wrap items-center gap-2 text-xl font-semibold">
             {w.personal ? `Personal · ${w.owner}` : w.name}
+            {p.plan && <PlanBadge plan={p.plan} />}
             {w.grandfathered && <Badge variant="outline">Grandfathered</Badge>}
             {!p.editable && <Badge variant="destructive">Read-only</Badge>}
           </h2>
           <p className="text-muted-foreground">/{w.slug}</p>
         </div>
         {!w.personal && (
-          <Button variant="outline" disabled={busy} onClick={() => setConfirm(!w.grandfathered)}>
-            {busy && <Loader2 className="animate-spin" />}
-            {w.grandfathered ? 'Remove grandfathering' : 'Grandfather this team'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setPlanning(true)}>Set plan…</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setConfirm(!w.grandfathered)}>
+              {busy && <Loader2 className="animate-spin" />}
+              {w.grandfathered ? 'Remove grandfathering' : 'Grandfather this team'}
+            </Button>
+          </div>
         )}
       </div>
       <Facts
         items={[
           ['Plan', planName],
           ['Diagrams', p.diagramLimit ? `${p.diagrams} of ${p.diagramLimit}` : String(p.diagrams)],
-          ...(w.personal ? [] : ([['Editor seats', p.editorLimit ? `${p.editors} of ${p.editorLimit} used` : `${p.editors} (no limit)`]] as [string, string][])),
+          ...(w.personal
+            ? []
+            : ([
+                p.peopleLimit
+                  ? ['People', `${p.people} of ${p.peopleLimit}, open invites included`]
+                  : ['Editor seats', p.editorLimit ? `${p.editors} of ${p.editorLimit} used` : `${p.editors} (no limit)`],
+              ] as [string, string][])),
           ['Created', new Date(w.createdAt).toLocaleString()],
         ]}
       />
@@ -462,6 +493,7 @@ function WorkspaceDetail({ id }: { id: string }) {
           </div>
         </section>
       )}
+      <SetPlan open={planning} data={data} onClose={() => setPlanning(false)} onChanged={setData} />
       <DeleteWorkspace
         open={deleting}
         data={data}
@@ -559,6 +591,163 @@ function DeleteWorkspace({ open, data, onClose, onDeleted }: { open: boolean; da
   );
 }
 
+const PLAN_NAMES: Record<WorkspacePlan, string> = { pro: 'Pro', team: 'Team', business: 'Business' };
+const PLAN_HINTS: Record<WorkspacePlan, string> = {
+  pro: 'Up to 4 people, unlimited diagrams',
+  team: 'Unlimited people and diagrams',
+  business: 'Team, plus SSO and audit features as they ship',
+};
+
+const PlanBadge = ({ plan }: { plan: WorkspacePlan }) => <Badge className="bg-primary/10 text-primary hover:bg-primary/10">{PLAN_NAMES[plan]}</Badge>;
+
+/** Pro, Team or Business as radio cards. */
+function PlanChoice({ value, onChange }: { value: WorkspacePlan; onChange: (p: WorkspacePlan) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Plan" className="grid gap-2">
+      {(Object.keys(PLAN_NAMES) as WorkspacePlan[]).map((p) => (
+        <button
+          key={p}
+          type="button"
+          role="radio"
+          aria-checked={value === p}
+          onClick={() => onChange(p)}
+          className={cn('rounded-md border px-3 py-2 text-left text-sm transition-colors', value === p ? 'border-primary bg-primary/5' : 'hover:bg-accent')}
+        >
+          <span className="font-medium">{PLAN_NAMES[p]}</span>
+          <span className="ml-2 text-muted-foreground">{PLAN_HINTS[p]}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A team workspace for a user, on a plan given without payment: for selling by hand and demos. */
+function CreateWorkspaceFor({ user, open, onClose }: { user: AdminUser; open: boolean; onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [plan, setPlan] = useState<WorkspacePlan>('pro');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setName('');
+      setPlan('pro');
+      setNote('');
+    }
+  }, [open]);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const w = await api.admin.createWorkspace({ name: name.trim(), ownerId: user.id, plan, note });
+      toast.success(`Created ${w.name} for ${user.email} on ${PLAN_NAMES[plan]}`);
+      onClose();
+      navigate(`/admin/workspaces/${w.id}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create a workspace for {user.email}</DialogTitle>
+          <DialogDescription>They own it, on the plan you choose, with no payment. Use it to sell by hand or for a demo.</DialogDescription>
+        </DialogHeader>
+        <form
+          id="create-for"
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) void run();
+          }}
+        >
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium">Workspace name</span>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme" maxLength={80} autoFocus />
+          </label>
+          <div className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium">Plan</span>
+            <PlanChoice value={plan} onChange={setPlan} />
+          </div>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium">Note for the admin log</span>
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Demo for Acme, invoiced by hand" maxLength={200} />
+          </label>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="create-for" disabled={busy || !name.trim()}>
+            {busy && <Loader2 className="animate-spin" />}
+            Create workspace
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Give a team its own plan without payment, change it, or take it away. */
+function SetPlan({ open, data, onClose, onChanged }: { open: boolean; data: WorkspaceData; onClose: () => void; onChanged: (d: WorkspaceData) => void }) {
+  const { workspace: w, plan: p } = data;
+  const [plan, setPlan] = useState<WorkspacePlan>('pro');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setPlan(p.plan || 'pro');
+      setNote('');
+    }
+  }, [open, p.plan]);
+  const run = async (next: '' | WorkspacePlan) => {
+    setBusy(true);
+    try {
+      onChanged(await api.admin.updateWorkspace(w.id, { plan: next, note }));
+      toast.success(next ? `${w.name} is on ${PLAN_NAMES[next]}` : `${w.name} has no plan of its own now`);
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Plan for {w.name}</DialogTitle>
+          <DialogDescription>Given without payment. Nobody is removed if the new plan's limits are lower; they just can't add more.</DialogDescription>
+        </DialogHeader>
+        <PlanChoice value={plan} onChange={setPlan} />
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium">Note for the admin log</span>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Signed a yearly contract" maxLength={200} />
+        </label>
+        <DialogFooter className="sm:justify-between">
+          {p.plan ? (
+            <Button variant="ghost" className="text-destructive" disabled={busy} onClick={() => run('')}>
+              Remove plan
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button disabled={busy || plan === p.plan} onClick={() => run(plan)}>
+              {busy && <Loader2 className="animate-spin" />}
+              Set {PLAN_NAMES[plan]}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ---------- log ----------
 
 function Log() {
@@ -577,6 +766,8 @@ const ACTIONS: Record<string, string> = {
   'purchase.paid': 'Lifetime bought by',
   'purchase.refunded': 'Lifetime refunded for',
   'team.delete': 'Deleted the workspace',
+  'team.create': 'Created the workspace',
+  'team.plan': 'Set the plan of',
 };
 
 function Events({ events }: { events: AdminEvent[] }) {

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"github.com/anothrNick/isodraw/api/internal/store"
 	"net/http"
 	"testing"
 )
@@ -139,6 +140,71 @@ func TestAdminDeletesATeam(t *testing.T) {
 	}
 	_, ev := f.do(req{method: "GET", path: "/api/admin/events", cookie: admin})
 	if e := ev["events"].([]any)[0].(map[string]any); e["action"] != "team.delete" || e["target"] != "Shop ("+slug+")" {
+		t.Fatal(e)
+	}
+}
+
+func TestAdminCompsAWorkspace(t *testing.T) {
+	f := setup(t)
+	admin, _ := f.user("admin@example.com")
+	f.makeAdmin(admin)
+	// A prospect on the free plan: no lifetime access, can't make teams themselves.
+	ada, _ := f.user("ada@example.com")
+	adaID := userID(t, f, ada)
+
+	create := func(c *http.Cookie, body string) (*http.Response, map[string]any) {
+		return f.do(req{method: "POST", path: "/api/admin/orgs", body: body, cookie: c})
+	}
+	if res, _ := create(ada, `{"name":"Acme","ownerId":"`+adaID+`","plan":"pro"}`); res.StatusCode != 404 {
+		t.Fatal("admins only", res.StatusCode)
+	}
+	if res, out := create(admin, `{"name":"Acme","ownerId":"`+adaID+`","plan":"gold"}`); res.StatusCode != 400 {
+		t.Fatal(out)
+	}
+	res, o := create(admin, `{"name":"Acme demo","ownerId":"`+adaID+`","plan":"pro","note":"Demo for Acme, call on Friday"}`)
+	expect(t, res, 201, o)
+	org := o["id"].(string)
+	if o["plan"] != "pro" || o["owner"] != "ada@example.com" {
+		t.Fatal(o)
+	}
+
+	// Ada owns it and can use it without paying: editable, unlimited diagrams, up to 4 people.
+	p := f.plan(ada, org)
+	if p["editable"] != true || p["plan"] != "pro" || p["planSource"] != "comp" || p["peopleLimit"].(float64) != store.ProPeople || p["diagramLimit"].(float64) != 0 {
+		t.Fatal(p)
+	}
+	res, out := newDiagram(f, ada, org, 1)
+	expect(t, res, 201, out)
+	// Ada plus three invites fill it, viewers included; a fourth is refused.
+	f.invite(ada, org, "b@example.com", "editor")
+	f.invite(ada, org, "c@example.com", "viewer")
+	f.invite(ada, org, "d@example.com", "viewer")
+	res, out = f.do(req{method: "POST", path: "/api/orgs/" + org + "/invites", body: `{"email":"e@example.com","role":"viewer"}`, cookie: ada})
+	expect(t, res, 402, out)
+	// Re-inviting someone already counted is fine.
+	f.invite(ada, org, "d@example.com", "editor")
+
+	// Moving it to Team lifts the limit.
+	res, out = f.do(req{method: "PATCH", path: "/api/admin/orgs/" + org, body: `{"plan":"team","note":"Signed"}`, cookie: admin})
+	expect(t, res, 200, out)
+	if out["plan"].(map[string]any)["peopleLimit"].(float64) != 0 {
+		t.Fatal(out)
+	}
+	f.invite(ada, org, "e@example.com", "viewer")
+
+	// Taking the plan away: it follows Ada's own access again, and she has no lifetime access.
+	res, out = f.do(req{method: "PATCH", path: "/api/admin/orgs/" + org, body: `{"plan":""}`, cookie: admin})
+	expect(t, res, 200, out)
+	if out["plan"].(map[string]any)["editable"] != false {
+		t.Fatal(out)
+	}
+
+	_, ev := f.do(req{method: "GET", path: "/api/admin/events", cookie: admin})
+	events := ev["events"].([]any)
+	if e := events[2].(map[string]any); e["action"] != "team.create" || e["detail"] != "pro for ada@example.com; Demo for Acme, call on Friday" {
+		t.Fatal(e)
+	}
+	if e := events[1].(map[string]any); e["action"] != "team.plan" || e["detail"] != "team; Signed" {
 		t.Fatal(e)
 	}
 }

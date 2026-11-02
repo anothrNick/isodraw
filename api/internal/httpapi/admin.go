@@ -28,6 +28,7 @@ func (s *Server) adminRoutes(api *http.ServeMux) {
 		"PATCH /api/admin/orgs/{id}":  s.adminUpdateOrg,
 		// POST, not DELETE, so the confirmation travels in the body.
 		"POST /api/admin/orgs/{id}/delete": s.adminDeleteOrg,
+		"POST /api/admin/orgs":             s.adminCreateOrg,
 		"GET /api/admin/events":            s.adminEvents,
 	} {
 		api.HandleFunc(pattern, s.platformAdmin(h))
@@ -207,9 +208,31 @@ func (s *Server) adminUpdateOrg(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Grandfathered *bool `json:"grandfathered"`
+		// Plan is "pro", "team" or "business", given without payment (a comp), or "" to take it away.
+		Plan *string `json:"plan"`
+		Note string  `json:"note"`
 	}
-	if !decode(w, r, 1024, &body) {
+	if !decode(w, r, 4096, &body) {
 		return
+	}
+	if body.Plan != nil {
+		if o.Personal {
+			writeError(w, http.StatusConflict, "personal", "Personal workspaces follow their person's plan.")
+			return
+		}
+		if *body.Plan != "" && !store.Plans[*body.Plan] {
+			writeError(w, http.StatusBadRequest, "invalid_plan", "The plan must be pro, team or business.")
+			return
+		}
+		if err := s.store.SetOrgPlan(r.Context(), o.ID, *body.Plan, "comp"); err != nil {
+			internalError(w, err)
+			return
+		}
+		plan := *body.Plan
+		if plan == "" {
+			plan = "none"
+		}
+		s.record(r, "team.plan", o.Name+" ("+o.Slug+")", noted(plan, body.Note))
 	}
 	if body.Grandfathered != nil {
 		if o.Personal {
@@ -224,6 +247,70 @@ func (s *Server) adminUpdateOrg(w http.ResponseWriter, r *http.Request) {
 		s.record(r, action, o.Name+" ("+o.Slug+")", "")
 	}
 	s.adminOrg(w, r)
+}
+
+// adminCreateOrg makes a team workspace for a user, on a plan given without
+// payment: for selling by hand and demos. The user is its owner.
+func (s *Server) adminCreateOrg(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name    string `json:"name"`
+		OwnerID string `json:"ownerId"`
+		Plan    string `json:"plan"`
+		Note    string `json:"note"`
+	}
+	if !decode(w, r, 4096, &body) {
+		return
+	}
+	name, msg := cleanOrgName(body.Name)
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, "invalid_name", msg)
+		return
+	}
+	if !store.Plans[body.Plan] {
+		writeError(w, http.StatusBadRequest, "invalid_plan", "The plan must be pro, team or business.")
+		return
+	}
+	if !isUUID(body.OwnerID) {
+		writeError(w, http.StatusNotFound, "not_found", "No such user.")
+		return
+	}
+	owner, err := s.store.AdminUser(r.Context(), body.OwnerID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "No such user.")
+		return
+	}
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	org, err := s.store.CreateTeam(r.Context(), owner.ID, name)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	if err := s.store.SetOrgPlan(r.Context(), org.ID, body.Plan, "comp"); err != nil {
+		internalError(w, err)
+		return
+	}
+	s.record(r, "team.create", org.Name+" ("+org.Slug+")", noted(body.Plan+" for "+owner.Email, body.Note))
+	o, err := s.store.AdminOrg(r.Context(), org.ID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, o)
+}
+
+// noted adds an admin's note to a log line.
+func noted(detail, note string) string {
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return detail
+	}
+	if len([]rune(note)) > 200 {
+		note = string([]rune(note)[:200])
+	}
+	return detail + "; " + note
 }
 
 // adminDeleteOrg permanently deletes a team workspace. The body must repeat

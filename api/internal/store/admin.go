@@ -116,21 +116,23 @@ func (s *Store) SetLifetimeByID(ctx context.Context, userID string, on bool) err
 }
 
 type AdminOrg struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Slug          string    `json:"slug"`
-	Personal      bool      `json:"personal"`
-	Grandfathered bool      `json:"grandfathered"`
-	CreatedAt     time.Time `json:"createdAt"`
-	Members       int       `json:"members"`
-	Diagrams      int       `json:"diagrams"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Slug          string `json:"slug"`
+	Personal      bool   `json:"personal"`
+	Grandfathered bool   `json:"grandfathered"`
+	// Plan is the workspace's own plan, "" when it has none.
+	Plan      string    `json:"plan"`
+	CreatedAt time.Time `json:"createdAt"`
+	Members   int       `json:"members"`
+	Diagrams  int       `json:"diagrams"`
 	// Owner is the first owner's email: the person, for a personal workspace.
 	Owner string `json:"owner"`
 	// Role is the user's role, when listed for one user.
 	Role Role `json:"role,omitempty"`
 }
 
-const adminOrgCols = `o.id, o.name, o.slug, o.personal, o.grandfathered, o.created_at,
+const adminOrgCols = `o.id, o.name, o.slug, o.personal, o.grandfathered, coalesce(o.plan, ''), o.created_at,
 	(select count(*) from memberships m2 where m2.org_id = o.id),
 	(select count(*) from diagrams d where d.org_id = o.id and d.deleted_at is null),
 	coalesce((select u.email from memberships m2 join users u on u.id = m2.user_id
@@ -138,7 +140,7 @@ const adminOrgCols = `o.id, o.name, o.slug, o.personal, o.grandfathered, o.creat
 
 func scanAdminOrg(r pgx.Row, withRole bool) (AdminOrg, error) {
 	var o AdminOrg
-	dest := []any{&o.ID, &o.Name, &o.Slug, &o.Personal, &o.Grandfathered, &o.CreatedAt, &o.Members, &o.Diagrams, &o.Owner}
+	dest := []any{&o.ID, &o.Name, &o.Slug, &o.Personal, &o.Grandfathered, &o.Plan, &o.CreatedAt, &o.Members, &o.Diagrams, &o.Owner}
 	if withRole {
 		dest = append(dest, &o.Role)
 	}

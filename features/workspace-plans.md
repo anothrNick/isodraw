@@ -47,6 +47,10 @@ Yearly billing gets about two months free. Metered AI (features that call a mode
 
 **Admin screens.** A workspace's admin page shows and sets its plan (comps, grandfathering), with the Stripe subscription linked; the overview shows workspaces per plan and monthly recurring revenue.
 
+## Built so far
+
+- 2026-11-02: workspaces can have their own plan (`orgs.plan`, `orgs.plan_source`). Platform admins create a workspace for any user on Pro, Team or Business without payment (`plan_source = 'comp'`), for selling by hand and demos, and can change or remove a workspace's plan; each change is in the admin log with a note. Pro's 4-person limit (any role, open invites included) is enforced; Team and Business have no people limit. Workspaces without a plan still follow their owners' lifetime access or grandfathering.
+
 ## What changes from what's built
 
 Built and deployed on 2026-11-01/02, before any seat was sold:

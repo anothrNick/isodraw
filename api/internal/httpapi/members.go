@@ -279,6 +279,9 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := strings.ToLower(addr.Address)
+	if !s.roomForPerson(w, r, org.ID, email) {
+		return
+	}
 	if body.Role != store.Viewer && !s.seatFor(w, r, org.ID, email, "") {
 		return
 	}

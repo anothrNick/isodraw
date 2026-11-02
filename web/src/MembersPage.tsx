@@ -78,10 +78,17 @@ export function MembersPage({ org }: { org: Org }) {
         <section className="mt-8">
           <h2 className="mb-3 flex items-baseline justify-between gap-3 text-sm font-semibold">
             <span>Members · {data.members.length}</span>
-            {plan && plan.editorLimit > 0 && (
-              <span className="font-normal text-muted-foreground" title="Owners, admins and editors, plus open invites to edit. Viewers are unlimited.">
-                {plan.editors} of {plan.editorLimit} editor seats used
+            {plan && plan.peopleLimit > 0 ? (
+              <span className="font-normal text-muted-foreground" title="Everyone in the workspace, any role, plus open invites.">
+                {plan.people} of {plan.peopleLimit} people
               </span>
+            ) : (
+              plan &&
+              plan.editorLimit > 0 && (
+                <span className="font-normal text-muted-foreground" title="Owners, admins and editors, plus open invites to edit. Viewers are unlimited.">
+                  {plan.editors} of {plan.editorLimit} editor seats used
+                </span>
+              )
             )}
           </h2>
           <ul className="divide-y rounded-lg border bg-card">
