@@ -83,8 +83,9 @@ function Card({ title, description, children, footer }: { title: string; descrip
     <div className="relative h-full overflow-y-auto bg-background">
       <Glow />
       <IsoGrid />
-      <div className="relative grid min-h-full lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <aside className="hidden flex-col justify-center gap-8 px-12 py-12 lg:flex xl:px-20">
+      {/* Capped and centred, so wide screens don't push the form far from the diagram. */}
+      <div className="relative mx-auto grid min-h-full w-full max-w-6xl lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 lg:px-8">
+        <aside className="hidden flex-col justify-center gap-8 py-12 lg:flex">
           <a className="flex items-center gap-2 text-lg font-semibold" {...linkProps('/')}>
             <Logo size={26} />
             IsoDraw
