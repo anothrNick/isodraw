@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 /**
  * A small history-based router; the app has a handful of pages, so a library isn't needed yet.
  *
- *   /                      → the first organization's diagrams
+ *   /                      → the first organization's diagrams (signed out: the landing page)
  *   /:org                  → an organization's diagrams
  *   /:org/d/:id#in/a/b     → a diagram, inside detail diagrams a › b
  *   /:org/d/:id/docs#/node/a/b → a diagram's docs, on component b inside a

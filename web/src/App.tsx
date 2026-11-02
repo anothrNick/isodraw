@@ -9,6 +9,7 @@ import { DiagramList } from './DiagramList';
 import { DocsPage } from './DocsPage';
 import { EditorPage } from './EditorPage';
 import { InvitePage } from './InvitePage';
+import { LandingPage } from './LandingPage';
 import { MembersPage } from './MembersPage';
 import { linkProps, navigate, useRoute } from './router';
 import { SessionContext, type Session } from './session';
@@ -38,6 +39,8 @@ export function App() {
   const route = useRoute();
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Signed out at "/": show the landing page instead of sending them to sign in.
+  const [signedOut, setSignedOut] = useState(false);
   useTheme(); // keeps <html class="dark"> in step on every page
 
   const reload = useCallback(async (): Promise<Session> => {
@@ -52,7 +55,10 @@ export function App() {
   useEffect(() => {
     if (authPage) return;
     reload().catch((err) => {
-      if (err instanceof ApiError && err.status === 401) signIn();
+      if (err instanceof ApiError && err.status === 401) {
+        if (location.pathname === '/') setSignedOut(true);
+        else signIn();
+      }
       else setError(err instanceof Error ? err.message : String(err));
     });
   }, [reload, authPage]);
@@ -64,6 +70,7 @@ export function App() {
 
   if (route.page === 'login' || route.page === 'signup' || route.page === 'verify' || route.page === 'forgot' || route.page === 'reset')
     return <AuthPages route={route} />;
+  if (signedOut && route.page === 'home') return <LandingPage />;
   if (error) return <Message title="Can't reach IsoDraw" body={error} />;
   if (!session) return <Loading />;
 
