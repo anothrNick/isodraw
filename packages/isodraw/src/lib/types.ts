@@ -124,10 +124,46 @@ export interface Diagram {
   doc?: string;
   /** How the diagram is drawn everywhere it appears: 2.5D (default) or flat. */
   view?: ViewMode;
+  /** Sequence diagrams between this level's components (see sequences.ts). */
+  sequences?: Sequence[];
+}
+
+/** A sequence diagram whose participants are components of the same diagram level. */
+export interface Sequence {
+  id: string;
+  title: string;
+  /** Node ids on this level, left to right. */
+  participants: string[];
+  steps: SequenceStep[];
+  /** Markdown documentation for the sequence as a whole. */
+  doc?: string;
+}
+
+/**
+ * One step of a sequence. call: a request that's answered (its receiver is
+ * active until it returns); async: fire and forget; return: the answer;
+ * self: a call to itself; note: text over one participant, or two (from and to).
+ */
+export type SequenceStepKind = 'call' | 'async' | 'return' | 'self' | 'note';
+
+export interface SequenceStep {
+  id: string;
+  kind: SequenceStepKind;
+  from: string;
+  /** The receiver; for a note, the second participant it spans, if any; unused for self. */
+  to?: string;
+  label?: string;
+  /** Markdown documentation for this step. */
+  doc?: string;
 }
 
 /** What a documentation page is about. */
-export type DocTarget = { kind: 'diagram' } | { kind: 'node'; id: string } | { kind: 'edge'; id: string };
+export type DocTarget =
+  | { kind: 'diagram' }
+  | { kind: 'node'; id: string }
+  | { kind: 'edge'; id: string }
+  | { kind: 'sequence'; id: string }
+  | { kind: 'step'; seq: string; id: string };
 
 export interface IconDef {
   id: string;

@@ -748,7 +748,11 @@ export default function DocsPanel({
       ? 'Overview'
       : target.kind === 'edge'
         ? 'Connection'
-        : KIND_NAMES[diagram.nodes.find((n) => n.id === target.id)?.kind ?? 'block'];
+        : target.kind === 'sequence'
+          ? 'Sequence'
+          : target.kind === 'step'
+            ? 'Step'
+            : KIND_NAMES[diagram.nodes.find((n) => n.id === target.id)?.kind ?? 'block'];
   const kind = overview ? `Overview · ${kindName}` : kindName;
 
   useEffect(() => setNotice(null), [target]);

@@ -10,10 +10,13 @@ import { diagramImages, iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loa
 import { fitIsoIcon, imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevel, markMoved, movesItem } from './layout';
+import { SequenceView } from './SequenceView';
+import { SequenceInspector } from './SequenceInspector';
+import { cleanSequences, createSequence, createStep, sequenceOf, withSequence } from './sequences';
 import { canHaveDetail, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
-import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
+import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, Sequence, ShapeKind, ViewMode } from './types';
 import { Field, Icon, NumberInput, ToolButton } from './ui';
 
 export interface IsoDiagramEditorProps {
@@ -223,6 +226,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   /** Item whose @ mention is under the pointer in the docs panel; outlined on the canvas. */
   const [mentionHover, setMentionHover] = useState<DocTarget | null>(null);
   const [docsTarget, setDocsTarget] = useState<DocTarget>({ kind: 'diagram' });
+  // The sequence diagram showing in place of the canvas, its selected step, and a lifeline picked as a new message's sender.
+  const [seqId, setSeqId] = useState<string | null>(null);
+  const [seqStep, setSeqStep] = useState<string | null>(null);
+  const [seqFrom, setSeqFrom] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const clipboard = useRef<{ nodes: DiagramNode[]; edges: DiagramEdge[] } | null>(null);
   const coalesce = useRef<{ key: string; t: number } | null>(null);
@@ -284,7 +291,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     (where: LevelPath, next: Diagram | ((d: Diagram) => Diagram), mode: 'push' | 'replace' = 'push', key?: string) => {
       const at = pathRef.current;
       setHist((h) => {
-        const d = withLevel(h.d, where, (cur) => (typeof next === 'function' ? next(cur) : next));
+        // Sequences drop components that are gone (deleted, cut, moved into a detail).
+        const d = withLevel(h.d, where, (cur) => cleanSequences(typeof next === 'function' ? next(cur) : next));
         if (d === h.d) return h;
         const now = Date.now();
         const k = key && `${levelKey(where)}|${key}`;
@@ -441,7 +449,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   }, [selectionTarget && targetKey(selectionTarget), levelKey(path)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openDocs = (t?: DocTarget) => {
-    if (t) {
+    if (t?.kind === 'sequence' || t?.kind === 'step') {
+      // A sequence's page, or a step's: open the sequence (with the step selected).
+      setSeqId(t.kind === 'sequence' ? t.id : t.seq);
+      setSeqStep(t.kind === 'step' ? t.id : null);
+    } else if (t) {
+      setSeqId(null);
       setDocsTarget(t);
       setSelection(t.kind === 'diagram' ? NO_SELECTION : t.kind === 'node' ? { nodes: [t.id], edges: [] } : { nodes: [], edges: [t.id] });
     }
@@ -454,8 +467,15 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
    * Inside a detail diagram, its overview is the doc of the component it
    * details, which lives one level up. The docs panel works on that level.
    */
-  const docsLevel = docsTarget.kind === 'diagram' && path.length ? path.slice(0, -1) : path;
-  const docsPageTarget: DocTarget = docsTarget.kind === 'diagram' && path.length ? { kind: 'node', id: path[path.length - 1] } : docsTarget;
+  // An open sequence: the docs show it, or its selected step, on this level.
+  const sequence = sequenceOf(diagram, seqId);
+  const seqTarget: DocTarget | null = sequence
+    ? seqStep && sequence.steps.some((x) => x.id === seqStep)
+      ? { kind: 'step', seq: sequence.id, id: seqStep }
+      : { kind: 'sequence', id: sequence.id }
+    : null;
+  const docsLevel = seqTarget ? path : docsTarget.kind === 'diagram' && path.length ? path.slice(0, -1) : path;
+  const docsPageTarget: DocTarget = seqTarget ?? (docsTarget.kind === 'diagram' && path.length ? { kind: 'node', id: path[path.length - 1] } : docsTarget);
   const docsDiagram = levelAt(root, docsLevel) ?? root;
 
   /** Jump to an item from a mention or breadcrumb: select it, center it, show its docs. */
@@ -469,7 +489,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       return;
     }
     openDocs(t);
-    if (t.kind === 'diagram') return;
+    if (t.kind === 'diagram' || t.kind === 'sequence' || t.kind === 'step') return;
     let p: Pt | null = null;
     if (t.kind === 'node') {
       const n = diagram.nodes.find((x) => x.id === t.id);
@@ -589,6 +609,56 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
   /** Selected nodes plus everything inside selected containers. */
   const withContents = (ids: string[]) => new Set([...ids, ...descendantsOf(ids, diagram.nodes)]);
+
+  // ----- sequences -----
+  // Sequences belong to a level; a different level starts on its diagram.
+  useEffect(() => {
+    setSeqId(null);
+    setSeqStep(null);
+    setSeqFrom(null);
+  }, [levelKey(path)]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openSequence = (id: string | null) => {
+    setSeqId(id);
+    setSeqStep(null);
+    setSeqFrom(null);
+  };
+  const changeSequence = (fn: (s: Sequence) => Sequence, key?: string) => {
+    if (!seqId) return;
+    commit((d) => withSequence(d, seqId, fn), 'push', key ? `seq:${seqId}:${key}` : undefined);
+  };
+  const addSequence = () => {
+    const n = (diagram.sequences?.length ?? 0) + 1;
+    const s = createSequence(n === 1 ? 'Main flow' : `Sequence ${n}`);
+    commit((d) => ({ ...d, sequences: [...(d.sequences ?? []), s] }));
+    openSequence(s.id);
+    setSideOpen(true);
+    setSideTab('properties');
+  };
+  const deleteSequence = () => {
+    if (!sequence || !window.confirm(`Delete the sequence "${sequence.title}"? Its steps and their docs go too.`)) return;
+    const id = sequence.id;
+    commit((d) => ({ ...d, sequences: (d.sequences ?? []).filter((x) => x.id !== id) }));
+    openSequence(null);
+  };
+  /** Two clicks on lifelines add a call from the first to the second (one lifeline twice: a self call). */
+  const pickLifeline = (p: string) => {
+    if (readOnly || !sequence) return;
+    if (!seqFrom) {
+      setSeqFrom(p);
+      return;
+    }
+    const step = createStep(p === seqFrom ? 'self' : 'call', seqFrom, p);
+    const after = seqStep ? sequence.steps.findIndex((x) => x.id === seqStep) : -1;
+    changeSequence((cur) => {
+      const steps = [...cur.steps];
+      steps.splice(after >= 0 ? after + 1 : steps.length, 0, step);
+      return { ...cur, steps };
+    });
+    setSeqFrom(null);
+    setSeqStep(step.id);
+    setSideOpen(true);
+  };
 
   const deleteSelection = () => {
     if (!selection.nodes.length && !selection.edges.length) return;
@@ -1101,7 +1171,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
       <div className="isd-body">
         {/* ---------- palette ---------- */}
-        {!readOnly && paletteOpen && (
+        {!readOnly && paletteOpen && !sequence && (
           <aside className="isd-palette">
             {compact && (
               <button type="button" className="isd-drawer-close" aria-label="Close panel" onClick={() => setPaletteOpen(false)}>
@@ -1214,11 +1284,52 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             )}
           </aside>
         )}
-        {!readOnly && paletteOpen && resizer('palette', 1, 'shapes panel')}
+        {!readOnly && paletteOpen && !sequence && resizer('palette', 1, 'shapes panel')}
 
         {/* ---------- canvas ---------- */}
         <div className="isd-stage" ref={stageRef}>
-          {/* Keyed by level, so each level change replays the zoom transition. */}
+          {sequence ? (
+            <div
+              className="isd-seq-wrap"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if ((e.target as HTMLElement).closest('input, textarea, select')) return;
+                if (e.key === 'Escape') {
+                  if (seqFrom) setSeqFrom(null);
+                  else setSeqStep(null);
+                } else if ((e.key === 'Delete' || e.key === 'Backspace') && seqStep && !readOnly) {
+                  e.preventDefault();
+                  changeSequence((cur) => ({ ...cur, steps: cur.steps.filter((x) => x.id !== seqStep) }));
+                  setSeqStep(null);
+                }
+              }}
+            >
+              <SequenceView
+                diagram={diagram}
+                sequence={sequence}
+                selected={seqStep}
+                onSelectStep={(id) => {
+                  setSeqStep(id);
+                  setSeqFrom(null);
+                  if (id) setSideOpen(true);
+                }}
+                onLifelineClick={readOnly ? undefined : pickLifeline}
+                pending={seqFrom}
+                hint={
+                  readOnly
+                    ? undefined
+                    : !sequence.participants.length
+                      ? 'Add participants in Properties: the components on this diagram that take part.'
+                      : seqFrom
+                        ? 'Now click the lifeline that receives the message (the same one again for a self call). Esc cancels.'
+                        : !sequence.steps.length
+                          ? 'Click a lifeline, then another, to add a message between them.'
+                          : 'Click two lifelines to add a message after the selected step. Select a step to edit it.'
+                }
+              />
+            </div>
+          ) : (
+          /* Keyed by level, so each level change replays the zoom transition. */
           <div key={levelKey(path)} className={`isd-level-view${levelMove.n ? ` is-${levelMove.dir}` : ''}`}>
           <IsoCanvas
             svgRef={svgRef}
@@ -1254,6 +1365,26 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             }}
           />
           </div>
+          )}
+          {/* The diagram and its sequence diagrams, as tabs over the canvas. */}
+          {(!readOnly || !!diagram.sequences?.length) && (
+            <div className={`isd-seq-tabs${path.length ? ' is-below-levels' : ''}`} role="tablist" aria-label="Diagram and sequences">
+              <button type="button" role="tab" aria-selected={!sequence} onClick={() => openSequence(null)}>
+                Diagram
+              </button>
+              {diagram.sequences?.map((x) => (
+                <button key={x.id} type="button" role="tab" aria-selected={sequence?.id === x.id} onClick={() => openSequence(x.id)} title={`Sequence: ${x.title}`}>
+                  <Icon name="seq" size={13} />
+                  {x.title || 'Untitled'}
+                </button>
+              ))}
+              {!readOnly && (
+                <button type="button" className="isd-seq-add" onClick={addSequence} title="Add a sequence diagram between this diagram's components">
+                  <Icon name="plus" size={13} /> Sequence
+                </button>
+              )}
+            </div>
+          )}
           {path.length > 0 && (
             <nav className="isd-levels" aria-label="Diagram levels">
               <button type="button" className="isd-levels-up" onClick={goUp} title="Up one level (Esc)" aria-label="Up one level">
@@ -1276,13 +1407,15 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
               )}
             </nav>
           )}
-          {path.length > 0 && !diagram.nodes.length && (
+          {path.length > 0 && !diagram.nodes.length && !sequence && (
             <div className="isd-level-empty">
               {readOnly ? 'Nothing inside yet.' : 'Nothing inside yet. Add shapes and icons from the palette to draw this component\'s insides.'}
             </div>
           )}
           <div className="isd-status">
-            {view === '3d' ? `2.5D · ${['N', 'E', 'S', 'W'][rotation]}` : 'Flat'} · {diagram.nodes.length} nodes · {diagram.edges.length} connections
+            {sequence
+              ? `Sequence · ${sequence.participants.length} participants · ${sequence.steps.length} steps`
+              : `${view === '3d' ? `2.5D · ${['N', 'E', 'S', 'W'][rotation]}` : 'Flat'} · ${diagram.nodes.length} nodes · ${diagram.edges.length} connections`}
           </div>
           {toast && <div className="isd-toast">{toast}</div>}
         </div>
@@ -1319,8 +1452,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                   diagram={docsDiagram}
                   readOnly={readOnly}
                   levels={docsLevelCrumbs}
-                  overview={docsTarget.kind === 'diagram' && path.length > 0}
-                  detail={docsDetail}
+                  overview={!seqTarget && docsTarget.kind === 'diagram' && path.length > 0}
+                  detail={seqTarget ? undefined : docsDetail}
                   onChange={updateDoc}
                   onNavigate={(t) => navigateTo(t, docsLevel)}
                   onMentionHover={setMentionHover}
@@ -1329,7 +1462,17 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
               </Suspense>
             ) : (
             <div className="isd-side-body">
-            {selNode ? (
+            {sequence ? (
+              <SequenceInspector
+                diagram={diagram}
+                sequence={sequence}
+                step={sequence.steps.find((x) => x.id === seqStep)}
+                readOnly={!!readOnly}
+                onChange={changeSequence}
+                onSelectStep={setSeqStep}
+                onDelete={deleteSequence}
+              />
+            ) : selNode ? (
               <NodeInspector
                 node={selNode}
                 parent={containerOf(selNode, diagram.nodes)}

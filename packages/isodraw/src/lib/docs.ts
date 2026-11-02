@@ -13,10 +13,27 @@ export const MENTION_SCHEME = 'isodraw:';
 
 export const hasDoc = (md?: string) => !!md && md.trim().length > 0;
 
-export const sameTarget = (a: DocTarget, b: DocTarget) =>
-  a.kind === b.kind && (a.kind === 'diagram' || a.id === (b as { id: string }).id);
+export const sameTarget = (a: DocTarget, b: DocTarget) => targetKey(a) === targetKey(b);
 
-export const targetKey = (t: DocTarget) => (t.kind === 'diagram' ? 'diagram' : `${t.kind}/${t.id}`);
+export const targetKey = (t: DocTarget) =>
+  t.kind === 'diagram' ? 'diagram' : t.kind === 'step' ? `step/${t.seq}/${t.id}` : `${t.kind}/${t.id}`;
+
+const seqOf = (d: Diagram, id: string) => d.sequences?.find((s) => s.id === id);
+const stepOf = (d: Diagram, seq: string, id: string) => seqOf(d, seq)?.steps.find((st) => st.id === id);
+
+/** "Checkout, step 3: POST /orders". */
+function stepTitle(d: Diagram, seq: string, id: string): string {
+  const s = seqOf(d, seq);
+  const i = s?.steps.findIndex((st) => st.id === id) ?? -1;
+  if (!s || i < 0) return 'Missing step';
+  const st = s.steps[i];
+  const name = (nid?: string) => {
+    const n = nid ? d.nodes.find((x) => x.id === nid) : undefined;
+    return n ? nodeTitle(n) : '?';
+  };
+  const what = st.label?.trim() || (st.kind === 'self' || st.kind === 'note' ? name(st.from) : `${name(st.from)} → ${name(st.to)}`);
+  return `${s.title}, step ${i + 1}: ${what}`;
+}
 
 export function mentionHref(t: DocTarget): string {
   return `${MENTION_SCHEME}${targetKey(t)}`;
@@ -43,6 +60,8 @@ export function edgeTitle(e: DiagramEdge, nodes: DiagramNode[]): string {
 
 export function titleOf(t: DocTarget, d: Diagram): string {
   if (t.kind === 'diagram') return 'Diagram';
+  if (t.kind === 'sequence') return seqOf(d, t.id)?.title ?? 'Missing sequence';
+  if (t.kind === 'step') return stepTitle(d, t.seq, t.id);
   if (t.kind === 'node') {
     const n = d.nodes.find((x) => x.id === t.id);
     return n ? nodeTitle(n) : 'Missing item';
@@ -53,11 +72,15 @@ export function titleOf(t: DocTarget, d: Diagram): string {
 
 export function exists(t: DocTarget, d: Diagram): boolean {
   if (t.kind === 'diagram') return true;
+  if (t.kind === 'sequence') return !!seqOf(d, t.id);
+  if (t.kind === 'step') return !!stepOf(d, t.seq, t.id);
   return t.kind === 'node' ? d.nodes.some((n) => n.id === t.id) : d.edges.some((e) => e.id === t.id);
 }
 
 export function docOf(t: DocTarget, d: Diagram): string {
   if (t.kind === 'diagram') return d.doc ?? '';
+  if (t.kind === 'sequence') return seqOf(d, t.id)?.doc ?? '';
+  if (t.kind === 'step') return stepOf(d, t.seq, t.id)?.doc ?? '';
   if (t.kind === 'node') return d.nodes.find((n) => n.id === t.id)?.doc ?? '';
   return d.edges.find((e) => e.id === t.id)?.doc ?? '';
 }
@@ -67,6 +90,17 @@ export function withDoc(d: Diagram, t: DocTarget, md: string): Diagram {
   const doc = hasDoc(md) ? md : undefined;
   if ((doc ?? '').trimEnd() === docOf(t, d).trimEnd()) return d;
   if (t.kind === 'diagram') return { ...d, doc };
+  if (t.kind === 'sequence' || t.kind === 'step') {
+    const sid = t.kind === 'sequence' ? t.id : t.seq;
+    return {
+      ...d,
+      sequences: (d.sequences ?? []).map((s) => {
+        if (s.id !== sid) return s;
+        if (t.kind === 'sequence') return { ...s, doc };
+        return { ...s, steps: s.steps.map((st) => (st.id === t.id ? { ...st, doc } : st)) };
+      }),
+    };
+  }
   if (t.kind === 'node') return { ...d, nodes: d.nodes.map((n) => (n.id === t.id ? { ...n, doc } : n)) };
   return { ...d, edges: d.edges.map((e) => (e.id === t.id ? { ...e, doc } : e)) };
 }
@@ -74,6 +108,8 @@ export function withDoc(d: Diagram, t: DocTarget, md: string): Diagram {
 /** Diagram › outer area › … › parent, for a node's doc page. */
 export function breadcrumbs(t: DocTarget, d: Diagram): DocTarget[] {
   const crumbs: DocTarget[] = [{ kind: 'diagram' }];
+  // A step's page sits under its sequence's.
+  if (t.kind === 'step') return [...crumbs, { kind: 'sequence', id: t.seq }];
   if (t.kind !== 'node') return crumbs;
   const n = d.nodes.find((x) => x.id === t.id);
   const chain: DocTarget[] = [];
