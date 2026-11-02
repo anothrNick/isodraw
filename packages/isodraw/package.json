@@ -2,6 +2,7 @@
   "name": "isodraw",
   "version": "0.1.0",
   "description": "React component for drawing Cloudcraft-style architecture diagrams in flat (2D) and isometric (2.5D) views.",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/isodraw.cjs",
   "module": "./dist/isodraw.js",

@@ -264,6 +264,15 @@ func (s *Store) SaveContent(ctx context.Context, id, userID string, from int64, 
 	return DiagramMeta{}, &ConflictError{Current: cur}
 }
 
+// MoveDiagram puts a diagram in another organization. Its id, content and
+// version stay, so links to it keep working for people who can see it there.
+func (s *Store) MoveDiagram(ctx context.Context, id, orgID string) (DiagramMeta, error) {
+	m, err := scanMeta(s.db.QueryRow(ctx, `
+		update diagrams set org_id = $2, updated_at = now() where id = $1 and deleted_at is null
+		returning `+metaCols, id, orgID))
+	return m, notFound(err)
+}
+
 // Rename changes a diagram's title. Titles are not content, so the version stays.
 func (s *Store) Rename(ctx context.Context, id, title string) (DiagramMeta, error) {
 	m, err := scanMeta(s.db.QueryRow(ctx, `

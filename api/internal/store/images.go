@@ -71,8 +71,22 @@ func (s *Store) RemoveImage(ctx context.Context, orgID, id string) error {
 	return notFound(err)
 }
 
-// ImageByToken finds an image by its link, removed or not.
+// ImageByToken finds an image by its link, removed or not, in any workspace.
 func (s *Store) ImageByToken(ctx context.Context, token string) (Image, error) {
-	i, err := scanImage(s.db.QueryRow(ctx, `select `+imageCols+` from images i left join users u on u.id = i.created_by where i.token = $1`, token))
+	i, err := scanImage(s.db.QueryRow(ctx, `select `+imageCols+` from images i left join users u on u.id = i.created_by where i.token = $1 limit 1`, token))
 	return i, notFound(err)
+}
+
+// AddImagesToOrg puts images (by token) on a workspace's list, as when a
+// diagram using them moves or is copied there. Images already there stay;
+// removed ones come back. Unknown tokens are ignored.
+func (s *Store) AddImagesToOrg(ctx context.Context, orgID, userID string, tokens []string) error {
+	if len(tokens) == 0 {
+		return nil
+	}
+	_, err := s.db.Exec(ctx, `
+		insert into images (org_id, name, token, content_type, size, created_by)
+		select distinct on (token) $1, name, token, content_type, size, $3 from images where token = any($2) order by token, created_at
+		on conflict (org_id, token) do update set removed_at = null`, orgID, tokens, userID)
+	return err
 }

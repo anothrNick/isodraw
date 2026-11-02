@@ -226,3 +226,7 @@ dev/                local development: Dex config and the npm run dev script
 infra/terraform/    Cognito for sign-in in production
 compose.yaml        Postgres and Dex for local development
 ```
+
+## License
+
+[AGPL-3.0](LICENSE). You can use, change and self-host IsoDraw; if you run a modified version as a service for others, you must publish your changes under the same license.

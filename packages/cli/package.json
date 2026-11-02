@@ -2,6 +2,7 @@
   "name": "@isodraw/cli",
   "version": "0.1.0",
   "description": "Work with IsoDraw diagrams and their docs from the command line; built for people and AI agents.",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "bin": {
     "isodraw": "dist/isodraw.mjs"

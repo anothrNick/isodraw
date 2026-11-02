@@ -252,6 +252,10 @@ export const api = {
     request<DiagramMeta>('PUT', `/api/diagrams/${id}/content`, content, { 'If-Match': `"${version}"` }),
   rename: (id: string, title: string) => request<DiagramMeta>('PATCH', `/api/diagrams/${id}`, { title }),
   deleteDiagram: (id: string) => request<void>('DELETE', `/api/diagrams/${id}`),
+  /** Puts a diagram in another workspace; it keeps its id, so links keep working. */
+  moveDiagram: (id: string, orgId: string) => request<DiagramMeta>('POST', `/api/diagrams/${id}/move`, { orgId }),
+  /** Makes a copy of a diagram in a workspace (the same one, or another). */
+  copyDiagram: (id: string, orgId: string) => request<StoredDiagram>('POST', `/api/diagrams/${id}/copy`, { orgId }),
   /** A signed link to a picture of the diagram (or one detail level), viewable without signing in. */
   previewLink: (id: string, level: string[]) =>
     request<PreviewLink>('GET', `/api/diagrams/${id}/preview?${new URLSearchParams(level.length ? { level: level.join('/') } : {})}`),

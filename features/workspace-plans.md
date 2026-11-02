@@ -34,7 +34,7 @@ Yearly billing gets about two months free. Metered AI (features that call a mode
 
 **The personal workspace** stays free and just you, with its 10-diagram limit; it can't be upgraded. Someone who wants more makes a Pro workspace and moves diagrams into it.
 
-**Moving and copying diagrams between workspaces.** From a diagram's menu (and the diagram list): "Move to…" and "Copy to…", listing the workspaces where you can edit.
+**Moving and copying diagrams between workspaces** (built 2026-11-02: `POST /api/diagrams/{id}/move` and `/copy`, "Move to…" and "Copy to…" in the diagram list and the editor's More menu). From a diagram's menu (and the diagram list): "Move to…" and "Copy to…", listing the workspaces where you can edit.
 - *Move* changes the diagram's workspace. It keeps its id, content, docs and version, so its links keep working for people who can see the new workspace; preview links already shared keep working too. You need to be able to edit in both workspaces.
 - *Copy* makes a new diagram in the target with the same content and docs, titled "… (copy)"; the original stays. You need to be able to read the source and edit in the target.
 - Both count against the target's plan (a free personal workspace at 10 diagrams refuses one more), and both are refused into a read-only workspace.

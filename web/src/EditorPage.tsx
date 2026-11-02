@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, BookOpen, Check, CloudOff, Copy, ExternalLink, Eye, Image, Link2, Loader2, Pencil } from 'lucide-react';
+import { AlertCircle, BookOpen, Check, CloudOff, Copy, ExternalLink, Eye, FolderInput, Image, Link2, Loader2, MoreHorizontal, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { IsoDiagramEditor, type LevelPath } from 'isodraw';
 import { ApiError, api, type Org, type PreviewLink, type StoredDiagram } from './api';
 import { useAutosave, type SaveStatus } from './autosave';
 import { useWorkspaceImages } from './workspaceImages';
+import { TransferDialog, type Transfer } from './TransferDialog';
 import { Loading, Message } from './App';
 import { docsHashForLevel, navigate } from './router';
 import { useTheme } from './theme';
@@ -59,6 +60,7 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
   const [title, setTitle] = useState(initial.title);
   const [level, setLevel] = useState<LevelPath>(readLevel);
   const images = useWorkspaceImages(org.id);
+  const [transfer, setTransfer] = useState<Transfer | null>(null);
 
   useEffect(() => {
     const on = () => {
@@ -133,6 +135,35 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
               <BookOpen />
               Docs
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-8" aria-label="More">
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={async () => {
+                    if (!readOnly) await saveAndWait();
+                    setTransfer({ mode: 'copy', id: initial.id, title: initial.title });
+                  }}
+                >
+                  <Copy />
+                  Copy to…
+                </DropdownMenuItem>
+                {canEdit && (
+                  <DropdownMenuItem
+                    onSelect={async () => {
+                      await saveAndWait();
+                      setTransfer({ mode: 'move', id: initial.id, title: initial.title });
+                    }}
+                  >
+                    <FolderInput />
+                    Move to…
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>,
           slot,
         )}
@@ -151,6 +182,13 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
         docsButton={false}
         // The library's own styles round and border the editor; full-bleed under the app bar, it needs neither.
         className="min-h-0 flex-1 rounded-none! border-0!"
+      />
+      {/* After a move, the diagram lives at the other workspace's address. */}
+      <TransferDialog
+        from={org}
+        transfer={transfer}
+        onClose={() => setTransfer(null)}
+        onMoved={(to) => navigate(`/${to.slug}/d/${initial.id}`, { replace: true })}
       />
     </div>
   );

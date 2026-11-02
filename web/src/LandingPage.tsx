@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Bot, Box, Check, FileCode2, FileText, Layers, Link2, Minus, Monitor, Moon, Sun, Users } from 'lucide-react';
+import { ArrowRight, Bot, Box, Check, FileCode2, FileText, Layers, Link2, Minus, Monitor, Moon, Scale, Server, Sun, Users } from 'lucide-react';
 import { StaticDiagram, ThemeContext } from 'isodraw';
 import type { Example } from 'isodraw-templates';
 import { Logo } from './App';
@@ -12,6 +12,17 @@ import { cn } from '@/lib/utils';
  * What a signed-out visitor sees at "/": what IsoDraw is, a live diagram drawn
  * by the library itself, and the plans. Every other page still sends them to sign in.
  */
+
+const GITHUB_URL = 'https://github.com/anothrNick/isodraw';
+
+/** GitHub's mark (lucide has no brand icons). */
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden className={className}>
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
 
 // The templates carry docs and a Terraform sample, so they load after the page shows.
 const loadTemplates = () => import('isodraw-templates').then((m) => m.EXAMPLES);
@@ -59,6 +70,7 @@ export function LandingPage() {
       </ThemeContext.Provider>
       <Features />
       <AgentSection />
+      <OpenSource />
       <Pricing />
       <Faq />
       <Footer />
@@ -89,6 +101,11 @@ function Nav() {
           </a>
         </nav>
         <div className="ml-auto flex items-center gap-1.5">
+          <Button asChild variant="ghost" size="icon-sm">
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" aria-label="IsoDraw on GitHub" title="IsoDraw on GitHub">
+              <GitHubIcon className="size-4" />
+            </a>
+          </Button>
           <Button variant="ghost" size="icon-sm" aria-label={`Theme: ${setting}`} title={`Theme: ${setting}`} onClick={() => setThemeSetting(next)}>
             <ThemeIcon />
           </Button>
@@ -149,7 +166,13 @@ function Hero() {
               <a href="#agents">Connect your AI</a>
             </Button>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">Free for personal use. No card needed.</p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Free for personal use. No card needed.{' '}
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="underline-offset-4 hover:text-foreground hover:underline">
+              Open source on GitHub
+            </a>
+            .
+          </p>
         </div>
 
         <div className="mx-auto mt-14 max-w-5xl overflow-hidden rounded-xl border bg-card shadow-xl shadow-primary/5">
@@ -285,6 +308,44 @@ function AgentSection() {
   );
 }
 
+function OpenSource() {
+  const points = [
+    { icon: Scale, title: 'AGPL-3.0', body: 'The editor, the API, the CLI and the MCP server, all under one license.' },
+    { icon: Server, title: 'Self-host it', body: 'Postgres, a Go API and a static web app. Run it on your own machines with your own sign-in.' },
+    { icon: GitHubIcon, title: 'Read and contribute', body: 'Issues and pull requests welcome. See how your diagrams are stored before you trust us with them.' },
+  ];
+  return (
+    <section id="open-source" className="scroll-mt-14 border-b py-20 sm:py-24">
+      <div className="mx-auto max-w-6xl px-4">
+        <SectionHeading
+          eyebrow="Open source"
+          title="Yours to read, run and change"
+          body="IsoDraw is open source. Use the hosted version to skip the setup, or run it yourself."
+        />
+        <div className="mt-12 grid gap-4 sm:grid-cols-3">
+          {points.map((p) => (
+            <div key={p.title} className="rounded-xl border bg-card p-6">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <p.icon className="size-4.5" />
+              </div>
+              <h3 className="mt-4 font-semibold">{p.title}</h3>
+              <p className="mt-1.5 text-sm/6 text-muted-foreground">{p.body}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 text-center">
+          <Button asChild variant="outline">
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+              <GitHubIcon className="size-4" />
+              View on GitHub
+            </a>
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 type Row = { label: string; free: boolean | string; lifetime: boolean | string };
 const PLAN_ROWS: Row[] = [
   { label: 'Every editor feature, 2D and isometric', free: true, lifetime: true },
@@ -387,6 +448,10 @@ function PlanCard({
 
 const FAQ = [
   {
+    q: 'Is IsoDraw open source?',
+    a: 'Yes, under the AGPL-3.0. You can self-host it for free; paying for lifetime access supports the hosted version and its development.',
+  },
+  {
     q: 'What does "lifetime" mean?',
     a: 'You pay once, with no subscription, and keep team workspaces and an unlimited personal workspace from then on.',
   },
@@ -445,10 +510,14 @@ function Footer() {
           <Logo size={18} />
           IsoDraw
         </span>
-        <span>© {new Date().getFullYear()}</span>
+        <span>© {new Date().getFullYear()} · AGPL-3.0</span>
         <div className="ml-auto flex gap-4">
           <a href="#pricing" className="hover:text-foreground">
             Pricing
+          </a>
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-foreground">
+            <GitHubIcon className="size-3.5" />
+            GitHub
           </a>
           <a className="hover:text-foreground" {...linkProps('/login')}>
             Sign in

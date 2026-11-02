@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Box, LayoutGrid, List, MoreHorizontal, Plus, Trash2, Users } from 'lucide-react';
+import { BookOpen, Box, Copy, FolderInput, LayoutGrid, List, MoreHorizontal, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, type DiagramMeta, type Org, type Plan } from './api';
 import { NewDiagramDialog } from './NewDiagramDialog';
+import { TransferDialog, type Transfer } from './TransferDialog';
 import { linkProps, navigate } from './router';
 import { useTheme } from './theme';
 import {
@@ -50,6 +51,7 @@ export function DiagramList({ org }: { org: Org }) {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<DiagramMeta | null>(null);
+  const [transfer, setTransfer] = useState<Transfer | null>(null);
   const [view, setView] = useView();
   const [plan, setPlan] = useState<Plan | null>(null);
   const { resolved } = useTheme();
@@ -190,7 +192,7 @@ export function DiagramList({ org }: { org: Org }) {
                     </a>
                     <span className="text-xs text-muted-foreground">Edited {ago(d.updatedAt)}</span>
                   </div>
-                  <DiagramActions org={org} diagram={d} onDelete={setDeleting} />
+                  <DiagramActions org={org} diagram={d} onDelete={setDeleting} onTransfer={setTransfer} />
                 </div>
               </li>
             ))}
@@ -206,7 +208,7 @@ export function DiagramList({ org }: { org: Org }) {
                   {d.title}
                 </a>
                 <span className="text-xs whitespace-nowrap text-muted-foreground">Edited {ago(d.updatedAt)}</span>
-                <DiagramActions org={org} diagram={d} onDelete={setDeleting} />
+                <DiagramActions org={org} diagram={d} onDelete={setDeleting} onTransfer={setTransfer} />
               </li>
             ))}
           </ul>
@@ -214,6 +216,12 @@ export function DiagramList({ org }: { org: Org }) {
       </div>
 
       <NewDiagramDialog org={org} open={creating} onOpenChange={setCreating} />
+      <TransferDialog
+        from={org}
+        transfer={transfer}
+        onClose={() => setTransfer(null)}
+        onMoved={() => setDiagrams((cur) => cur?.filter((x) => x.id !== transfer?.id) ?? null)}
+      />
 
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
@@ -259,8 +267,18 @@ function Thumbnail({ diagram, dark }: { diagram: DiagramMeta; dark: boolean }) {
   );
 }
 
-/** Read docs, and delete for editors. */
-function DiagramActions({ org, diagram: d, onDelete }: { org: Org; diagram: DiagramMeta; onDelete: (d: DiagramMeta) => void }) {
+/** Read docs, copy anywhere you can edit, and move and delete for editors. */
+function DiagramActions({
+  org,
+  diagram: d,
+  onDelete,
+  onTransfer,
+}: {
+  org: Org;
+  diagram: DiagramMeta;
+  onDelete: (d: DiagramMeta) => void;
+  onTransfer: (t: Transfer) => void;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -273,8 +291,16 @@ function DiagramActions({ org, diagram: d, onDelete }: { org: Org; diagram: Diag
           <BookOpen />
           Read docs
         </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onTransfer({ mode: 'copy', id: d.id, title: d.title })}>
+          <Copy />
+          Copy to…
+        </DropdownMenuItem>
         {canEdit(org) && (
           <>
+            <DropdownMenuItem onSelect={() => onTransfer({ mode: 'move', id: d.id, title: d.title })}>
+              <FolderInput />
+              Move to…
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => onDelete(d)}>
               <Trash2 />
