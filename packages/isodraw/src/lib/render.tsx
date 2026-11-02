@@ -201,9 +201,12 @@ function Lifeline({ node, diagram, proj }: { node: DiagramNode; diagram: Diagram
   const theme = useTheme();
   const top = lineTop(node);
   const len = node.lifeline ?? 0;
-  const ink = theme === 'dark' ? '#64748b' : '#94a3b8';
+  const ink = node.lifelineColor ?? (theme === 'dark' ? '#64748b' : '#94a3b8');
+  const style = node.lifelineStyle ?? 'dashed';
+  const bars = node.lifelineBars === false ? [] : activations(diagram, node);
+  // data-lifeline: pressing on the line draws a message from that point (IsoCanvas).
   return (
-    <g data-node-id={node.id}>
+    <g data-node-id={node.id} data-lifeline={node.id}>
       <Ground proj={proj} z={node.z}>
         {/* A wide invisible stroke, so the line can be clicked and connected to. */}
         <line x1={top.x * TILE} y1={top.y * TILE} x2={top.x * TILE} y2={(top.y + len) * TILE} stroke="transparent" strokeWidth={TILE * 0.9} />
@@ -214,10 +217,11 @@ function Lifeline({ node, diagram, proj }: { node: DiagramNode; diagram: Diagram
           y2={(top.y + len) * TILE}
           stroke={ink}
           strokeWidth={1.4}
-          strokeDasharray="6 5"
+          strokeDasharray={style === 'dashed' ? '6 5' : style === 'dotted' ? '0.5 4' : undefined}
+          strokeLinecap={style === 'dotted' ? 'round' : undefined}
           vectorEffect="non-scaling-stroke"
         />
-        {activations(diagram, node).map((b, i) => (
+        {bars.map((b, i) => (
           <rect
             key={i}
             x={(top.x - BAR / 2) * TILE}

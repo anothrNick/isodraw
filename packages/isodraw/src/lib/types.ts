@@ -55,6 +55,10 @@ export interface DiagramNode {
    * as in a sequence diagram. Connections attach anywhere along it.
    */
   lifeline?: number;
+  /** How the lifeline is drawn (default dashed), its color (default a soft gray), and whether activation bars show (default yes). */
+  lifelineStyle?: LineStyle;
+  lifelineColor?: string;
+  lifelineBars?: boolean;
   /** Markdown documentation for this node. */
   doc?: string;
   /** The component's own diagram, opened by drilling into it. Its overview doc is this node's doc. */

@@ -1,4 +1,4 @@
-import { lifelineRoute, lineAnchor, onLifeline, sideToward } from './lifelines';
+import { lifelineRoute, lineAnchor, linePoint, lineTop, onLifeline, sideToward } from './lifelines';
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type Ref } from 'react';
 import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, snap } from './geometry';
 import { containerOf, descendantsOf, isContainer } from './containers';
@@ -79,7 +79,9 @@ type Drag =
     }
   | { type: 'resize'; id: string; fixed: Pt; began: boolean }
   | { type: 'height'; id: string; sy: number; h0: number; began: boolean }
-  | { type: 'connect'; from: string; fromSide?: Side; trail: Pt[]; cursor: Pt; target: string | null }
+  | { type: 'lifeline'; id: string; began: boolean }
+  /** `line`: started on a lifeline, at trail[0]: a message from that point. */
+  | { type: 'connect'; from: string; fromSide?: Side; trail: Pt[]; cursor: Pt; target: string | null; line?: boolean }
   | { type: 'edgeEnd'; edgeId: string; end: 'from' | 'to'; cursor: Pt; target: string | null }
   | { type: 'segment'; edgeId: string; index: number; start: Pt; base: ResolvedEdge; began: boolean }
   | { type: 'waypoint'; edgeId: string; index: number; began: boolean }
@@ -279,12 +281,24 @@ export function IsoCanvas(props: IsoCanvasProps) {
       if (!n) return;
       if (handle === 'height') {
         setDrag({ type: 'height', id: n.id, sy: e.clientY, h0: n.h, began: false });
+      } else if (handle === 'lifeline') {
+        setDrag({ type: 'lifeline', id: n.id, began: false });
       } else {
         const corners = rectPoly(n);
         const fixed = corners[(Number(handle) + 2) % 4];
         setDrag({ type: 'resize', id: n.id, fixed, began: false });
       }
       return;
+    }
+    // Pressing on a lifeline draws a message from that point, whatever the tool; the shape itself still moves.
+    const lifeline = closestAttr(e.target, 'data-lifeline');
+    if (lifeline && !readOnly) {
+      const n = nodeById.get(lifeline);
+      const w = n && toWorld(e.clientX, e.clientY, n.z);
+      if (n && w && onLifeline(n, w)) {
+        setDrag({ type: 'connect', from: n.id, trail: [w], cursor: w, target: null, line: true });
+        return;
+      }
     }
     if (nodeId && tool === 'connect' && !readOnly) {
       const n = nodeById.get(nodeId)!;
@@ -421,6 +435,18 @@ export function IsoCanvas(props: IsoCanvasProps) {
         updateNodes((m) => (m.id === drag.id ? { ...m, h } : m));
         break;
       }
+      case 'lifeline': {
+        const n = nodeById.get(drag.id);
+        if (!n) break;
+        const w = toWorld(e.clientX, e.clientY, n.z);
+        const len = Math.max(1, free ? w.y - lineTop(n).y : snap(w.y - lineTop(n).y, 0.5));
+        if (!drag.began) {
+          props.onBeginChange?.();
+          setDrag({ ...drag, began: true });
+        }
+        updateNodes((m) => (m.id === drag.id ? { ...m, lifeline: len } : m));
+        break;
+      }
       case 'connect': {
         const from = nodeById.get(drag.from)!;
         const w = toWorld(e.clientX, e.clientY, from.z);
@@ -486,7 +512,10 @@ export function IsoCanvas(props: IsoCanvasProps) {
 
   const onPointerUp = (e: RPointerEvent<SVGSVGElement>) => {
     if (drag?.type === 'pan' && !drag.moved) onSelectionChange({ nodes: [], edges: [] });
-    if (drag?.type === 'connect') {
+    if (drag?.type === 'connect' && drag.line && Math.hypot(drag.cursor.x - drag.trail[0].x, drag.cursor.y - drag.trail[0].y) < 0.35) {
+      // A click on a lifeline, not a drag: select its participant.
+      onSelectionChange({ nodes: [drag.from], edges: [] });
+    } else if (drag?.type === 'connect') {
       const target = nodeAtPoint(e.clientX, e.clientY);
       const from = nodeById.get(drag.from);
       const to = target ? nodeById.get(target) : undefined;
@@ -652,6 +681,25 @@ export function IsoCanvas(props: IsoCanvasProps) {
             style={{ cursor: 'nwse-resize' }}
           />
         )}
+        {single.lifeline && !single.locked && (() => {
+          const t = lineTop(single);
+          const b = proj.project(t.x, t.y + single.lifeline, single.z);
+          return (
+            <circle
+              data-handle="lifeline"
+              cx={b.x}
+              cy={b.y}
+              r={r}
+              fill="#fff"
+              stroke={ACCENT}
+              strokeWidth={1.5}
+              vectorEffect="non-scaling-stroke"
+              style={{ cursor: 'ns-resize' }}
+            >
+              <title>Drag to change the lifeline's length</title>
+            </circle>
+          );
+        })()}
         {showHeight && !single.locked && (
           <circle
             data-handle="height"
@@ -733,7 +781,28 @@ export function IsoCanvas(props: IsoCanvasProps) {
 
   // ----- drag previews -----
   let preview = null;
-  if (drag?.type === 'connect') {
+  if (drag?.type === 'connect' && drag.line) {
+    // A message from a lifeline: level from where it started, onto the target's line (or a loop back onto its own).
+    const from = nodeById.get(drag.from);
+    const target = drag.target ? nodeById.get(drag.target) : undefined;
+    const start = drag.trail[0];
+    const route = from && target ? lifelineRoute(from, start, target, drag.cursor) : null;
+    let d = '';
+    if (from && target && route) {
+      d = edgeGeometry({ id: '_preview', from: from.id, to: target.id, color: '', width: 2, ...route }, from, target, proj).d;
+    } else if (from) {
+      const a = linePoint(from, lineAnchor(from, start.y, drag.cursor.x >= start.x ? 'e' : 'w'));
+      const p = proj.project(a.x, a.y, from.z);
+      const q = proj.project(drag.cursor.x, a.y, from.z);
+      d = `M${p.x},${p.y}L${q.x},${q.y}`;
+    }
+    if (d)
+      preview = (
+        <g pointerEvents="none">
+          <path d={d} fill="none" stroke={ACCENT} strokeWidth={2.5} strokeDasharray="7 5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" markerEnd={`url(#${idPrefix}-preview-arrow)`} />
+        </g>
+      );
+  } else if (drag?.type === 'connect') {
     const from = nodeById.get(drag.from);
     const target = drag.target && drag.target !== drag.from ? nodeById.get(drag.target) : undefined;
     if (from) {
@@ -888,7 +957,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
   return (
     <svg
       ref={setSvg}
-      className={dragCursor ? 'isd-canvas isd-canvas-dragging' : 'isd-canvas'}
+      className={`isd-canvas${dragCursor ? ' isd-canvas-dragging' : ''}${readOnly ? ' is-readonly' : ''}`}
       tabIndex={0}
       style={{ cursor, touchAction: 'none' }}
       onPointerDown={onPointerDown}

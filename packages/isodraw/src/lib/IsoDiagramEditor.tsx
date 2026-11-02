@@ -1667,11 +1667,32 @@ function NodeInspector({
           <div className="isd-row">
             <label className="isd-check">
               <input type="checkbox" checked={!!node.lifeline} onChange={(e) => onChange({ lifeline: e.target.checked ? 12 : undefined })} />
-              Dashed line below
+              Line below, for sequences
             </label>
             {!!node.lifeline && <NumberInput value={node.lifeline} min={1} step={1} onChange={(lifeline) => onChange({ lifeline: Math.max(1, lifeline) }, 'life')} />}
           </div>
         </Field>
+      )}
+      {!!node.lifeline && (
+        <>
+          <Segmented
+            value={node.lifelineStyle ?? 'dashed'}
+            options={[
+              ['solid', 'Solid'],
+              ['dashed', 'Dashed'],
+              ['dotted', 'Dotted'],
+            ]}
+            onChange={(lifelineStyle) => onChange({ lifelineStyle: lifelineStyle === 'dashed' ? undefined : lifelineStyle })}
+          />
+          <Field label="Line color">
+            <Swatches value={node.lifelineColor ?? ''} onChange={(lifelineColor) => onChange({ lifelineColor })} />
+          </Field>
+          <label className="isd-check">
+            <input type="checkbox" checked={node.lifelineBars !== false} onChange={(e) => onChange({ lifelineBars: e.target.checked ? undefined : false })} />
+            Activation bars (from calls and their dashed returns)
+          </label>
+          <p className="isd-hint">Drag from the line to draw a message; drag the handle at its end to change its length.</p>
+        </>
       )}
       {node.kind === 'text' && (
         <Field label="Font size">
