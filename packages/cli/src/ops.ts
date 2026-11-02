@@ -11,6 +11,7 @@ import {
   isIsoIcon,
   levelAt,
   levelNodes,
+  lineTop,
   nodeTitle,
   settleLevel,
   SHAPES,
@@ -22,6 +23,7 @@ import {
   type LineStyle,
   type ShapeKind,
 } from './lib';
+import { COL, ROW, messageEdge, nextMessageY, reach, type Message } from './sequence';
 
 /**
  * Edits to a diagram, as data. The CLI's commands and `apply` turn into these,
@@ -43,7 +45,16 @@ export type Op = { level?: string } & (
       near?: string;
       doc?: string;
     }
-  | { op: 'updateNode'; item: string; label?: string; color?: string; kind?: ShapeKind; icon?: string }
+  | {
+      op: 'updateNode';
+      item: string;
+      label?: string;
+      color?: string;
+      kind?: ShapeKind;
+      icon?: string;
+      /** Give it a lifeline this long (a sequence participant), or 0 / null to take it away. */
+      lifeline?: number | null;
+    }
   | { op: 'removeNode'; item: string }
   | { op: 'addEdge'; from: string; to: string; label?: string; style?: LineStyle }
   | { op: 'updateEdge'; from: string; to: string; label?: string; style?: LineStyle }
@@ -52,6 +63,17 @@ export type Op = { level?: string } & (
   | { op: 'setDoc'; item?: string; markdown: string }
   /** Give a component an empty detail diagram to fill. */
   | { op: 'addDetail'; item: string }
+  /**
+   * A sequence diagram: participants (new, or existing items by id or label)
+   * in a row with lifelines, and messages between them, top to bottom.
+   */
+  | {
+      op: 'addSequence';
+      participants: { label: string; id?: string; icon?: string; kind?: ShapeKind; color?: string; doc?: string }[];
+      messages: Message[];
+    }
+  /** One more message between two participants, below the last one on the level. */
+  | ({ op: 'addMessage' } & Message)
 );
 
 export class OpError extends Error {
@@ -275,6 +297,10 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
               if (!KINDS.has(op.kind)) throw new OpError(`Unknown kind "${op.kind}".`);
               patch.kind = op.kind;
             }
+            if (op.lifeline !== undefined) {
+              if (op.lifeline) patch.lifeline = Math.max(1, op.lifeline);
+              else Object.assign(patch, { lifeline: undefined, activationBars: undefined });
+            }
             if (op.icon) {
               const src = iconUrl(op.icon);
               // Isometric icons stand on their tiles in the component's color; other images sit on a tile.
@@ -298,7 +324,7 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
           case 'addEdge': {
             const a = findNode(d, op.from);
             const b = findNode(d, op.to);
-            if (a.id === b.id) throw new OpError('A connection needs two different items.');
+            if (a.id === b.id) throw new OpError('A connection needs two different items. For a self call in a sequence, use addMessage.');
             const edge = { ...createEdge(a.id, b.id, { ...(op.label ? { label: op.label } : {}), ...(op.style ? { lineStyle: op.style } : {}) }), id: freeId(d, `${a.id}-${b.id}`) };
             added.push(edge.id);
             changes.push(`connected ${a.id} → ${b.id}${op.label ? ` "${op.label}"` : ''}${where}`);
@@ -336,6 +362,80 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
             if (n.detail) return d;
             changes.push(`added a detail diagram to ${n.id}${where}`);
             return { ...d, nodes: d.nodes.map((x) => (x.id === n.id ? { ...x, detail: { version: 1, nodes: [], edges: [] } } : x)) };
+          }
+          case 'addSequence': {
+            if (!op.participants?.length) throw new OpError('A sequence needs participants.');
+            const wasEmpty = !d.nodes.length;
+            // New participants go in a row below everything on the level, bottoms lined up.
+            const bottom = d.nodes.length ? Math.max(...d.nodes.map((n) => (n.lifeline ? lineTop(n).y + n.lifeline : n.y + n.d))) + 3 : 0;
+            const left = d.nodes.length ? Math.min(...d.nodes.map((n) => n.x)) : 0;
+            let next = d;
+            const ids: string[] = [];
+            let col = 0;
+            for (const p of op.participants) {
+              let existing: DiagramNode | undefined;
+              try {
+                existing = findNode(next, p.id ?? p.label);
+              } catch {
+                existing = undefined;
+              }
+              if (existing) {
+                ids.push(existing.id);
+                if (!existing.lifeline) next = { ...next, nodes: next.nodes.map((x) => (x.id === existing!.id ? { ...x, lifeline: 2 } : x)) };
+                continue;
+              }
+              if (!p.label?.trim()) throw new OpError('Each participant needs a label.');
+              const base = p.icon ? createImageNode(iconUrl(p.icon), p.label, 0, 0) : createShape(p.kind ?? 'block', 0, 0, { label: p.label, w: 2.4, d: 1.2, h: 0.4 });
+              const id = p.id ?? freeId(next, slug(p.label));
+              const node: DiagramNode = {
+                ...base,
+                id,
+                label: p.label,
+                x: left + col * COL + 1 - base.w / 2,
+                y: bottom + 1.5 - base.d,
+                lifeline: 2,
+                ...(p.color ? { color: p.color } : {}),
+                ...(p.doc ? { doc: p.doc } : {}),
+              };
+              col++;
+              ids.push(id);
+              added.push(id);
+              next = { ...next, nodes: [...next.nodes, node] };
+            }
+            const byId = () => new Map(next.nodes.map((n) => [n.id, n]));
+            const y0 = nextMessageY(next, ids.map((id) => byId().get(id)!));
+            for (const [i, m] of (op.messages ?? []).entries()) {
+              const a = findNode(next, m.from);
+              const b = findNode(next, m.to);
+              if (!ids.includes(a.id) || !ids.includes(b.id)) throw new OpError(`Message ${i + 1}: ${m.from} → ${m.to} isn't between this sequence's participants.`);
+              const edge = messageEdge(freeId(next, `${a.id}-${b.id}`), a, b, y0 + i * ROW, m);
+              added.push(edge.id);
+              next = { ...next, edges: [...next.edges, edge] };
+            }
+            const last = y0 + Math.max(0, (op.messages?.length ?? 0) - 1) * ROW;
+            next = { ...next, nodes: next.nodes.map((n) => (ids.includes(n.id) ? reach(n, last) : n)) };
+            changes.push(`added a sequence: ${ids.length} participants, ${op.messages?.length ?? 0} messages${where}`);
+            // A sequence on its own reads best flat.
+            if (wasEmpty && !level.length) {
+              changes.push('switched the diagram to the flat view');
+              return { ...next, view: '2d' };
+            }
+            return next;
+          }
+          case 'addMessage': {
+            const a = findNode(d, op.from);
+            const b = findNode(d, op.to);
+            const withLine = (n: DiagramNode) => (n.lifeline ? n : { ...n, lifeline: 2 });
+            const [la, lb] = [withLine(a), withLine(b)];
+            const y = nextMessageY(d, a.id === b.id ? [la] : [la, lb]);
+            const edge = messageEdge(freeId(d, `${a.id}-${b.id}`), la, lb, y, op);
+            added.push(edge.id);
+            changes.push(`added message ${a.id} → ${b.id}${op.label ? ` "${op.label}"` : ''} (${a.id === b.id ? 'self' : (op.kind ?? 'call')})${where}`);
+            return {
+              ...d,
+              nodes: d.nodes.map((n) => (n.id === a.id ? reach(la, y) : n.id === b.id ? reach(lb, y) : n)),
+              edges: [...d.edges, edge],
+            };
           }
           default:
             throw new OpError(`Unknown op "${(op as { op: string }).op}".`);

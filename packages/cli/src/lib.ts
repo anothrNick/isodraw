@@ -10,4 +10,5 @@ export { catalogEntry, iconTypes } from '../../isodraw/src/lib/terraformCatalog'
 export { cloudIconUrl } from '../../isodraw/src/lib/icons';
 export { ISO_ICON_COLOR, isIsoIcon, isoIconLibrary } from '../../isodraw/src/lib/isoIcons';
 export { layoutLevel, settleLevel } from '../../isodraw/src/lib/layout';
+export { lineAnchor, lineTop, sideToward } from '../../isodraw/src/lib/lifelines';
 export type { Diagram, DiagramNode, DiagramEdge, ShapeKind, LineStyle } from '../../isodraw/src/lib/types';

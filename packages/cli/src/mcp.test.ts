@@ -130,6 +130,30 @@ describe('the MCP server', () => {
     expect(bad.text).toContain('Call describe_diagram to see the items.');
   });
 
+  it('draws sequence diagrams', async () => {
+    const { call } = await connect();
+    const made = await call('create_diagram', {
+      title: 'Checkout',
+      changes: [
+        {
+          op: 'addSequence',
+          participants: [{ label: 'Browser', icon: 'isodraw:browser' }, { label: 'API' }],
+          messages: [
+            { from: 'Browser', to: 'API', label: 'POST /orders' },
+            { from: 'API', to: 'API', label: 'validate', kind: 'self' },
+            { from: 'API', to: 'Browser', label: '201', kind: 'return' },
+          ],
+        },
+        { op: 'addMessage', from: 'Browser', to: 'API', label: 'GET /orders/1' },
+      ],
+    });
+    expect(made.error).toBe(false);
+    expect(made.text).toContain('added a sequence: 2 participants, 3 messages');
+    const described = await call('describe_diagram', { diagram: 'Checkout' });
+    expect(described.text).toContain('## Sequence (4 messages, top to bottom)');
+    expect(described.text).toContain('2. api → api "validate" (self)');
+  });
+
   it('finds icons of both kinds', async () => {
     const { call } = await connect();
     const found = await call('find_icons', { query: 'database' });

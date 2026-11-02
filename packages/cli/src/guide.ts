@@ -46,7 +46,26 @@ with a JSON array of ops, and \`--dry-run\` first to see what would change:
     ]
 
 Ops: addNode, updateNode, removeNode, addEdge, updateEdge, removeEdge, setDoc,
-addDetail. Every op may have "level": "a/b".
+addDetail, addSequence, addMessage. Every op may have "level": "a/b".
+
+## Sequence diagrams
+Participants are components with a lifeline; messages are connections down
+the lifelines, in order. Build one in a single op:
+
+    [{"op": "addSequence",
+      "participants": [{"label": "Browser", "icon": "isodraw:browser"}, {"label": "API", "icon": "isodraw:service"}, {"label": "DB", "icon": "isodraw:database"}],
+      "messages": [
+        {"from": "Browser", "to": "API", "label": "POST /orders"},
+        {"from": "API", "to": "DB", "label": "INSERT"},
+        {"from": "DB", "to": "API", "label": "ok", "kind": "return"},
+        {"from": "API", "to": "API", "label": "send receipt", "kind": "self"},
+        {"from": "API", "to": "Browser", "label": "201", "kind": "return"}]}]
+
+Message kinds: call (default), async, return (dashed), self. Add more later
+with \`{"op": "addMessage", "from": …, "to": …, "label": …, "kind": …}\`; it goes
+below the last message. Existing items can be participants (by id or label).
+\`describe\` lists the messages top to bottom. A new diagram made only of a
+sequence switches to the flat view, where sequences read best.
 
 ## Layout is the platform's job
 Never pass coordinates. Items you add are placed for you, and a level made

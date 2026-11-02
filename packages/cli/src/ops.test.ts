@@ -194,3 +194,56 @@ describe('describe', () => {
     expect(describeText(o)).toContain('Level: inside orders-api  (--level api)');
   });
 });
+
+describe('sequence diagrams', () => {
+  const empty: Diagram = { version: 1, nodes: [], edges: [] };
+  const seq = applyOps(empty, [
+    {
+      op: 'addSequence',
+      participants: [{ label: 'Browser', icon: 'isodraw:browser' }, { label: 'API' }, { label: 'DB', icon: 'isodraw:database' }],
+      messages: [
+        { from: 'Browser', to: 'API', label: 'POST /orders' },
+        { from: 'API', to: 'DB', label: 'INSERT' },
+        { from: 'DB', to: 'API', label: 'ok', kind: 'return' },
+        { from: 'API', to: 'API', label: 'send receipt', kind: 'self' },
+        { from: 'API', to: 'Browser', label: '201', kind: 'return' },
+      ],
+    },
+  ]);
+
+  it('lays out participants with lifelines and messages top to bottom', () => {
+    const d = seq.diagram;
+    expect(d.view).toBe('2d');
+    expect(d.nodes.map((n) => [n.id, !!n.lifeline])).toEqual([
+      ['browser', true],
+      ['api', true],
+      ['db', true],
+    ]);
+    const o = outline(d, { title: 'Orders', version: 1 });
+    expect(o.sequence.map((m) => `${m.from}>${m.to}:${m.kind}`)).toEqual(['browser>api:call', 'api>db:call', 'db>api:return', 'api>api:self', 'api>browser:return']);
+    expect(o.connections).toEqual([]);
+    expect(describeText(o)).toContain('## Sequence (5 messages, top to bottom)');
+    // Every message attaches partway down both lifelines, and the lines reach the last one.
+    for (const e of d.edges) expect(e.fromAnchor?.line).toBeGreaterThan(0);
+    const last = Math.max(...d.edges.map((e) => e.toAnchor!.line!));
+    for (const n of d.nodes) expect(n.lifeline).toBeGreaterThanOrEqual(last);
+  });
+
+  it('adds messages below the last one, and reuses existing items as participants', () => {
+    const more = applyOps(seq.diagram, [{ op: 'addMessage', from: 'Browser', to: 'DB', label: 'GET /cache', kind: 'async' }]).diagram;
+    const o = outline(more, { title: 'Orders', version: 1 });
+    expect(o.sequence.at(-1)).toMatchObject({ from: 'browser', to: 'db', kind: 'async', label: 'GET /cache' });
+
+    const arch: Diagram = { version: 1, nodes: [{ id: 'svc', kind: 'block', label: 'Service', x: 0, y: 0, w: 2, d: 2, h: 1, z: 0, color: '#fff' }], edges: [] };
+    const mixed = applyOps(arch, [{ op: 'addSequence', participants: [{ label: 'Service' }, { label: 'Queue' }], messages: [{ from: 'Service', to: 'Queue', label: 'publish' }] }]).diagram;
+    expect(mixed.nodes.map((n) => n.id)).toEqual(['svc', 'queue']);
+    expect(mixed.nodes[0].lifeline).toBeGreaterThan(0);
+    // Not an empty diagram: the view stays as it was.
+    expect(mixed.view).toBeUndefined();
+  });
+
+  it('takes a lifeline away', () => {
+    const d = applyOps(seq.diagram, [{ op: 'updateNode', item: 'DB', lifeline: null }]).diagram;
+    expect(d.nodes.find((n) => n.id === 'db')!.lifeline).toBeUndefined();
+  });
+});

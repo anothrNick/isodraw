@@ -23,6 +23,7 @@ How to work:
 - Find the diagram with list_diagrams, then call describe_diagram before changing anything, and again after to check.
 - Make related changes in one apply_changes call. Use dry_run first when the change is large or the user should confirm.
 - Never think about coordinates or layout: the platform places and lays out items.
+- Sequence diagrams: use addSequence (participants left to right, messages top to bottom: call, async, return, self) and addMessage to add more. Participants are components with lifelines, so the same items can appear in the architecture and in sequences. Activation bars come from calls and their returns. describe_diagram lists the messages in order.
 - Icons: find_icons gives references for the "icon" field (isodraw:laptop, aws_lambda_function, …). Isometric icons (isodraw:…) take the item's color.
 - Finish by showing the user the picture. Tools that change a diagram, and preview_diagram, return the picture as an image plus Markdown for it (a PNG linking to the editor); put that Markdown in your reply.
 - Don't remove items or connections unless the user asked.
@@ -34,6 +35,15 @@ const diagram = z.string().describe('The diagram, by id or title (a unique start
 const NodeKind = z.enum(['block', 'cylinder', 'hexagon', 'pyramid', 'cone', 'sphere', 'area', 'circleArea', 'text']);
 const LineStyle = z.enum(['solid', 'dashed', 'dotted']);
 const at = { level: z.string().optional().describe('Apply this change on another level than the call\'s "level".') };
+
+/** A message in a sequence diagram. */
+const Message = z.object({
+  from: z.string(),
+  to: z.string().describe('The same as from for a self call.'),
+  label: z.string().optional().describe('e.g. "POST /orders" or "200 OK".'),
+  kind: z.enum(['call', 'async', 'return', 'self']).optional().describe('call (default): a request; async: fire and forget; return: the answer (dashed); self: to itself.'),
+  doc: z.string().optional().describe('Its Markdown doc: why this step happens.'),
+});
 
 /** The change list `apply_changes` takes: the CLI's apply format. Items are named by id or label. */
 const Change = z.discriminatedUnion('op', [
@@ -49,7 +59,16 @@ const Change = z.discriminatedUnion('op', [
     doc: z.string().optional().describe('Its Markdown doc.'),
     ...at,
   }),
-  z.object({ op: z.literal('updateNode'), item: z.string(), label: z.string().optional(), color: z.string().optional(), kind: NodeKind.optional(), icon: z.string().optional(), ...at }),
+  z.object({
+    op: z.literal('updateNode'),
+    item: z.string(),
+    label: z.string().optional(),
+    color: z.string().optional(),
+    kind: NodeKind.optional(),
+    icon: z.string().optional(),
+    lifeline: z.number().nullable().optional().describe('Give it a lifeline this long (a sequence participant, ~10–30), or null to take it away.'),
+    ...at,
+  }),
   z.object({ op: z.literal('removeNode'), item: z.string().describe('Also removes its connections.'), ...at }),
   z.object({ op: z.literal('addEdge'), from: z.string(), to: z.string(), label: z.string().optional(), style: LineStyle.optional(), ...at }),
   z.object({ op: z.literal('updateEdge'), from: z.string(), to: z.string(), label: z.string().optional(), style: LineStyle.optional(), ...at }),
@@ -61,6 +80,25 @@ const Change = z.discriminatedUnion('op', [
     ...at,
   }),
   z.object({ op: z.literal('addDetail'), item: z.string().describe('Give this component an empty detail diagram to fill.'), ...at }),
+  z.object({
+    op: z.literal('addSequence'),
+    participants: z
+      .array(
+        z.object({
+          label: z.string(),
+          id: z.string().optional(),
+          icon: z.string().optional().describe('An icon reference from find_icons, e.g. isodraw:user, isodraw:service, isodraw:database.'),
+          kind: NodeKind.optional(),
+          color: z.string().optional(),
+          doc: z.string().optional(),
+        }),
+      )
+      .min(1)
+      .describe('Left to right. An existing item (by id or label) is reused and given a lifeline.'),
+    messages: z.array(Message).describe('Top to bottom, between the participants.'),
+    ...at,
+  }),
+  z.object({ op: z.literal('addMessage'), ...Message.shape, ...at }).describe('One more message, below the last one on the level.'),
 ]);
 
 const text = (t: string): CallToolResult => ({ content: [{ type: 'text', text: t }] });
