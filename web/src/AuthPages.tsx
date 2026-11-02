@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, MailCheck } from 'lucide-react';
 import { ApiError, authApi } from './api';
 import { Logo } from './App';
+import { AuthScene, Glow, IsoGrid } from './AuthScene';
 import { linkProps, navigate, type Route } from './router';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,19 +74,51 @@ export function AuthPages({ route }: { route: Extract<Route, { page: AuthPage }>
   }
 }
 
+/**
+ * Every auth page: the form in a card over an isometric grid, and on wide
+ * screens a live IsoDraw diagram beside it saying what the product is.
+ */
 function Card({ title, description, children, footer }: { title: string; description?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode }) {
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-muted/40 px-4 py-12">
-      <a className="mb-6 flex items-center gap-2 text-lg font-semibold" {...linkProps('/')}>
-        <Logo />
-        IsoDraw
-      </a>
-      <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm">
-        <h1 className="text-lg font-semibold">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
-        <div className="mt-5">{children}</div>
+    <div className="relative h-full overflow-y-auto bg-background">
+      <Glow />
+      <IsoGrid />
+      <div className="relative grid min-h-full lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <aside className="hidden flex-col justify-center gap-8 px-12 py-12 lg:flex xl:px-20">
+          <a className="flex items-center gap-2 text-lg font-semibold" {...linkProps('/')}>
+            <Logo size={26} />
+            IsoDraw
+          </a>
+          <div className="max-w-lg">
+            <h2 className="text-3xl font-semibold tracking-tight text-balance xl:text-4xl">
+              Architecture diagrams with <span className="text-primary">depth</span>.
+            </h2>
+            <p className="mt-3 text-muted-foreground text-pretty">
+              Draw your system in clean isometric 2.5D, write docs on every component, and let your AI tools keep it up to date.
+            </p>
+          </div>
+          <AuthScene />
+          <ul className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {['Isometric or flat', 'Docs on every component', 'AI agents over MCP', 'Live preview links'].map((t) => (
+              <li key={t} className="rounded-full border bg-card/70 px-2.5 py-1 backdrop-blur">
+                {t}
+              </li>
+            ))}
+          </ul>
+        </aside>
+        <main className="flex flex-col items-center justify-center px-4 py-12">
+          <a className="mb-6 flex items-center gap-2 text-lg font-semibold lg:hidden" {...linkProps('/')}>
+            <Logo />
+            IsoDraw
+          </a>
+          <div className="w-full max-w-sm rounded-xl border bg-card/90 p-6 shadow-lg shadow-primary/5 backdrop-blur">
+            <h1 className="text-lg font-semibold">{title}</h1>
+            {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+            <div className="mt-5">{children}</div>
+          </div>
+          {footer && <div className="mt-5 text-center text-sm text-muted-foreground">{footer}</div>}
+        </main>
       </div>
-      {footer && <div className="mt-5 text-center text-sm text-muted-foreground">{footer}</div>}
     </div>
   );
 }

@@ -98,3 +98,14 @@
     font-size: 14px;
   }
 }
+
+/* The sign-in pages' diagram drifts gently (AuthScene). */
+@keyframes iso-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
