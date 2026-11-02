@@ -7,11 +7,7 @@ import { useSession } from './session';
 import { Button } from '@/components/ui/button';
 
 const FREE = ['Every feature in your personal workspace', 'Up to 10 diagrams', 'The CLI and the MCP server for AI apps'];
-const LIFETIME = [
-  'Unlimited diagrams',
-  'Team workspaces: you and up to four other editors each, and as many viewers as you like',
-  'Everything we add to the editor, for good',
-];
+const LIFETIME = ['Unlimited diagrams', 'Shared workspaces for you and your team', 'Everything we add to the editor, for good'];
 
 /**
  * Your plan, and buying lifetime access. Stripe Checkout comes back here: with

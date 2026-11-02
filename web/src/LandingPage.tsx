@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Bot, Box, Check, FileCode2, FileText, Layers, Link2, Minus, Monitor, Moon, Scale, Server, Sun, Users } from 'lucide-react';
+import { ArrowRight, Bot, Box, Check, FileCode2, FileText, Layers, Link2, Monitor, Moon, Scale, Server, Sun, Users } from 'lucide-react';
 import { StaticDiagram, ThemeContext } from 'isodraw';
 import type { Example } from 'isodraw-templates';
 import { Logo } from './App';
+import { Glow, IsoGrid } from './AuthScene';
 import { linkProps } from './router';
 import { setThemeSetting, useTheme } from './theme';
 import { Button } from '@/components/ui/button';
@@ -133,21 +134,14 @@ function Hero() {
 
   return (
     <section className="relative overflow-hidden border-b">
-      {/* A faint isometric grid behind the hero. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.5] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)] dark:opacity-[0.25]"
-        style={{
-          backgroundImage:
-            'linear-gradient(30deg, var(--border) 1px, transparent 1px), linear-gradient(150deg, var(--border) 1px, transparent 1px)',
-          backgroundSize: '40px 23px',
-        }}
-      />
+      {/* The same isometric grid and glow as the sign-in pages. */}
+      <Glow />
+      <IsoGrid />
       <div className="relative mx-auto max-w-6xl px-4 pt-16 pb-12 sm:pt-24">
         <div className="mx-auto max-w-3xl text-center">
           <p className="mb-4 inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground">
             <span className="size-1.5 rounded-full bg-success" />
-            Founding lifetime access is open
+            Founding lifetime: 100 seats, pay once
           </p>
           <h1 className="text-4xl font-bold tracking-tight text-balance sm:text-6xl">
             Architecture diagrams that <span className="text-primary">explain themselves</span>
@@ -346,102 +340,115 @@ function OpenSource() {
   );
 }
 
-type Row = { label: string; free: boolean | string; lifetime: boolean | string };
-const PLAN_ROWS: Row[] = [
-  { label: 'Every editor feature, 2D and isometric', free: true, lifetime: true },
-  { label: 'Docs, detail diagrams, published views', free: true, lifetime: true },
-  { label: 'MCP and CLI, reads and writes', free: true, lifetime: true },
-  { label: 'Diagrams in your personal workspace', free: 'Up to 10', lifetime: 'Unlimited' },
-  { label: 'Team workspaces', free: false, lifetime: '5 editors each, unlimited viewers' },
-];
+type Plan = {
+  name: string;
+  price: string;
+  note: string;
+  later?: string;
+  pitch: string;
+  items: string[];
+  cta?: { label: string; to: string; variant: 'default' | 'outline' };
+  badge?: string;
+  soon?: boolean;
+};
 
-function Cell({ v }: { v: boolean | string }) {
-  if (v === true) return <Check className="size-4 text-primary" aria-label="Included" />;
-  if (v === false) return <Minus className="size-4 text-muted-foreground/60" aria-label="Not included" />;
-  return <span>{v}</span>;
-}
+const PLANS: Plan[] = [
+  {
+    name: 'Personal',
+    price: 'Free',
+    note: 'forever',
+    pitch: 'Every feature, in your own workspace.',
+    items: ['2D and isometric editor', 'Docs, detail diagrams, published views', 'MCP and CLI, reads and writes', 'Up to 10 diagrams'],
+    cta: { label: 'Start drawing', to: '/signup', variant: 'outline' },
+  },
+  {
+    name: 'Pro',
+    price: '$99',
+    note: 'once',
+    later: 'Founding lifetime price, then $8/month',
+    pitch: 'A shared workspace for a small team, paid once.',
+    items: ['Everything in Personal', 'Unlimited diagrams', 'Up to 4 people, any role', 'Shared image library'],
+    cta: { label: 'Get lifetime access', to: '/signup?return=%2Fsettings%2Fplan', variant: 'default' },
+    badge: '100 founding seats',
+  },
+  {
+    name: 'Team',
+    price: '$49',
+    note: '/month',
+    pitch: 'One price for the whole team, however big.',
+    items: ['Everything in Pro', 'Unlimited people', 'Version history and GitHub sync, as they ship', 'Private published docs'],
+    soon: true,
+  },
+  {
+    name: 'Business',
+    price: '$199',
+    note: '/month',
+    pitch: 'For companies with sign-in and compliance needs.',
+    items: ['Everything in Team', 'SSO / SAML', 'Audit log', 'Priority support and a signed agreement'],
+    soon: true,
+  },
+];
 
 function Pricing() {
   return (
     <section id="pricing" className="scroll-mt-14 border-b py-20 sm:py-24">
-      <div className="mx-auto max-w-5xl px-4">
+      <div className="mx-auto max-w-6xl px-4">
         <SectionHeading
           eyebrow="Pricing"
-          title="Free for you. Pay once for your team."
-          body="Nothing is held back from the free plan. Founding lifetime access adds teams, for a one-time price, for the first 100 buyers."
+          title="One price per workspace. Never per seat."
+          body="Your personal workspace is free, with every feature. Shared workspaces have a flat price however many people join, so inviting a teammate never costs a thing."
         />
-        <div className="mt-14 grid gap-4 md:grid-cols-2">
-          <PlanCard
-            name="Personal"
-            price="Free"
-            note="forever"
-            pitch="Everything, in your own workspace."
-            cta={{ label: 'Start drawing', to: '/signup', variant: 'outline' }}
-            plan="free"
-          />
-          <PlanCard
-            name="Founding lifetime"
-            price="$99"
-            note="one time"
-            pitch="Teams, and no limits on your personal workspace."
-            cta={{ label: 'Get lifetime access', to: '/signup?return=%2Fsettings%2Fplan', variant: 'default' }}
-            plan="lifetime"
-            featured
-          />
+        <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {PLANS.map((p) => (
+            <PlanCard key={p.name} plan={p} />
+          ))}
         </div>
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Lifetime doesn't include metered AI features that run on our bill, enterprise features (SSO, audit logs, teams over 5 editors) or storage
-          beyond fair use. 30-day refunds, no questions.
+          Plans don't include metered AI features that run on our bill, or storage beyond fair use. Move or copy diagrams between workspaces any time.
+          30-day refunds on lifetime, no questions.
         </p>
       </div>
     </section>
   );
 }
 
-function PlanCard({
-  name,
-  price,
-  note,
-  pitch,
-  cta,
-  plan,
-  featured,
-}: {
-  name: string;
-  price: string;
-  note: string;
-  pitch: string;
-  cta: { label: string; to: string; variant: 'default' | 'outline' };
-  plan: 'free' | 'lifetime';
-  featured?: boolean;
-}) {
+function PlanCard({ plan: p }: { plan: Plan }) {
+  const featured = !!p.badge;
   return (
-    <div className={cn('relative flex flex-col rounded-xl border bg-card p-6 sm:p-8', featured && 'border-primary shadow-lg shadow-primary/10')}>
+    <div className={cn('relative flex flex-col rounded-xl border bg-card p-6', featured && 'border-primary shadow-lg shadow-primary/10', p.soon && 'bg-card/60')}>
       {featured && (
         <span className="absolute -top-3 left-6 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground">
           <Users className="size-3" />
-          100 seats only
+          {p.badge}
         </span>
       )}
-      <h3 className="font-semibold">{name}</h3>
-      <p className="mt-1 text-sm text-muted-foreground">{pitch}</p>
-      <p className="mt-6 flex items-baseline gap-1.5">
-        <span className="text-4xl font-bold tracking-tight">{price}</span>
-        <span className="text-sm text-muted-foreground">{note}</span>
+      <h3 className="flex items-center gap-2 font-semibold">
+        {p.name}
+        {p.soon && <span className="rounded-full border px-2 py-0.5 text-[11px] font-normal text-muted-foreground">Coming soon</span>}
+      </h3>
+      <p className="mt-1 min-h-10 text-sm text-muted-foreground">{p.pitch}</p>
+      <p className="mt-5 flex items-baseline gap-1.5">
+        <span className="text-4xl font-bold tracking-tight">{p.price}</span>
+        <span className="text-sm text-muted-foreground">{p.note}</span>
       </p>
-      <ul className="mt-6 flex-1 space-y-3 text-sm">
-        {PLAN_ROWS.map((r) => (
-          <li key={r.label} className="flex items-start justify-between gap-4 border-b pb-3 last:border-0">
-            <span className="text-muted-foreground">{r.label}</span>
-            <span className="flex-none text-right font-medium">
-              <Cell v={r[plan]} />
-            </span>
+      <p className="mt-1 min-h-4 text-xs text-muted-foreground">{p.later}</p>
+      <ul className="mt-5 flex-1 space-y-2.5 text-sm">
+        {p.items.map((i) => (
+          <li key={i} className="flex gap-2">
+            <Check className="mt-0.5 size-4 flex-none text-primary" aria-hidden />
+            {i}
           </li>
         ))}
       </ul>
-      <Button asChild variant={cta.variant} className="mt-6 w-full">
-        <a {...linkProps(cta.to)}>{cta.label}</a>
-      </Button>
+      {p.cta ? (
+        <Button asChild variant={p.cta.variant} className="mt-6 w-full">
+          <a {...linkProps(p.cta.to)}>{p.cta.label}</a>
+        </Button>
+      ) : (
+        <Button variant="outline" className="mt-6 w-full" disabled>
+          Coming soon
+        </Button>
+      )}
     </div>
   );
 }
@@ -449,23 +456,27 @@ function PlanCard({
 const FAQ = [
   {
     q: 'Is IsoDraw open source?',
-    a: 'Yes, under the AGPL-3.0. You can self-host it for free; paying for lifetime access supports the hosted version and its development.',
+    a: 'Yes, under the AGPL-3.0. You can self-host it for free; paying for the hosted version supports it and its development.',
   },
   {
-    q: 'What does "lifetime" mean?',
-    a: 'You pay once, with no subscription, and keep team workspaces and an unlimited personal workspace from then on.',
+    q: 'Why per workspace and not per seat?',
+    a: "Because diagrams are for sharing. A workspace has one flat price however many people are in it, so you never have to decide whether a teammate is worth a seat.",
   },
   {
-    q: 'Do my teammates need to buy too?',
-    a: 'No. Each team you create has room for you and four more editors, plus as many viewers as you like. Only you buy.',
+    q: 'What does founding lifetime mean?',
+    a: 'The first 100 buyers pay once instead of monthly and keep Pro for good: unlimited diagrams and a shared workspace for up to 4 people.',
   },
   {
     q: 'What happens at 10 diagrams on the free plan?',
-    a: "Creating an 11th is refused, with a note on exporting and deleting one. Nothing you've drawn is ever locked or deleted.",
+    a: "Creating an 11th is refused, with a note on exporting and deleting one, or moving it to a paid workspace. Nothing you've drawn is ever locked or deleted.",
+  },
+  {
+    q: 'When are Team and Business coming?',
+    a: 'Soon after the founding seats. Founding members can move their diagrams into a Team workspace whenever they outgrow 4 people.',
   },
   {
     q: 'Can I get a refund?',
-    a: 'Within 30 days, no questions. A refund ends team access, and your personal workspace goes back to the free limits.',
+    a: 'Within 30 days of buying lifetime access, no questions. Your diagrams stay; the workspace goes back to the free limits.',
   },
 ];
 
