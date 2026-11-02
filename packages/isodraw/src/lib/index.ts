@@ -6,6 +6,8 @@ export { IsoCanvas, DRAG_MIME } from './IsoCanvas';
 export type { IsoCanvasProps, Selection, Tool } from './IsoCanvas';
 export { SceneContent, NodeShape, EdgeShape, ShapePreview, StaticDiagram } from './render';
 export { IsoDiagramPublished } from './Published';
+export { IsoDocView } from './DocView';
+export type { IsoDocViewProps } from './DocView';
 export { ThemeContext, inkFor, useResolvedTheme, type Theme, type ResolvedTheme } from './theme';
 export type { IsoDiagramPublishedProps } from './Published';
 export { Projector, TILE, shade } from './geometry';

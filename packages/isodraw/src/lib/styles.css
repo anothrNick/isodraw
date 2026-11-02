@@ -1,5 +1,5 @@
 /* ----- theme tokens (light by default; data-theme="dark" switches) ----- */
-.isd-root, .isd-pub, .isd-modal {
+.isd-root, .isd-pub, .isd-modal, .isd-docview {
   --isd-bg: #ffffff;
   --isd-panel: #f8fafc;
   --isd-border: #e2e8f0;
@@ -29,7 +29,7 @@
   --isd-shadow: 15 23 42;
   color-scheme: light;
 }
-:is(.isd-root, .isd-pub, .isd-modal)[data-theme="dark"] {
+:is(.isd-root, .isd-pub, .isd-modal, .isd-docview)[data-theme="dark"] {
   --isd-bg: #0f172a;
   --isd-panel: #131c2f;
   --isd-border: #253247;
@@ -549,3 +549,7 @@ button.isd-pub-toc-twist:hover { color: var(--isd-text); }
 /* Outline of the item whose doc mention is hovered. */
 .isd-target-highlight { animation: isd-target-in 0.15s ease-out; }
 @keyframes isd-target-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ----- IsoDocView: one doc, read-only, outside the editor ----- */
+.isd-docview { color: var(--isd-text); font-size: 14px; line-height: 1.6; }
+.isd-docview .isd-doc-content .ProseMirror { padding: 0; min-height: 0; }

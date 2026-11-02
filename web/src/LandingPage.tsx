@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Bot, Box, Check, FileCode2, FileText, Layers, Link2, Monitor, Moon, Scale, Server, Sun, Users } from 'lucide-react';
-import { StaticDiagram, ThemeContext } from 'isodraw';
+import { IsoDocView, StaticDiagram, ThemeContext, docOf, hasDoc, titleOf, type DocTarget } from 'isodraw';
 import type { Example } from 'isodraw-templates';
 import { Logo } from './App';
 import { Glow, IsoGrid } from './AuthScene';
@@ -126,11 +126,19 @@ function Hero() {
   const [examples, setExamples] = useState<Example[] | null>(null);
   const [choice, setChoice] = useState(0);
   const [view, setView] = useState<'2d' | '3d'>('3d');
+  // The docs sidebar: the diagram's overview, or the doc of the component clicked.
+  const [page, setPage] = useState<DocTarget>({ kind: 'diagram' });
+  const [focus, setFocus] = useState<DocTarget | null>(null);
+  const { resolved } = useTheme();
   useEffect(() => {
     loadTemplates().then(setExamples, () => setExamples([]));
   }, []);
   const shown = examples?.slice(0, 4) ?? [];
   const example = shown[choice];
+  const pick = (i: number) => {
+    setChoice(i);
+    setPage({ kind: 'diagram' });
+  };
 
   return (
     <section className="relative overflow-hidden border-b">
@@ -182,7 +190,7 @@ function Hero() {
                   key={ex.id}
                   role="tab"
                   aria-selected={i === choice}
-                  onClick={() => setChoice(i)}
+                  onClick={() => pick(i)}
                   className={cn(
                     'rounded-md px-2.5 py-1 text-xs whitespace-nowrap text-muted-foreground hover:bg-accent hover:text-foreground',
                     i === choice && 'bg-accent font-medium text-foreground',
@@ -205,17 +213,87 @@ function Hero() {
               ))}
             </div>
           </div>
-          <div className="flex aspect-[16/9] items-center justify-center bg-muted/30 p-4 sm:p-8">
-            {example ? (
-              <StaticDiagram key={example.id} diagram={example.diagram} view={view} maxHeight="100%" className="h-full" label={example.name} />
-            ) : (
-              <div className="h-full w-full animate-pulse rounded-lg bg-muted" />
-            )}
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="flex min-w-0 flex-col">
+              <div className="flex aspect-[16/9] items-center justify-center bg-muted/30 p-4 sm:p-8 lg:aspect-auto lg:h-[480px]">
+                {example ? (
+                  <StaticDiagram
+                    key={example.id}
+                    diagram={example.diagram}
+                    view={view}
+                    maxHeight="100%"
+                    className="h-full"
+                    label={example.name}
+                    highlight={page.kind === 'node' ? page.id : undefined}
+                    focus={focus}
+                    onNodeClick={(id) => setPage({ kind: 'node', id })}
+                  />
+                ) : (
+                  <div className="h-full w-full animate-pulse rounded-lg bg-muted" />
+                )}
+              </div>
+              {example && (
+                <p className="border-t px-4 py-2.5 text-xs text-muted-foreground">
+                  {example.description} <span className="text-foreground/70">Click a component to read its docs.</span>
+                </p>
+              )}
+            </div>
+            {example && <DocsSidebar diagram={example.diagram} page={page} onPage={setPage} onFocus={setFocus} theme={resolved} />}
           </div>
-          {example && <p className="border-t px-4 py-2.5 text-xs text-muted-foreground">{example.description}</p>}
         </div>
       </div>
     </section>
+  );
+}
+
+/** The hero demo's docs: one page at a time, like the Docs tab and the published site. */
+function DocsSidebar({
+  diagram,
+  page,
+  onPage,
+  onFocus,
+  theme,
+}: {
+  diagram: Example['diagram'];
+  page: DocTarget;
+  onPage: (t: DocTarget) => void;
+  onFocus: (t: DocTarget | null) => void;
+  theme: 'light' | 'dark';
+}) {
+  const md = docOf(page, diagram);
+  const title = page.kind === 'diagram' ? 'Overview' : titleOf(page, diagram);
+  // Many docs open with their own heading; don't show two.
+  const ownHeading = /^\s*#{1,3}\s/.test(md);
+  return (
+    <aside className="flex max-h-[420px] min-w-0 flex-col border-t bg-card lg:max-h-[528px] lg:border-t-0 lg:border-l">
+      <div className="flex items-center gap-2 border-b px-4 py-2.5">
+        <FileText className="size-4 text-primary" aria-hidden />
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Docs</span>
+        {page.kind !== 'diagram' && (
+          <button type="button" onClick={() => onPage({ kind: 'diagram' })} className="ml-auto text-xs text-muted-foreground hover:text-foreground">
+            ← Overview
+          </button>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {!ownHeading && <h3 className="mb-3 text-base font-semibold">{title}</h3>}
+        {hasDoc(md) ? (
+          <IsoDocView
+            key={`${page.kind}:${'id' in page ? page.id : ''}`}
+            markdown={md}
+            diagram={diagram}
+            theme={theme}
+            onNavigate={(t) => {
+              onFocus(null);
+              onPage(t);
+            }}
+            onMentionHover={onFocus}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">No doc for this one yet. In the editor, every component, area and connection can have one.</p>
+        )}
+      </div>
+    </aside>
   );
 }
 

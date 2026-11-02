@@ -851,3 +851,27 @@ export default function DocsPanel({
     </section>
   );
 }
+
+/** One doc, read-only, for IsoDocView (loaded lazily with the rest of the docs code). */
+export function DocReader({
+  markdown,
+  diagram,
+  onNavigate,
+  onMentionHover,
+}: {
+  markdown: string;
+  diagram: Diagram;
+  onNavigate: (t: DocTarget) => void;
+  onMentionHover?: (t: DocTarget | null) => void;
+}) {
+  return (
+    <DocEditor
+      markdown={markdown}
+      editable={false}
+      items={() => mentionables(diagram)}
+      onChange={() => undefined}
+      onNavigate={onNavigate}
+      onMentionHover={onMentionHover}
+    />
+  );
+}
