@@ -5,19 +5,16 @@ How a person signs in to **Tablebook** with an outside identity provider, using 
 
 ## Drawing a sequence diagram in IsoDraw
 
-This is an ordinary diagram in the flat view. Nothing here is special; it's the same shapes and connections as any other diagram:
+This is an ordinary diagram in the flat view:
 
-| Part | Made with |
-| --- | --- |
-| Participants | Icons along the top |
-| Lifelines | A narrow **Area** under each one, with a dashed border |
-| Activation bars | Thin **Blocks** on a lifeline, from the call that wakes it to its return |
-| Messages | **Straight** connections; drag each end to the same height on both lifelines |
-| Returns | Connections with a **dashed** line and an **open** arrowhead |
-| Self calls | A connection with two bend points, into a small nested bar |
-| Notes | A small tinted **Area** with a label |
+- **Participants** are any shape or icon with a **lifeline**: drag *Lifeline* from the Shapes palette, or tick *Lifeline* in a component's Properties.
+- **Messages** are connections drawn from one lifeline to another: start where you want the message on the line, and it runs straight and level.
+- **Returns** are connections with a **dashed** line and an **open** arrowhead.
+- **Self calls**: draw from a lifeline back onto itself.
+- **Activation bars** appear on their own: a message arriving starts one, and a dashed return leaving ends it.
+- **Notes** are a small tinted **Area** with a label.
 
-Every component and message can have its own doc, like this one: select an arrow to read why that step happens.
+Every participant and message can have its own doc, like this one: select an arrow to read why that step happens.
 
 <!-- edge:m3 -->
 The API makes a random **code verifier**, keeps it in a short-lived cookie, and sends the browser to the identity provider with only its hash, the **code challenge**.

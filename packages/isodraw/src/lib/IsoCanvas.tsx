@@ -1,3 +1,4 @@
+import { lifelineRoute, lineAnchor, onLifeline, sideToward } from './lifelines';
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type Ref } from 'react';
 import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, snap } from './geometry';
 import { containerOf, descendantsOf, isContainer } from './containers';
@@ -489,7 +490,10 @@ export function IsoCanvas(props: IsoCanvasProps) {
       const target = nodeAtPoint(e.clientX, e.clientY);
       const from = nodeById.get(drag.from);
       const to = target ? nodeById.get(target) : undefined;
-      if (from && to && to.id !== from.id) props.onConnect?.(from.id, to.id, inferRoute(drag.trail, from, drag.fromSide, to));
+      // On a lifeline: a level message, or a self call back to the same line.
+      const line = from && to && drag.trail.length ? lifelineRoute(from, drag.trail[0], to, toWorld(e.clientX, e.clientY, to.z)) : null;
+      if (from && to && line) props.onConnect?.(from.id, to.id, line);
+      else if (from && to && to.id !== from.id) props.onConnect?.(from.id, to.id, inferRoute(drag.trail, from, drag.fromSide, to));
     }
     if (drag?.type === 'edgeEnd') {
       const edge = edgeById.get(drag.edgeId);
@@ -497,7 +501,10 @@ export function IsoCanvas(props: IsoCanvasProps) {
       const node = target ? nodeById.get(target) : undefined;
       const other = edge && (drag.end === 'from' ? edge.to : edge.from);
       if (edge && node && node.id !== other) {
-        const anchor = nearestAnchor(node, toWorld(e.clientX, e.clientY, node.z));
+        const at = toWorld(e.clientX, e.clientY, node.z);
+        const otherNode = other ? nodeById.get(other) : undefined;
+        // Dropped on a lifeline: attach at that height.
+        const anchor = onLifeline(node, at) ? lineAnchor(node, at.y, otherNode ? sideToward(node, otherNode) : 'e') : nearestAnchor(node, at);
         const sameNode = node.id === (drag.end === 'from' ? edge.from : edge.to);
         props.onBeginChange?.();
         patchEdge(edge.id, {

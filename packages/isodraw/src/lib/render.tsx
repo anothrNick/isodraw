@@ -1,3 +1,4 @@
+import { BAR, activations, lineTop } from './lifelines';
 import { Fragment, useId, useMemo, type CSSProperties, type MouseEvent as RMouseEvent, type ReactNode } from 'react';
 import {
   TILE,
@@ -192,6 +193,46 @@ function TextNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
         ))}
       </text>
     </Ground>
+  );
+}
+
+/** A node's lifeline: a dashed line hanging below it, with activation bars from its messages. */
+function Lifeline({ node, diagram, proj }: { node: DiagramNode; diagram: Diagram; proj: Projector }) {
+  const theme = useTheme();
+  const top = lineTop(node);
+  const len = node.lifeline ?? 0;
+  const ink = theme === 'dark' ? '#64748b' : '#94a3b8';
+  return (
+    <g data-node-id={node.id}>
+      <Ground proj={proj} z={node.z}>
+        {/* A wide invisible stroke, so the line can be clicked and connected to. */}
+        <line x1={top.x * TILE} y1={top.y * TILE} x2={top.x * TILE} y2={(top.y + len) * TILE} stroke="transparent" strokeWidth={TILE * 0.9} />
+        <line
+          x1={top.x * TILE}
+          y1={top.y * TILE}
+          x2={top.x * TILE}
+          y2={(top.y + len) * TILE}
+          stroke={ink}
+          strokeWidth={1.4}
+          strokeDasharray="6 5"
+          vectorEffect="non-scaling-stroke"
+        />
+        {activations(diagram, node).map((b, i) => (
+          <rect
+            key={i}
+            x={(top.x - BAR / 2) * TILE}
+            y={(top.y + b.from - 0.3) * TILE}
+            width={BAR * TILE}
+            height={(b.to - b.from + 0.6) * TILE}
+            rx={3}
+            fill={theme === 'dark' ? shade(node.color, 0.45) : shade(node.color, 1.75)}
+            stroke={shade(node.color, theme === 'dark' ? 1.2 : 0.75)}
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </Ground>
+    </g>
   );
 }
 
@@ -626,6 +667,8 @@ export function SceneContent({
           <NodeShape node={n} proj={proj} idPrefix={idPrefix} />
         </Fragment>
       ))}
+      {/* Lifelines lie on the ground, under the messages that attach to them. */}
+      {diagram.nodes.map((n) => (n.lifeline ? <Lifeline key={`life-${n.id}`} node={n} diagram={diagram} proj={proj} /> : null))}
       {diagram.edges.map((e) => {
         const a = byId.get(e.from);
         const b = byId.get(e.to);
@@ -736,6 +779,10 @@ export function sceneBounds(d: Diagram, proj: Projector, pad = 28): { x: number;
     const top = n.z + (isFlat(n) ? 0 : n.kind === 'sphere' ? Math.min(n.w, n.d) : n.h);
     for (const q of footprint(n)) pts.push(proj.project(q.x, q.y, n.z), proj.project(q.x, q.y, top));
     if (n.label && n.kind !== 'text' && n.kind !== 'area') pts.push(labelAnchor(n, proj));
+    if (n.lifeline) {
+      const t = lineTop(n);
+      pts.push(proj.project(t.x, t.y + n.lifeline, n.z));
+    }
     // An isometric icon's box is its drawing in 2.5D; in 2D its picture can reach past the footprint.
     const iso = n.kind === 'image' && isIsoIcon(n.src) ? isoIconRect(n, proj) : null;
     if (iso) {

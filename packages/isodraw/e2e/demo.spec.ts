@@ -52,7 +52,8 @@ test('loads every example', async ({ page }) => {
   for (const option of options) {
     const value = (await option.getAttribute('value'))!;
     await select.selectOption(value);
-    const nodes = await canvas(page).locator('[data-node-id]').count();
+    // Distinct nodes: a node's lifeline is drawn as a second element with the same id.
+    const nodes = new Set(await canvas(page).locator('[data-node-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-node-id')))).size;
     expect(nodes, value).toBeGreaterThan(5);
     await expect(status(page)).toContainText(`${nodes} nodes`);
   }

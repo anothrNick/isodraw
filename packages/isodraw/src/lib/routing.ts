@@ -1,5 +1,6 @@
+import { linePoint } from './lifelines';
 import { center, clipToRect, snap, type Projector, type Pt } from './geometry';
-import type { DiagramEdge, DiagramNode, EdgeAnchor, LineStyle, MarkerKind, Side } from './types';
+import type { EdgeRouting, DiagramEdge, DiagramNode, EdgeAnchor, LineStyle, MarkerKind, Side } from './types';
 
 export const SIDE_DIR: Record<Side, Pt> = {
   n: { x: 0, y: -1 },
@@ -33,6 +34,8 @@ export const endMarkerOf = (e: DiagramEdge): MarkerKind => e.endMarker ?? (e.arr
 
 /** World point on a node's outline for an anchor, pushed out by `gap`. */
 export function anchorPoint(n: DiagramNode, a: EdgeAnchor, gap = GAP): Pt {
+  // On a lifeline: the point down the line, at its bar's edge.
+  if (a.line !== undefined && n.lifeline) return linePoint(n, a);
   const t = clamp(a.t, 0, 1);
   const cx = n.x + n.w / 2;
   const cy = n.y + n.d / 2;
@@ -316,6 +319,8 @@ export interface InferredRoute {
   fromAnchor?: EdgeAnchor;
   toAnchor?: EdgeAnchor;
   waypoints: Pt[];
+  /** Set when the gesture decides it (messages on lifelines run straight). */
+  routing?: EdgeRouting;
 }
 
 /**

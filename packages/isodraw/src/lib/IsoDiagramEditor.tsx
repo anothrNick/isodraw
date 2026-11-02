@@ -10,6 +10,7 @@ import { diagramImages, iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loa
 import { fitIsoIcon, imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevel, markMoved, movesItem } from './layout';
+import { lineTop } from './lifelines';
 import { canHaveDetail, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
@@ -119,7 +120,8 @@ const COMPACT_WIDTH = 1000;
 const NO_SELECTION: Selection = { nodes: [], edges: [] };
 
 interface PalettePayload {
-  type: 'shape' | 'icon';
+  /** lifeline: a participant for a sequence diagram (a box with a lifeline). */
+  type: 'shape' | 'icon' | 'lifeline';
   kind?: ShapeKind;
   src?: string;
   name?: string;
@@ -500,9 +502,11 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const fitTo = useCallback(
     (d: Diagram, p: Projector) => {
       const { w, h } = stageSize();
-      const pts = d.nodes.flatMap((n) =>
-        footprint(n).flatMap((q) => [p.project(q.x, q.y, n.z), p.project(q.x, q.y, n.z + (isFlat(n) ? 0 : n.h))]),
-      );
+      const pts = d.nodes.flatMap((n) => [
+        ...footprint(n).flatMap((q) => [p.project(q.x, q.y, n.z), p.project(q.x, q.y, n.z + (isFlat(n) ? 0 : n.h))]),
+        // A lifeline reaches below its node.
+        ...(n.lifeline ? [p.project(lineTop(n).x, lineTop(n).y + n.lifeline, n.z)] : []),
+      ]);
       if (!pts.length) {
         setCamera({ x: w / 2, y: h / 3, zoom: 1 });
         return;
@@ -569,6 +573,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
     if (compact) setPaletteOpen(false);
     if (p.type === 'shape' && p.kind) addNode(createShape(p.kind, at.x, at.y));
     if (p.type === 'icon' && p.src) addNode(createImageNode(p.src, p.name ?? '', at.x, at.y));
+    if (p.type === 'lifeline') addNode(createShape('block', at.x, at.y, { w: 2.4, d: 1.2, h: 0.4, label: 'Participant', lifeline: 12 }));
   };
 
   // Moving or resizing by hand makes an item manual: automatic layout won't move it again.
@@ -1127,6 +1132,22 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                       <span>{s.name}</span>
                     </button>
                   ))}
+                  {/* A sequence diagram participant: any shape or icon can have a lifeline; this one starts with one. */}
+                  <button
+                    type="button"
+                    className="isd-tile"
+                    draggable
+                    onDragStart={dragStart({ type: 'lifeline' })}
+                    onClick={() => placePayload({ type: 'lifeline' }, viewCenter())}
+                    title="Lifeline — a participant for sequence diagrams; click or drag onto canvas"
+                  >
+                    <svg width={44} height={44} viewBox="0 0 44 44" aria-hidden>
+                      <rect x={8} y={4} width={28} height={12} rx={3} fill="#4f8cf7" />
+                      <line x1={22} y1={17} x2={22} y2={42} stroke="#94a3b8" strokeWidth={1.6} strokeDasharray="3 3" />
+                      <rect x={19.5} y={22} width={5} height={12} rx={1.5} fill="#dbeafe" stroke="#4f8cf7" />
+                    </svg>
+                    <span>Lifeline</span>
+                  </button>
                 </div>
                 <div className="isd-section-title">Images & logos</div>
                 <div className="isd-import-row">
@@ -1641,6 +1662,17 @@ function NodeInspector({
           <NumberInput value={node.z} step={0.25} onChange={(z) => onChange({ z }, 'z')} />
         </Field>
       </div>
+      {!isArea && node.kind !== 'text' && (
+        <Field label="Lifeline">
+          <div className="isd-row">
+            <label className="isd-check">
+              <input type="checkbox" checked={!!node.lifeline} onChange={(e) => onChange({ lifeline: e.target.checked ? 12 : undefined })} />
+              Dashed line below
+            </label>
+            {!!node.lifeline && <NumberInput value={node.lifeline} min={1} step={1} onChange={(lifeline) => onChange({ lifeline: Math.max(1, lifeline) }, 'life')} />}
+          </div>
+        </Field>
+      )}
       {node.kind === 'text' && (
         <Field label="Font size">
           <NumberInput value={node.fontSize ?? 0.7} min={0.2} step={0.1} onChange={(fontSize) => onChange({ fontSize }, 'fs')} />

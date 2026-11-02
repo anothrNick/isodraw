@@ -50,6 +50,11 @@ export interface DiagramNode {
   imageStyle?: ImageStyle;
   /** Locked nodes can be selected but not moved. */
   locked?: boolean;
+  /**
+   * A lifeline: a dashed line this long (world units) hanging below the node,
+   * as in a sequence diagram. Connections attach anywhere along it.
+   */
+  lifeline?: number;
   /** Markdown documentation for this node. */
   doc?: string;
   /** The component's own diagram, opened by drilling into it. Its overview doc is this node's doc. */
@@ -70,6 +75,11 @@ export type Side = 'n' | 'e' | 's' | 'w';
 export interface EdgeAnchor {
   side: Side;
   t: number;
+  /**
+   * On a lifeline: how far down the line (world units from the node's front
+   * edge) the connection attaches; `side` says which way it leaves (e or w).
+   */
+  line?: number;
 }
 
 export interface Point {
