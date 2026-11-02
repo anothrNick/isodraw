@@ -57,13 +57,13 @@ Roles are owner, admin, editor and viewer. Owners and admins manage members and 
 
 ```bash
 npm run build -w @isodraw/cli
-npx isodraw login          # opens the browser to authorize this machine (on https://isodraw.sjostrom.io)
+npx isodraw login          # opens the browser to authorize this machine (on https://isodraw.app)
 npx isodraw diagrams list
 npx isodraw describe "Payments service"
 npx isodraw guide          # how agents should use it
 ```
 
-- **Server:** the hosted app at https://isodraw.sjostrom.io by default. Against the local stack, pass `--server http://localhost:5190` to `login` (it's saved with the token) or set `ISODRAW_SERVER`.
+- **Server:** the hosted app at https://isodraw.app by default. Against the local stack, pass `--server http://localhost:5190` to `login` (it's saved with the token) or set `ISODRAW_SERVER`.
 - **Sign-in:** `isodraw login` opens the app's *Authorize the CLI* page, where you pick a workspace, read-only or read-and-write access, and an expiry; the app hands the token back to the CLI on a localhost port (`--no-browser` just prints the link). The token is saved in `~/.config/isodraw/config.json` (mode 600). Agents, scripts and CI can pass a token as `ISODRAW_TOKEN` instead; create and revoke tokens under *API tokens* in the account menu.
 - **Reading:** `describe` prints a compact outline of a level (components, areas, connections, docs) that fits in a prompt; `docs get` prints a doc as Markdown. Diagrams are named by id or title, items by id or label, levels by path (`--level orders/validate`).
 - **Changing:** `nodes add|update|remove`, `edges add|update|remove`, `docs set`, and `apply` for a batch of changes as JSON (with `--dry-run`). New items are placed automatically, inside the right area, without overlapping; `--icon` takes an isometric icon such as `isodraw:laptop` (drawn in the item's `--color`), a Terraform resource type such as `aws_lambda_function`, or an image URL (`isodraw icons` lists the first two). Saves name the version they started from; if someone saved in between, the CLI merges item by item, like the app.
@@ -73,7 +73,7 @@ npx isodraw guide          # how agents should use it
 
 ### In Claude, ChatGPT, Cursor and other AI apps (MCP)
 
-**Hosted (for everyone):** add `https://isodraw.sjostrom.io/mcp` as a connector. In Claude: *Settings → Connectors → Add custom connector*, paste the URL, then *Connect*. ChatGPT and other apps that take a remote MCP server URL work the same way. The app sends you to IsoDraw's **Connect** page, where you pick a workspace, read-only or read-and-write access, and an expiry; *Allow* sends you back and the app can use your diagrams. The connection is an ordinary API token named after the app ("Claude (connected Nov 3)"), so it's listed under *API tokens*, and revoking it disconnects the app.
+**Hosted (for everyone):** add `https://isodraw.app/mcp` as a connector. In Claude: *Settings → Connectors → Add custom connector*, paste the URL, then *Connect*. ChatGPT and other apps that take a remote MCP server URL work the same way. The app sends you to IsoDraw's **Connect** page, where you pick a workspace, read-only or read-and-write access, and an expiry; *Allow* sends you back and the app can use your diagrams. The connection is an ordinary API token named after the app ("Claude (connected Nov 3)"), so it's listed under *API tokens*, and revoking it disconnects the app.
 
 **Local (for apps that launch a local server):** `isodraw mcp` serves the same tools over stdio, signed in with `isodraw login` (or `ISODRAW_TOKEN`). Until the CLI is on npm, build it once with `npm run build -w @isodraw/cli` and point apps at `packages/cli/dist/isodraw.mjs`:
 

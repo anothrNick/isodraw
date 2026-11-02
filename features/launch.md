@@ -19,7 +19,7 @@ Decided 2026-11-01:
 | Cohort | **100 seats**, no end date; it closes when they're gone. Seats left shown on the pricing page. |
 | Refunds | **30 days, no questions.** A refund ends team access; the personal workspace drops back to the free limits. |
 | Payments | **Stripe Checkout + Stripe Tax.** We register for and file sales tax and VAT ourselves where thresholds are crossed. |
-| Domain | **Buy a dedicated domain** and move to it before launch. Keep `isodraw.sjostrom.io` redirecting for good. |
+| Domain | **isodraw.app** (bought 2026-11-02, on Cloudflare). `isodraw.sjostrom.io` redirects to it for good. |
 | Teams that exist before launch | **Grandfathered:** they keep working free, at their current size. |
 
 Still open:
@@ -28,7 +28,7 @@ Still open:
 - [x] What happens at the 10-diagram limit: creating an 11th is refused with a note on exporting and deleting one, and nothing existing is locked or deleted.
 - [x] Grandfathered teams have no editor cap for now (built that way; revisit if one grows past what's fair).
 - [ ] Business basics: the entity that sells it, a bank account, and the support email on receipts.
-- [ ] The domain name itself.
+- [x] The domain name itself: isodraw.app.
 
 ## 2. Billing and access
 

@@ -28,7 +28,7 @@ The MCP server is mostly a new front door to these.
 ### Two ways in
 
 1. **Local, over stdio: `isodraw mcp`.** A CLI subcommand that serves the same tools to apps that launch local servers (Claude Desktop, Claude Code, Cursor, VS Code). It signs in with `isodraw login` or `ISODRAW_TOKEN`. Nearly free to build, and the quickest way to tune the tools against real assistants.
-2. **Remote, over Streamable HTTP: `https://isodraw.sjostrom.io/mcp`.** What Claude's custom connectors (web, desktop, mobile) and ChatGPT's connectors use. Nothing to install: paste the URL, sign in, approve.
+2. **Remote, over Streamable HTTP: `https://isodraw.app/mcp`.** What Claude's custom connectors (web, desktop, mobile) and ChatGPT's connectors use. Nothing to install: paste the URL, sign in, approve.
 
 Both serve one tool set from one module, `packages/mcp`, built on the official TypeScript MCP SDK and the CLI's operations.
 

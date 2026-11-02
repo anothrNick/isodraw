@@ -12,7 +12,7 @@ export interface Config {
 }
 
 /** The hosted app. For the local dev stack, use --server http://localhost:5190 or ISODRAW_SERVER. */
-export const DEFAULT_SERVER = 'https://isodraw.sjostrom.io';
+export const DEFAULT_SERVER = 'https://isodraw.app';
 
 export function configPath(): string {
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
