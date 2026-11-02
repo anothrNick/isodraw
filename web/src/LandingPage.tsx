@@ -350,6 +350,8 @@ type Plan = {
   cta?: { label: string; to: string; variant: 'default' | 'outline' };
   badge?: string;
   soon?: boolean;
+  /** Another way to pay for the same plan, behind a toggle on its card. */
+  alternative?: { toggle: [string, string]; price: string; note: string; later: string; soon: boolean };
 };
 
 const PLANS: Plan[] = [
@@ -365,11 +367,12 @@ const PLANS: Plan[] = [
     name: 'Pro',
     price: '$99',
     note: 'once',
-    later: 'Founding lifetime price, then $8/month',
-    pitch: 'A shared workspace for a small team, paid once.',
+    later: 'Pay once, keep Pro for good',
+    pitch: 'A shared workspace for a small team.',
     items: ['Everything in Personal', 'Unlimited diagrams', 'Up to 4 people, any role', 'Shared image library'],
     cta: { label: 'Get lifetime access', to: '/signup?return=%2Fsettings%2Fplan', variant: 'default' },
     badge: '100 founding seats',
+    alternative: { toggle: ['Lifetime', 'Monthly'], price: '$8', note: '/month', later: 'After the founding seats, or billed yearly at $80', soon: true },
   },
   {
     name: 'Team',
@@ -412,11 +415,14 @@ function Pricing() {
   );
 }
 
-function PlanCard({ plan: p }: { plan: Plan }) {
-  const featured = !!p.badge;
+function PlanCard({ plan }: { plan: Plan }) {
+  const [alt, setAlt] = useState(false);
+  // The toggle swaps the price and how it's bought; what the plan includes stays.
+  const p: Plan = alt && plan.alternative ? { ...plan, ...plan.alternative, badge: undefined, cta: undefined } : plan;
+  const featured = !!plan.badge;
   return (
     <div className={cn('relative flex flex-col rounded-xl border bg-card p-6', featured && 'border-primary shadow-lg shadow-primary/10', p.soon && 'bg-card/60')}>
-      {featured && (
+      {p.badge && (
         <span className="absolute -top-3 left-6 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground">
           <Users className="size-3" />
           {p.badge}
@@ -424,7 +430,24 @@ function PlanCard({ plan: p }: { plan: Plan }) {
       )}
       <h3 className="flex items-center gap-2 font-semibold">
         {p.name}
-        {p.soon && <span className="rounded-full border px-2 py-0.5 text-[11px] font-normal text-muted-foreground">Coming soon</span>}
+        {/* With a toggle there's no room; the button says it instead. */}
+        {p.soon && !plan.alternative && <span className="rounded-full border px-2 py-0.5 text-[11px] font-normal text-muted-foreground">Coming soon</span>}
+        {plan.alternative && (
+          <span role="radiogroup" aria-label={`${plan.name} billing`} className="ml-auto inline-flex rounded-md border p-0.5 text-[11px] font-normal">
+            {plan.alternative.toggle.map((label, i) => (
+              <button
+                key={label}
+                type="button"
+                role="radio"
+                aria-checked={alt === (i === 1)}
+                onClick={() => setAlt(i === 1)}
+                className={cn('rounded px-1.5 py-0.5 text-muted-foreground', alt === (i === 1) && 'bg-primary text-primary-foreground')}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        )}
       </h3>
       <p className="mt-1 min-h-10 text-sm text-muted-foreground">{p.pitch}</p>
       <p className="mt-5 flex items-baseline gap-1.5">
