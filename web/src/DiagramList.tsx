@@ -81,7 +81,7 @@ export function DiagramList({ org }: { org: Org }) {
 
   return (
     <div className="overflow-y-auto">
-      <div className={cn('mx-auto w-full px-6 py-10', view === 'grid' ? 'max-w-6xl' : 'max-w-3xl')}>
+      <div className="mx-auto w-full max-w-6xl px-6 py-10">
         <div className="mb-6 flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold tracking-tight">{org.personal ? 'Your diagrams' : org.name}</h1>
           <div className="flex gap-2">
