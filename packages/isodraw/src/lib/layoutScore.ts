@@ -1,4 +1,5 @@
 import { isContainer, parentMap } from './containers';
+import { routeEdges } from './autoRoute';
 import { resolveEdge } from './routing';
 import type { Diagram, DiagramNode } from './types';
 
@@ -11,6 +12,10 @@ import type { Diagram, DiagramNode } from './types';
 export interface LayoutScore {
   /** Pairs of connections that cross (ones sharing an item don't count). */
   crossings: number;
+  /** Length of line two connections share, running along the same track: they can't be told apart. */
+  parallel: number;
+  /** Length of line two connections run side by side, less than half a unit apart: a bundle that's hard to follow. */
+  close: number;
   /** Pairs of components whose footprints overlap. */
   overlaps: number;
   /** A connection running across a component it doesn't attach to, counted per component. */
@@ -58,12 +63,14 @@ function hits([a, b]: [Pt, Pt], n: DiagramNode): boolean {
   return true;
 }
 
-export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
+/** Scores what's drawn; `router: false` scores each connection routed on its own, as before the level router. */
+export function scoreLayout(d: Diagram, before?: Diagram, { router = true } = {}): LayoutScore {
+  const level = router ? routeEdges(d) : undefined;
   const byId = new Map(d.nodes.map((n) => [n.id, n]));
   const parts = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
   const routes = d.edges
     .filter((e) => byId.has(e.from) && byId.has(e.to) && e.from !== e.to)
-    .map((e) => ({ e, segs: segments(resolveEdge(e, byId.get(e.from)!, byId.get(e.to)!).pts) }));
+    .map((e) => ({ e, segs: segments(resolveEdge(e, byId.get(e.from)!, byId.get(e.to)!, level).pts) }));
 
   let crossings = 0;
   for (let i = 0; i < routes.length; i++) {
@@ -71,6 +78,25 @@ export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
       const [p, q] = [routes[i], routes[j]];
       if ([p.e.from, p.e.to].some((id) => id === q.e.from || id === q.e.to)) continue;
       if (p.segs.some((s) => q.segs.some((t) => cross(s[0], s[1], t[0], t[1])))) crossings++;
+    }
+  }
+
+  let parallel = 0;
+  let close = 0;
+  const flat = (s: [Pt, Pt]) => Math.abs(s[0].y - s[1].y) < 1e-6;
+  const upright = (s: [Pt, Pt]) => Math.abs(s[0].x - s[1].x) < 1e-6;
+  const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(Math.max(a0, a1), Math.max(b0, b1)) - Math.max(Math.min(a0, a1), Math.min(b0, b1)));
+  for (let i = 0; i < routes.length; i++) {
+    for (let j = i + 1; j < routes.length; j++) {
+      for (const s of routes[i].segs) {
+        for (const t of routes[j].segs) {
+          let [gap, run] = [Infinity, 0];
+          if (flat(s) && flat(t)) [gap, run] = [Math.abs(s[0].y - t[0].y), overlap(s[0].x, s[1].x, t[0].x, t[1].x)];
+          else if (upright(s) && upright(t)) [gap, run] = [Math.abs(s[0].x - t[0].x), overlap(s[0].y, s[1].y, t[0].y, t[1].y)];
+          if (gap < 0.05) parallel += run;
+          else if (gap < 0.45) close += run;
+        }
+      }
     }
   }
 
@@ -107,5 +133,5 @@ export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
   const h = Math.max(...all.map((n) => n.y + n.d)) - Math.min(...all.map((n) => n.y));
   const own = parts.reduce((t, n) => t + n.w * n.d, 0) || 1;
 
-  return { crossings, overlaps, through, regrouped, length: Math.round(length), sprawl: Math.round(((w * h) / own) * 10) / 10, moved: Math.round(moved * 10) / 10 };
+  return { crossings, parallel: Math.round(parallel * 10) / 10, close: Math.round(close * 10) / 10, overlaps, through, regrouped, length: Math.round(length), sprawl: Math.round(((w * h) / own) * 10) / 10, moved: Math.round(moved * 10) / 10 };
 }

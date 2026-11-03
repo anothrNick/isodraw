@@ -19,7 +19,8 @@ import {
 import { depthMap, isContainer } from './containers';
 import { ISO_ICON_BOX, imageHref, isIsoIcon, isoIconPlacement, isoIconScale } from './isoIcons';
 import { CANVAS_BG, INK, themedDiagram, useTheme } from './theme';
-import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
+import { routeEdges } from './autoRoute';
+import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf, type LevelRoutes } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget, LineStyle, MarkerKind } from './types';
 
 const CURVED = new Set(['cylinder', 'cone']);
@@ -410,7 +411,7 @@ export function TargetHighlight({ target, diagram, proj }: { target: DocTarget; 
     const a = e && diagram.nodes.find((n) => n.id === e.from);
     const b = e && diagram.nodes.find((n) => n.id === e.to);
     if (!e || !a || !b) return null;
-    const { d } = edgeGeometry(e, a, b, proj);
+    const { d } = edgeGeometry(e, a, b, proj, routeEdges(diagram));
     return (
       <g className="isd-target-highlight">
         <path d={d} fill="none" strokeOpacity={0.3} strokeWidth={10} strokeLinecap="round" {...stroke} />
@@ -421,8 +422,8 @@ export function TargetHighlight({ target, diagram, proj }: { target: DocTarget; 
   return null;
 }
 
-export function edgeGeometry(edge: DiagramEdge, a: DiagramNode, b: DiagramNode, proj: Projector) {
-  const r = resolveEdge(edge, a, b);
+export function edgeGeometry(edge: DiagramEdge, a: DiagramNode, b: DiagramNode, proj: Projector, routes?: LevelRoutes) {
+  const r = resolveEdge(edge, a, b, routes);
   const screen = r.pts.map((p, i) => proj.project(p.x, p.y, r.zs[i]));
   const d = edgePathD(r, edge.routing, edge.rounded ?? false, proj);
   return { r, screen, d, length: polylineLength(screen) };
@@ -570,6 +571,7 @@ export function EdgeShape({
   idPrefix,
   selected,
   animate = true,
+  routes,
 }: {
   edge: DiagramEdge;
   a: DiagramNode;
@@ -578,8 +580,10 @@ export function EdgeShape({
   idPrefix: string;
   selected?: boolean;
   animate?: boolean;
+  /** The level's routes (see autoRoute), so lines keep clear of items and each other. */
+  routes?: LevelRoutes;
 }) {
-  const { d, length } = edgeGeometry(edge, a, b, proj);
+  const { d, length } = edgeGeometry(edge, a, b, proj, routes);
   const startId = `${idPrefix}-ms-${edge.id}`;
   const endId = `${idPrefix}-me-${edge.id}`;
   const start = startMarkerOf(edge);
@@ -623,10 +627,10 @@ export function EdgeShape({
   );
 }
 
-export function EdgeLabel({ edge, a, b, proj }: { edge: DiagramEdge; a: DiagramNode; b: DiagramNode; proj: Projector }) {
+export function EdgeLabel({ edge, a, b, proj, routes }: { edge: DiagramEdge; a: DiagramNode; b: DiagramNode; proj: Projector; routes?: LevelRoutes }) {
   const theme = useTheme();
   if (!edge.label) return null;
-  const mid = midpoint(edgeGeometry(edge, a, b, proj).screen);
+  const mid = midpoint(edgeGeometry(edge, a, b, proj, routes).screen);
   const labelW = edge.label.length * 6.6 + 12;
   return (
     <g data-edge-id={edge.id}>
@@ -667,6 +671,7 @@ export function SceneContent({
   const byId = new Map(diagram.nodes.map((n) => [n.id, n]));
   const sorted = depthSort(solids, proj);
   const animated = animate && diagram.edges.some((e) => e.animation && e.animation !== 'none');
+  const routes = routeEdges(diagram);
   return (
     <>
       {animated && <style>{EDGE_KEYFRAMES}</style>}
@@ -681,7 +686,7 @@ export function SceneContent({
         const a = byId.get(e.from);
         const b = byId.get(e.to);
         if (!a || !b) return null;
-        return <EdgeShape key={e.id} edge={e} a={a} b={b} proj={proj} idPrefix={idPrefix} selected={selectedEdges?.has(e.id)} animate={animate} />;
+        return <EdgeShape key={e.id} edge={e} a={a} b={b} proj={proj} idPrefix={idPrefix} selected={selectedEdges?.has(e.id)} animate={animate} routes={routes} />;
       })}
       {sorted.map((n) => (
         <NodeShape key={n.id} node={n} proj={proj} idPrefix={idPrefix} />
@@ -693,7 +698,7 @@ export function SceneContent({
       {diagram.edges.map((e) => {
         const a = byId.get(e.from);
         const b = byId.get(e.to);
-        return a && b ? <EdgeLabel key={`l-${e.id}`} edge={e} a={a} b={b} proj={proj} /> : null;
+        return a && b ? <EdgeLabel key={`l-${e.id}`} edge={e} a={a} b={b} proj={proj} routes={routes} /> : null;
       })}
     </>
   );
@@ -738,6 +743,7 @@ function Spotlight({ diagram: source, node: raw, proj, bounds, idPrefix }: { dia
   const halo = base.map((p) => ({ x: c.x + (p.x - c.x) * 1.35, y: c.y + (p.y - c.y) * 1.35 }));
   const byId = new Map(diagram.nodes.map((n) => [n.id, n]));
   const edges = diagram.edges.filter((e) => e.from === node.id || e.to === node.id);
+  const routes = routeEdges(diagram);
   return (
     <>
       {defs}
@@ -747,7 +753,7 @@ function Spotlight({ diagram: source, node: raw, proj, bounds, idPrefix }: { dia
       {edges.map((e) => {
         const a = byId.get(e.from);
         const b = byId.get(e.to);
-        return a && b ? <EdgeShape key={e.id} edge={e} a={a} b={b} proj={proj} idPrefix={`${idPrefix}-spot`} animate={false} /> : null;
+        return a && b ? <EdgeShape key={e.id} edge={e} a={a} b={b} proj={proj} idPrefix={`${idPrefix}-spot`} animate={false} routes={routes} /> : null;
       })}
       <g filter={`url(#${shadow})`}>
         <NodeShape node={node} proj={proj} idPrefix={`${idPrefix}-spot`} />
@@ -756,7 +762,7 @@ function Spotlight({ diagram: source, node: raw, proj, bounds, idPrefix }: { dia
       {edges.map((e) => {
         const a = byId.get(e.from);
         const b = byId.get(e.to);
-        return a && b ? <EdgeLabel key={`l-${e.id}`} edge={e} a={a} b={b} proj={proj} /> : null;
+        return a && b ? <EdgeLabel key={`l-${e.id}`} edge={e} a={a} b={b} proj={proj} routes={routes} /> : null;
       })}
     </>
   );

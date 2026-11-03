@@ -89,7 +89,7 @@ function anchorToward(n: DiagramNode, p: Pt): EdgeAnchor {
   return { side, t: t > 0 && t < 1 ? t : 0.5 };
 }
 
-function autoAnchors(a: DiagramNode, b: DiagramNode): [EdgeAnchor, EdgeAnchor] {
+export function autoAnchors(a: DiagramNode, b: DiagramNode): [EdgeAnchor, EdgeAnchor] {
   const ca = center(a);
   const cb = center(b);
   const dx = cb.x - ca.x;
@@ -209,7 +209,7 @@ export interface ResolvedEdge {
   bDir: Pt;
 }
 
-function interpolateZ(pts: Pt[], za: number, zb: number): number[] {
+export function interpolateZ(pts: Pt[], za: number, zb: number): number[] {
   if (za === zb) return pts.map(() => za);
   const seg = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
   const total = seg.reduce((s, v) => s + v, 0) || 1;
@@ -220,7 +220,14 @@ function interpolateZ(pts: Pt[], za: number, zb: number): number[] {
   });
 }
 
-export function resolveEdge(edge: Pick<DiagramEdge, 'routing' | 'fromAnchor' | 'toAnchor' | 'waypoints'>, a: DiagramNode, b: DiagramNode): ResolvedEdge {
+/** A level's routes worked out together (see autoRoute), which take precedence over routing a connection on its own. */
+export interface LevelRoutes {
+  get(edge: DiagramEdge, a: DiagramNode, b: DiagramNode): ResolvedEdge | undefined;
+}
+
+export function resolveEdge(edge: Pick<DiagramEdge, 'routing' | 'fromAnchor' | 'toAnchor' | 'waypoints'>, a: DiagramNode, b: DiagramNode, routes?: LevelRoutes): ResolvedEdge {
+  const routed = routes && 'id' in edge ? routes.get(edge as DiagramEdge, a, b) : undefined;
+  if (routed) return routed;
   const wps = edge.waypoints ?? [];
   const auto = autoAnchors(a, b);
   const from = edge.fromAnchor ?? (wps.length ? anchorToward(a, wps[0]) : auto[0]);

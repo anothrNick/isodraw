@@ -1,6 +1,7 @@
 import { BAR, lifelineBars, lifelineRoute, lineAnchor, linePoint, lineTop, onLifeline, sideToward, withBars } from './lifelines';
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type Ref } from 'react';
 import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, snap } from './geometry';
+import { routeEdges } from './autoRoute';
 import { containerOf, descendantsOf, isContainer } from './containers';
 import { hasDoc } from './docs';
 import { fitIsoIcon, isIsoIcon } from './isoIcons';
@@ -204,6 +205,8 @@ export function IsoCanvas(props: IsoCanvasProps) {
 
   const nodeById = useMemo(() => new Map(diagram.nodes.map((n) => [n.id, n])), [diagram.nodes]);
   const edgeById = useMemo(() => new Map(diagram.edges.map((e) => [e.id, e])), [diagram.edges]);
+  // The level's routes, the same ones the scene draws, so handles and hit-testing follow the lines you see.
+  const routes = routeEdges(diagram);
 
   const updateNodes = (fn: (n: DiagramNode) => DiagramNode) => {
     props.onChange?.({ ...diagram, nodes: diagram.nodes.map(fn) });
@@ -226,13 +229,13 @@ export function IsoCanvas(props: IsoCanvasProps) {
     if (kind === 'edge-from' || kind === 'edge-to') {
       setDrag({ type: 'edgeEnd', edgeId: edge.id, end: kind === 'edge-from' ? 'from' : 'to', cursor: toScene(e.clientX, e.clientY), target: null });
     } else if (kind === 'seg') {
-      const base = resolveEdge(edge, ends[0], ends[1]);
+      const base = resolveEdge(edge, ends[0], ends[1], routes);
       setDrag({ type: 'segment', edgeId: edge.id, index: i, start: toWorld(e.clientX, e.clientY, base.zs[i]), base, began: false });
     } else if (kind === 'wp') {
       setDrag({ type: 'waypoint', edgeId: edge.id, index: i, began: false });
     } else if (kind === 'wpadd') {
       // Insert a bend between route points i and i+1, then drag it.
-      const r = resolveEdge(edge, ends[0], ends[1]);
+      const r = resolveEdge(edge, ends[0], ends[1], routes);
       const p = { x: (r.pts[i].x + r.pts[i + 1].x) / 2, y: (r.pts[i].y + r.pts[i + 1].y) / 2 };
       const wps = [...(edge.waypoints ?? [])];
       wps.splice(i, 0, p);
@@ -794,7 +797,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const selEdge = selection.edges.length === 1 && !selection.nodes.length ? edgeById.get(selection.edges[0]) : undefined;
   const selEnds = selEdge && edgeEnds(selEdge);
   if (selEdge && selEnds && !readOnly && tool === 'select' && drag?.type !== 'edgeEnd') {
-    const { r: route, screen } = edgeGeometry(selEdge, selEnds[0], selEnds[1], proj);
+    const { r: route, screen } = edgeGeometry(selEdge, selEnds[0], selEnds[1], proj, routes);
     const items: React.ReactElement[] = [];
     if (selEdge.routing === 'orthogonal') {
       route.pts.slice(0, -1).forEach((p, i) => {
@@ -940,7 +943,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
     const edge = edgeById.get(drag.edgeId);
     const ends = edge && edgeEnds(edge);
     if (edge && ends) {
-      const { screen } = edgeGeometry(edge, ends[0], ends[1], proj);
+      const { screen } = edgeGeometry(edge, ends[0], ends[1], proj, routes);
       const fixed = drag.end === 'from' ? screen[screen.length - 1] : screen[0];
       const target = drag.target ? nodeById.get(drag.target) : undefined;
       preview = (
@@ -1012,7 +1015,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
             .map((ed) => {
               const ends = edgeEnds(ed);
               if (!ends) return null;
-              const m = midpoint(edgeGeometry(ed, ends[0], ends[1], proj).screen);
+              const m = midpoint(edgeGeometry(ed, ends[0], ends[1], proj, routes).screen);
               // Sit beside the edge label pill when there is one.
               const dx = ed.label ? (ed.label.length * 6.6 + 12) / 2 + 12 : 0;
               return badge(`edge:${ed.id}`, { x: m.x + dx, y: m.y - (ed.label ? 0 : badgeSize * 0.9) }, ed.label || 'connection');

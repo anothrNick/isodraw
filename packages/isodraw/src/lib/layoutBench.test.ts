@@ -67,11 +67,11 @@ describe('layout bench', () => {
   it('prints the table', () => {
     if (!process.env.BENCH) return;
     console.table(rows.sort((a, b) => a.case.localeCompare(b.case) || a.engine.localeCompare(b.engine)));
-    const total = (engine: string, k: keyof LayoutScore) => rows.filter((r) => r.engine === engine).reduce((t, r) => t + r[k], 0);
+    const total = (engine: string, k: keyof LayoutScore) => Math.round(rows.filter((r) => r.engine === engine).reduce((t, r) => t + r[k], 0));
     console.table(
       ENGINES.map(([engine]) => ({
         engine,
-        ...Object.fromEntries((['crossings', 'overlaps', 'through', 'regrouped', 'length'] as const).map((k) => [k, total(engine, k)])),
+        ...Object.fromEntries((['through', 'parallel', 'crossings', 'overlaps', 'regrouped', 'length', 'sprawl'] as const).map((k) => [k, total(engine, k)])),
         ms: rows.filter((r) => r.engine === engine).reduce((t, r) => t + r.ms, 0),
       })),
     );
