@@ -102,6 +102,9 @@ async function layoutItemsElk(d: Diagram, include: Parameters<typeof levelInput>
       'elk.spacing.edgeEdge': String(S / 2),
       'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+      // Then pull everything as close as the lines allow.
+      'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
+      'elk.layered.compaction.postCompaction.constraints': 'SCANLINE',
       ...options,
     },
   };
