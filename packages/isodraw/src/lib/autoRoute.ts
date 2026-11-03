@@ -1,16 +1,19 @@
 import { isContainer } from './containers';
 import type { Pt } from './geometry';
-import { anchorPoint, autoAnchors, interpolateZ, SIDE_DIR, SIDES, simplifyPath, STUB, type LevelRoutes, type ResolvedEdge } from './routing';
+import { anchorPoint, autoAnchors, interpolateZ, SIDE_DIR, SIDES, simplifyPath, STUB, type ResolvedEdge } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, EdgeAnchor, Side } from './types';
 
 /**
- * Routing a level's orthogonal connections together, so they read cleanly:
+ * Routing a level's orthogonal connections together, so they read cleanly
+ * (Tidy and automatic layout do it; the routes are saved as each
+ * connection's bends, so moving things afterwards doesn't re-route them):
  * each goes around the items in its way, on a grid path that costs a little
  * per bend and a lot per stretch run along a track another connection already
  * uses (two lines on top of each other can't be told apart; crossing at right
  * angles is fine). A connection takes the sides of its items that make the
  * best path, unless someone set them, and several leaving the same side are
- * spread along it. Connections with bends placed by hand keep them.
+ * spread along it. Connections with bends placed by hand keep them; ones the
+ * router drew before (`routed: 'auto'`) are drawn again.
  */
 
 /** Clearance kept around items. */
@@ -329,30 +332,38 @@ function route(a: DiagramNode, b: DiagramNode, from: End[], to: End[], walls: Wa
   } satisfies ResolvedEdge;
 }
 
-/** The route for a connection, if the router drew it with these exact two items. */
-export type Routes = LevelRoutes;
-
-const cache = new WeakMap<DiagramNode[], WeakMap<DiagramEdge[], Routes>>();
-
-/** Routes for a level's orthogonal connections, worked out together (and remembered for the same level). */
-export function routeEdges(d: Pick<Diagram, 'nodes' | 'edges'>): Routes {
-  const byEdges = cache.get(d.nodes) ?? new WeakMap<DiagramEdge[], Routes>();
-  cache.set(d.nodes, byEdges);
-  let routes = byEdges.get(d.edges);
-  if (!routes) {
-    routes = computeRoutes(d);
-    byEdges.set(d.edges, routes);
-  }
-  return routes;
+/**
+ * Route a level's orthogonal connections and save each route on its
+ * connection: the anchors and bends, marked `routed: 'auto'`. Connections a
+ * person shaped (bends without the mark), curves, straight lines and
+ * lifeline messages are left as they are.
+ */
+export function routeLevel(d: Diagram): Diagram {
+  // What the router drew last time is its to redo.
+  const fresh = d.edges.map((e) => {
+    if (e.routed !== 'auto') return e;
+    const { waypoints: _w, fromAnchor: _f, toAnchor: _t, routed: _r, ...rest } = e;
+    return rest;
+  });
+  const routes = computeRoutes({ nodes: d.nodes, edges: fresh });
+  const edges = fresh.map((e, i) => {
+    const r = routes.get(e.id);
+    // The old route, if this one couldn't be routed (the level ran out of search budget).
+    if (!r) return d.edges[i].routed === 'auto' && e !== d.edges[i] ? d.edges[i] : e;
+    return { ...e, fromAnchor: r.from, toAnchor: r.to, waypoints: r.pts.slice(1, -1).map((p) => ({ x: round(p.x), y: round(p.y) })), routed: 'auto' as const };
+  });
+  return { ...d, edges };
 }
 
-function computeRoutes(d: Pick<Diagram, 'nodes' | 'edges'>): Routes {
+const round = (v: number) => Math.round(v * 1000) / 1000;
+
+function computeRoutes(d: Pick<Diagram, 'nodes' | 'edges'>): Map<string, ResolvedEdge> {
   const byId = new Map(d.nodes.map((n) => [n.id, n]));
   const solid = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
   const walls = new Walls(solid.map((n) => ({ x0: n.x - CLEAR, y0: n.y - CLEAR, x1: n.x + n.w + CLEAR, y1: n.y + n.d + CLEAR })));
   const level = solid.length ? bounds(solid.flatMap((n) => [{ x: n.x, y: n.y }, { x: n.x + n.w, y: n.y + n.d }]), 0) : { x0: 0, y0: 0, x1: 0, y1: 0 };
   const edges = d.edges.filter((e) => routed(e) && byId.has(e.from) && byId.has(e.to));
-  const out = new Map<string, { r: ResolvedEdge; a: DiagramNode; b: DiagramNode }>();
+  const out = new Map<string, ResolvedEdge>();
   const budget = { steps: BUDGET };
 
   // First pass: the best sides for each connection, routed on its own, avoiding sides that are full.
@@ -428,13 +439,8 @@ function computeRoutes(d: Pick<Diagram, 'nodes' | 'edges'>): Routes {
     const r = route(a, b, options(0, a, b, e.fromAnchor), options(1, b, a, e.toAnchor), walls, tracks, level, budget);
     if (!r) continue;
     tracks.add(r.pts);
-    out.set(e.id, { r, a, b });
+    out.set(e.id, r);
   }
 
-  return {
-    get: (edge, a, b) => {
-      const hit = out.get(edge.id);
-      return hit && hit.a === a && hit.b === b ? hit.r : undefined;
-    },
-  };
+  return out;
 }

@@ -1,4 +1,5 @@
 import { isContainer, parentMap } from './containers';
+import { routeLevel } from './autoRoute';
 import { layoutSequence } from './sequenceLayout';
 import type { Diagram, DiagramNode } from './types';
 
@@ -270,16 +271,15 @@ export const laidOut = (n: DiagramNode) => n.kind !== 'text';
  * Lay out a whole level: areas keep their contents, components go in columns
  * by flow, and every item is marked as placed by the platform. The result
  * starts where the old content did, so it doesn't jump away on the canvas.
- * Connections between moved items lose their manual bends and anchors. A
- * sequence (messages on lifelines) is laid out as one, with the rest beside it.
+ * Connections between moved items lose their manual bends and anchors, and
+ * orthogonal ones are routed again (see autoRoute). A sequence (messages on
+ * lifelines) is laid out as one, with the rest beside it.
  */
 export function layoutLevel(d: Diagram): Diagram {
-  // A sequence gets its own layout, and everything else goes beside it.
+  // A sequence gets its own layout, and everything else goes beside it. Then the lines are routed.
   const seq = layoutSequence(d);
-  if (seq) {
-    return layoutItems(seq.diagram, (n) => laidOut(n) && !seq.placed.has(n.id), { x: seq.right + COL_GAP, y: seq.top });
-  }
-  return layoutItems(d, laidOut);
+  if (seq) return routeLevel(layoutItems(seq.diagram, (n) => laidOut(n) && !seq.placed.has(n.id), { x: seq.right + COL_GAP, y: seq.top }));
+  return routeLevel(layoutItems(d, laidOut));
 }
 
 /** What a level's layout works from: the items, which area each is in, and the links between components. */
@@ -345,9 +345,12 @@ const GEOMETRY = ['x', 'y', 'w', 'd', 'h', 'z'] as const;
 /** Whether a patch moves or resizes an item. */
 export const movesItem = (patch: Partial<DiagramNode>) => GEOMETRY.some((k) => k in patch);
 
+const ROUTE = ['waypoints', 'fromAnchor', 'toAnchor', 'routing'] as const;
+
 /**
  * After a person moved or resized items, they stop being auto-placed, so
- * automatic layout leaves them where they were put.
+ * automatic layout leaves them where they were put. Likewise a connection
+ * whose bends or ends a person changed stops being the router's.
  */
 export function markMoved(prev: Diagram, next: Diagram): Diagram {
   const before = new Map(prev.nodes.map((n) => [n.id, n]));
@@ -359,7 +362,15 @@ export function markMoved(prev: Diagram, next: Diagram): Diagram {
     const { placed: _p, ...rest } = n;
     return rest;
   });
-  return changed ? { ...next, nodes } : next;
+  const old = new Map(prev.edges.map((e) => [e.id, e]));
+  const edges = next.edges.map((e) => {
+    const b = old.get(e.id);
+    if (!e.routed || !b || ROUTE.every((k) => b[k] === e[k])) return e;
+    changed = true;
+    const { routed: _r, ...rest } = e;
+    return rest;
+  });
+  return changed ? { ...next, nodes, edges } : next;
 }
 
 /**

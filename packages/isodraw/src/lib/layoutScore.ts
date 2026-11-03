@@ -1,5 +1,4 @@
 import { isContainer, parentMap } from './containers';
-import { routeEdges } from './autoRoute';
 import { resolveEdge } from './routing';
 import type { Diagram, DiagramNode } from './types';
 
@@ -63,14 +62,12 @@ function hits([a, b]: [Pt, Pt], n: DiagramNode): boolean {
   return true;
 }
 
-/** Scores what's drawn; `router: false` scores each connection routed on its own, as before the level router. */
-export function scoreLayout(d: Diagram, before?: Diagram, { router = true } = {}): LayoutScore {
-  const level = router ? routeEdges(d) : undefined;
+export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
   const byId = new Map(d.nodes.map((n) => [n.id, n]));
   const parts = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
   const routes = d.edges
     .filter((e) => byId.has(e.from) && byId.has(e.to) && e.from !== e.to)
-    .map((e) => ({ e, segs: segments(resolveEdge(e, byId.get(e.from)!, byId.get(e.to)!, level).pts) }));
+    .map((e) => ({ e, segs: segments(resolveEdge(e, byId.get(e.from)!, byId.get(e.to)!).pts) }));
 
   let crossings = 0;
   for (let i = 0; i < routes.length; i++) {

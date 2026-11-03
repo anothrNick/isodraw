@@ -1,4 +1,5 @@
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk.bundled.js';
+import { routeLevel } from './autoRoute';
 import { isContainer } from './containers';
 import { applyPlacements, COL_GAP, laidOut, levelInput, PAD, PAD_TOP, ROW_GAP, type Placement } from './layout';
 import { layoutSequence } from './sequenceLayout';
@@ -25,8 +26,8 @@ export type ElkOptions = Record<string, string>;
 
 export async function layoutLevelElk(d: Diagram, options: ElkOptions = {}): Promise<Diagram> {
   const seq = layoutSequence(d);
-  if (seq) return layoutItemsElk(seq.diagram, (n) => laidOut(n) && !seq.placed.has(n.id), options, { x: seq.right + COL_GAP, y: seq.top });
-  return layoutItemsElk(d, laidOut, options);
+  if (seq) return routeLevel(await layoutItemsElk(seq.diagram, (n) => laidOut(n) && !seq.placed.has(n.id), options, { x: seq.right + COL_GAP, y: seq.top }));
+  return routeLevel(await layoutItemsElk(d, laidOut, options));
 }
 
 async function layoutItemsElk(d: Diagram, include: Parameters<typeof levelInput>[1], options: ElkOptions, at?: { x: number; y: number }): Promise<Diagram> {

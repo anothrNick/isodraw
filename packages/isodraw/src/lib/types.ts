@@ -120,6 +120,12 @@ export interface DiagramEdge {
   toAnchor?: EdgeAnchor;
   /** Bend points in world units, between the two ends. */
   waypoints?: Point[];
+  /**
+   * 'auto' when the router drew the anchors and bends (Tidy, automatic
+   * layout): the next Tidy may draw them again. Reshaping it by hand clears
+   * this, and the router leaves it alone after that.
+   */
+  routed?: 'auto';
   /** Round the corners of orthogonal routes. */
   rounded?: boolean;
   lineStyle?: LineStyle;

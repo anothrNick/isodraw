@@ -220,14 +220,7 @@ export function interpolateZ(pts: Pt[], za: number, zb: number): number[] {
   });
 }
 
-/** A level's routes worked out together (see autoRoute), which take precedence over routing a connection on its own. */
-export interface LevelRoutes {
-  get(edge: DiagramEdge, a: DiagramNode, b: DiagramNode): ResolvedEdge | undefined;
-}
-
-export function resolveEdge(edge: Pick<DiagramEdge, 'routing' | 'fromAnchor' | 'toAnchor' | 'waypoints'>, a: DiagramNode, b: DiagramNode, routes?: LevelRoutes): ResolvedEdge {
-  const routed = routes && 'id' in edge ? routes.get(edge as DiagramEdge, a, b) : undefined;
-  if (routed) return routed;
+export function resolveEdge(edge: Pick<DiagramEdge, 'routing' | 'fromAnchor' | 'toAnchor' | 'waypoints'>, a: DiagramNode, b: DiagramNode): ResolvedEdge {
   const wps = edge.waypoints ?? [];
   const auto = autoAnchors(a, b);
   const from = edge.fromAnchor ?? (wps.length ? anchorToward(a, wps[0]) : auto[0]);

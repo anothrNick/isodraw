@@ -45,7 +45,10 @@ describe('layoutLevel', () => {
     expect(Math.min(...d.nodes.map((n) => n.x))).toBe(10);
     expect(Math.min(...d.nodes.map((n) => n.y))).toBe(10);
     expect(d.nodes.every((n) => n.placed === 'auto')).toBe(true);
-    expect(d.edges.find((e) => e.to === 'stripe')!.waypoints).toBeUndefined();
+    // The old bend is gone; the line is the router's now.
+    const stripe = d.edges.find((e) => e.to === 'stripe')!;
+    expect(stripe.waypoints).not.toContainEqual({ x: 1, y: 1 });
+    expect(stripe.routed).toBe('auto');
   });
 
   it('leaves free text where it is', () => {

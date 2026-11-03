@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { routeEdges } from './autoRoute';
+import { routeLevel } from './autoRoute';
+import { markMoved } from './layout';
 import { resolveEdge } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode } from './types';
 
@@ -8,11 +9,14 @@ const node = (id: string, x: number, y: number, extra: Partial<DiagramNode> = {}
 });
 const edge = (id: string, from: string, to: string, extra: Partial<DiagramEdge> = {}): DiagramEdge => ({ id, from, to, color: '#475569', width: 2, routing: 'orthogonal', ...extra });
 
-const routeOf = (d: Diagram, id: string) => {
+/** The drawn line of a connection, as saved on the level. */
+const drawn = (d: Diagram, id: string) => {
   const e = d.edges.find((x) => x.id === id)!;
   const [a, b] = [d.nodes.find((n) => n.id === e.from)!, d.nodes.find((n) => n.id === e.to)!];
-  return resolveEdge(e, a, b, routeEdges(d)).pts;
+  return resolveEdge(e, a, b).pts;
 };
+/** The line after routing the level. */
+const routeOf = (d: Diagram, id: string) => drawn(routeLevel(d), id);
 const segments = (pts: { x: number; y: number }[]) => pts.slice(1).map((p, i) => [pts[i], p] as const);
 /** Does a polyline pass through the inside of a node? */
 const through = (pts: { x: number; y: number }[], n: DiagramNode) =>
@@ -66,22 +70,39 @@ describe('routeEdges', () => {
     for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(0.5 - 1e-6);
   });
 
-  it('leaves hand-placed bends, curves and lifeline messages alone', () => {
+  it('leaves hand-placed bends and curves alone', () => {
     const d: Diagram = {
       version: 1,
       nodes: [node('a', 0, 0), node('b', 10, 0)],
       edges: [edge('bent', 'a', 'b', { waypoints: [{ x: 5, y: 6 }] }), edge('curve', 'a', 'b', { routing: 'curved' })],
     };
-    const routes = routeEdges(d);
-    expect(routes.get(d.edges[0], d.nodes[0], d.nodes[1])).toBeUndefined();
-    expect(routes.get(d.edges[1], d.nodes[0], d.nodes[1])).toBeUndefined();
+    expect(routeLevel(d).edges).toEqual(d.edges);
   });
 
-  it("ignores its routes for items that aren't the level's own (a drag preview)", () => {
-    const d: Diagram = { version: 1, nodes: [node('a', 0, 0), node('b', 10, 0)], edges: [edge('ab', 'a', 'b')] };
-    const routes = routeEdges(d);
-    expect(routes.get(d.edges[0], d.nodes[0], d.nodes[1])).toBeDefined();
-    expect(routes.get(d.edges[0], { ...d.nodes[0], x: 3 }, d.nodes[1])).toBeUndefined();
+  it('saves the route on the connection, so moving something else leaves the line as it was', () => {
+    const d: Diagram = { version: 1, nodes: [node('a', 0, 0), node('wall', 5, -0.5, { d: 3 }), node('b', 10, 0), node('c', 0, 10)], edges: [edge('ab', 'a', 'b')] };
+    const routed = routeLevel(d);
+    const e = routed.edges[0];
+    expect(e.routed).toBe('auto');
+    expect(e.waypoints?.length).toBeGreaterThan(0);
+    const line = drawn(routed, 'ab');
+    // Drawing it back gives the router's path exactly.
+    expect(line.slice(1, -1)).toEqual(e.waypoints);
+    const moved = { ...routed, nodes: routed.nodes.map((n) => (n.id === 'c' ? { ...n, x: 5, y: 4 } : n)) };
+    expect(drawn(moved, 'ab')).toEqual(line);
+  });
+
+  it('routes its own lines again, but not ones a person reshaped', () => {
+    const d: Diagram = { version: 1, nodes: [node('a', 0, 0), node('b', 10, 0), node('c', 10, 8)], edges: [edge('ab', 'a', 'b'), edge('ac', 'a', 'c')] };
+    const once = routeLevel(d);
+    // A person drags a bend of ac: the editor's markMoved takes it off the router.
+    const reshaped = markMoved(once, { ...once, edges: once.edges.map((e) => (e.id === 'ac' ? { ...e, waypoints: [{ x: 4, y: 12 }] } : e)) });
+    expect(reshaped.edges[1].routed).toBeUndefined();
+    // b moves; routing again redraws ab for where b is now, and leaves ac's bend.
+    const later = { ...reshaped, nodes: reshaped.nodes.map((n) => (n.id === 'b' ? { ...n, y: 4 } : n)) };
+    const again = routeLevel(later);
+    expect(again.edges[1]).toEqual(reshaped.edges[1]);
+    expect(again.edges[0].waypoints).not.toEqual(once.edges[0].waypoints);
   });
 
   it('draws the same routes every time', () => {

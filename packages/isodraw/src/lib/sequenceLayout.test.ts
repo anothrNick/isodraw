@@ -62,7 +62,8 @@ describe('Tidy on a sequence', () => {
   it('lays out everything else beside the sequence', () => {
     const db = get('db');
     expect(db.x).toBeGreaterThan(get('c').x + get('c').w + 3);
-    expect(d.edges.find((e) => e.id === 'x')!.fromAnchor).toBeUndefined();
+    // Its connection into the sequence is routed afresh for where db is now.
+    expect(d.edges.find((e) => e.id === 'x')!.routed).toBe('auto');
   });
 
   it('keeps the sign-in template in order, its note between the same messages', () => {
