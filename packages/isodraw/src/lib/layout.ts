@@ -23,10 +23,10 @@ export interface LayoutInput {
 
 export type Placement = { x: number; y: number; w: number; d: number };
 
-const PAD = 1;
-const PAD_TOP = 1.5;
-const COL_GAP = 4;
-const ROW_GAP = 3;
+export const PAD = 1;
+export const PAD_TOP = 1.5;
+export const COL_GAP = 4;
+export const ROW_GAP = 3;
 const MAX_COLUMN = 16;
 const half = (v: number) => Math.round(v * 2) / 2;
 
@@ -264,7 +264,7 @@ export function layeredLayout(input: LayoutInput): Map<string, Placement> {
 export const isAutoPlaced = (n: DiagramNode) => n.placed === 'auto';
 
 /** Items that take part in layout: everything but free text. */
-const laidOut = (n: DiagramNode) => n.kind !== 'text';
+export const laidOut = (n: DiagramNode) => n.kind !== 'text';
 
 /**
  * Lay out a whole level: areas keep their contents, components go in columns
@@ -282,10 +282,9 @@ export function layoutLevel(d: Diagram): Diagram {
   return layoutItems(d, laidOut);
 }
 
-/** Lay out some of a level's items by flow, starting at `at` (by default where they are now). */
-function layoutItems(d: Diagram, include: (n: DiagramNode) => boolean, at?: { x: number; y: number }): Diagram {
+/** What a level's layout works from: the items, which area each is in, and the links between components. */
+export function levelInput(d: Diagram, include: (n: DiagramNode) => boolean) {
   const items = d.nodes.filter(include);
-  if (!items.length) return d;
   const ids = new Set(items.map((n) => n.id));
   const byId = new Map(items.map((n) => [n.id, n]));
   const parents = parentMap(items);
@@ -297,15 +296,15 @@ function layoutItems(d: Diagram, include: (n: DiagramNode) => boolean, at?: { x:
   const links = d.edges
     .filter((e) => ids.has(e.from) && ids.has(e.to) && !isContainer(byId.get(e.from)!) && !isContainer(byId.get(e.to)!))
     .map((e) => [e.from, e.to] as [string, string]);
-  const placed = layeredLayout({
-    children,
-    isArea: (id) => isContainer(byId.get(id)!),
-    size: (id) => ({ w: byId.get(id)!.w, d: byId.get(id)!.d }),
-    label: (id) => byId.get(id)!.label ?? id,
-    // Keep the current top-to-bottom order where the flow allows it.
-    order: (id) => byId.get(id)!.y * 1000 + byId.get(id)!.x,
-    links,
-  });
+  return { items, byId, children, links };
+}
+
+/**
+ * Put a layout's placements (top group's corner at 0, 0) on the level,
+ * starting at `at` (by default where the items are now), marking them
+ * auto-placed; connections between moved items lose their bends and anchors.
+ */
+export function applyPlacements(d: Diagram, items: DiagramNode[], placed: Map<string, Placement>, at?: { x: number; y: number }): Diagram {
   const x0 = at?.x ?? Math.min(...items.map((n) => n.x));
   const y0 = at?.y ?? Math.min(...items.map((n) => n.y));
   const moved = new Set<string>();
@@ -323,6 +322,22 @@ function layoutItems(d: Diagram, include: (n: DiagramNode) => boolean, at?: { x:
     return { ...rest, ...(f?.line !== undefined ? { fromAnchor: f } : {}), ...(t?.line !== undefined ? { toAnchor: t } : {}) };
   });
   return { ...d, nodes, edges };
+}
+
+/** Lay out some of a level's items by flow, starting at `at` (by default where they are now). */
+function layoutItems(d: Diagram, include: (n: DiagramNode) => boolean, at?: { x: number; y: number }): Diagram {
+  const { items, byId, children, links } = levelInput(d, include);
+  if (!items.length) return d;
+  const placed = layeredLayout({
+    children,
+    isArea: (id) => isContainer(byId.get(id)!),
+    size: (id) => ({ w: byId.get(id)!.w, d: byId.get(id)!.d }),
+    label: (id) => byId.get(id)!.label ?? id,
+    // Keep the current top-to-bottom order where the flow allows it.
+    order: (id) => byId.get(id)!.y * 1000 + byId.get(id)!.x,
+    links,
+  });
+  return applyPlacements(d, items, placed, at);
 }
 
 const GEOMETRY = ['x', 'y', 'w', 'd', 'h', 'z'] as const;
