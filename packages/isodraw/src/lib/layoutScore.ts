@@ -1,4 +1,5 @@
 import { isContainer, parentMap } from './containers';
+import { itemLabelBox, labelBox, pointAlong } from './autoRoute';
 import { resolveEdge } from './routing';
 import type { Diagram, DiagramNode } from './types';
 
@@ -27,6 +28,12 @@ export interface LayoutScore {
   sprawl: number;
   /** Average distance an item moved from where it was. */
   moved: number;
+  /** Connection labels sitting on an item (or its label), across another line, or on another label. */
+  labelOnItem: number;
+  labelOnLine: number;
+  labelOnLabel: number;
+  /** Lines running through an item's label (not the item's own lines). */
+  throughLabel: number;
 }
 
 type Pt = { x: number; y: number };
@@ -40,16 +47,15 @@ function segments(pts: Pt[]): [Pt, Pt][] {
   return pts.slice(1).map((p, i) => [pts[i], p]);
 }
 
-/** Does a segment pass through the inside of a node's footprint (shrunk a little, so grazing doesn't count)? */
-function hits([a, b]: [Pt, Pt], n: DiagramNode): boolean {
-  const m = 0.15;
-  const [x0, y0, x1, y1] = [n.x + m, n.y + m, n.x + n.w - m, n.y + n.d - m];
-  // Clip the segment to the box (Liang–Barsky).
+type Rect = { x0: number; y0: number; x1: number; y1: number };
+
+/** Does a segment pass through a box (Liang–Barsky clip)? */
+function hitsBox([a, b]: [Pt, Pt], r: Rect): boolean {
   let t0 = 0;
   let t1 = 1;
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  for (const [p, q] of [[-dx, a.x - x0], [dx, x1 - a.x], [-dy, a.y - y0], [dy, y1 - a.y]] as const) {
+  for (const [p, q] of [[-dx, a.x - r.x0], [dx, r.x1 - a.x], [-dy, a.y - r.y0], [dy, r.y1 - a.y]] as const) {
     if (p === 0) {
       if (q < 0) return false;
       continue;
@@ -62,6 +68,13 @@ function hits([a, b]: [Pt, Pt], n: DiagramNode): boolean {
   return true;
 }
 
+/** Does a segment pass through the inside of a node's footprint (shrunk a little, so grazing doesn't count)? */
+function hits(s: [Pt, Pt], n: DiagramNode): boolean {
+  const m = 0.15;
+  return hitsBox(s, { x0: n.x + m, y0: n.y + m, x1: n.x + n.w - m, y1: n.y + n.d - m });
+}
+
+/** Scores what's drawn: items where they are, lines as their anchors and bends draw them. */
 export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
   const byId = new Map(d.nodes.map((n) => [n.id, n]));
   const parts = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
@@ -124,11 +137,30 @@ export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
     moved /= d.nodes.length || 1;
   }
 
+  // Labels: a connection's pill where it's drawn, and each item's label under it.
+  const box = (r: Rect, s: Rect) => r.x0 < s.x1 && s.x0 < r.x1 && r.y0 < s.y1 && s.y0 < r.y1;
+  const itemBoxes = [...parts.map((n) => ({ x0: n.x, y0: n.y, x1: n.x + n.w, y1: n.y + n.d })), ...parts.filter((n) => n.label).map(itemLabelBox)];
+  const pills = routes.filter((r) => r.e.label).map((r) => ({ r, box: labelBox(r.e.label!, pointAlong([r.segs[0]?.[0] ?? { x: 0, y: 0 }, ...r.segs.map((s) => s[1])], r.e.labelT ?? 0.5)) }));
+  let labelOnItem = 0;
+  let labelOnLine = 0;
+  let labelOnLabel = 0;
+  for (const p of pills) {
+    if (itemBoxes.some((b) => box(p.box, b))) labelOnItem++;
+    if (routes.some((r) => r !== p.r && r.segs.some((s) => hitsBox(s, p.box)))) labelOnLine++;
+  }
+  for (let i = 0; i < pills.length; i++) for (let j = i + 1; j < pills.length; j++) if (box(pills[i].box, pills[j].box)) labelOnLabel++;
+  let throughLabel = 0;
+  for (const n of parts) {
+    if (!n.label) continue;
+    const b = itemLabelBox(n);
+    if (routes.some((r) => r.e.from !== n.id && r.e.to !== n.id && r.segs.some((s) => hitsBox(s, b)))) throughLabel++;
+  }
+
   const length = routes.reduce((t, r) => t + r.segs.reduce((s, [a, b]) => s + Math.hypot(b.x - a.x, b.y - a.y), 0), 0);
   const all = d.nodes.filter((n) => n.kind !== 'text');
   const w = Math.max(...all.map((n) => n.x + n.w)) - Math.min(...all.map((n) => n.x));
   const h = Math.max(...all.map((n) => n.y + n.d)) - Math.min(...all.map((n) => n.y));
   const own = parts.reduce((t, n) => t + n.w * n.d, 0) || 1;
 
-  return { crossings, parallel: Math.round(parallel * 10) / 10, close: Math.round(close * 10) / 10, overlaps, through, regrouped, length: Math.round(length), sprawl: Math.round(((w * h) / own) * 10) / 10, moved: Math.round(moved * 10) / 10 };
+  return { labelOnItem, labelOnLine, labelOnLabel, throughLabel, crossings, parallel: Math.round(parallel * 10) / 10, close: Math.round(close * 10) / 10, overlaps, through, regrouped, length: Math.round(length), sprawl: Math.round(((w * h) / own) * 10) / 10, moved: Math.round(moved * 10) / 10 };
 }

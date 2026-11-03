@@ -1,6 +1,6 @@
 import { isContainer } from './containers';
-import type { Pt } from './geometry';
-import { anchorPoint, autoAnchors, interpolateZ, SIDE_DIR, SIDES, simplifyPath, STUB, type ResolvedEdge } from './routing';
+import { TILE, type Pt } from './geometry';
+import { anchorPoint, autoAnchors, interpolateZ, resolveEdge, SIDE_DIR, SIDES, simplifyPath, STUB, type ResolvedEdge } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, EdgeAnchor, Side } from './types';
 
 /**
@@ -27,6 +27,14 @@ const SHARED = 6;
 /** Share of that cost for running close beside another connection (under a grid step), or a grid step away: bundles are hard to follow too. */
 const CLOSE = 0.6;
 const NEAR = 0.25;
+/** Cost per unit of running through an item's label space, on top of the length. */
+const LABEL_SPACE = 4;
+/**
+ * Cost of crossing another line at right angles: readable, but each one costs
+ * the eye something. High enough that a line won't take a long way round a
+ * label if that means crossing several others.
+ */
+const CROSS = 2;
 /** Cost of leaving a side that isn't the one facing the other end. */
 const SIDE_COST = { facing: 0, across: 1.5, away: 4 };
 /** Cost of each line more than a side has room for, so they spill onto another side instead of bunching up. */
@@ -52,14 +60,24 @@ const dirIndex = (d: Pt) => (d.x > 0 ? 0 : d.y > 0 ? 1 : d.x < 0 ? 2 : 3);
 const opposite = (i: number) => (i + 2) % 4;
 const key = (v: number) => Math.round(v * 100);
 
-type Rect = { x0: number; y0: number; x1: number; y1: number };
+type Rect = { x0: number; y0: number; x1: number; y1: number; owner?: string };
 
 /** Items to keep clear of, bucketed by area, so checking a point looks at a few nearby ones only. */
 class Walls {
   private buckets = new Map<number, Rect[]>();
+  private soft = new Map<number, Rect[]>();
   private static SIZE = 4;
-  constructor(rects: Rect[]) {
+  /** `rects` block; `softRects` (label space, each owned by its item) cost to pass through. */
+  constructor(rects: Rect[], softRects: Rect[] = []) {
     const S = Walls.SIZE;
+    for (const r of softRects) {
+      for (let i = Math.floor(r.x0 / S); i <= Math.floor(r.x1 / S); i++) {
+        for (let j = Math.floor(r.y0 / S); j <= Math.floor(r.y1 / S); j++) {
+          const k = i * 100003 + j;
+          this.soft.set(k, [...(this.soft.get(k) ?? []), r]);
+        }
+      }
+    }
     for (const r of rects) {
       for (let i = Math.floor(r.x0 / S); i <= Math.floor(r.x1 / S); i++) {
         for (let j = Math.floor(r.y0 / S); j <= Math.floor(r.y1 / S); j++) {
@@ -73,12 +91,17 @@ class Walls {
     const near = this.buckets.get(Math.floor(x / Walls.SIZE) * 100003 + Math.floor(y / Walls.SIZE));
     return !!near && near.some((r) => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1);
   }
+  /** Is the point in some item's label space, other than the items in `except` (a line's own ends)? */
+  costly(x: number, y: number, except: ReadonlySet<string>): boolean {
+    const near = this.soft.get(Math.floor(x / Walls.SIZE) * 100003 + Math.floor(y / Walls.SIZE));
+    return !!near && near.some((r) => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1 && !(r.owner && except.has(r.owner)));
+  }
 }
 type End = { anchor: EdgeAnchor; at: Pt; out: number; cost: number };
 
-/** Which connections the router draws: orthogonal ones between two items, without hand-placed bends or lifeline ends. */
+/** Which connections the router draws: orthogonal and curved ones between two items, without hand-placed bends or lifeline ends. */
 export const routed = (e: DiagramEdge) =>
-  e.routing === 'orthogonal' && !e.waypoints?.length && e.from !== e.to && e.fromAnchor?.line === undefined && e.toAnchor?.line === undefined;
+  (e.routing === 'orthogonal' || e.routing === 'curved') && !e.waypoints?.length && e.from !== e.to && e.fromAnchor?.line === undefined && e.toAnchor?.line === undefined;
 
 /** Tracks already taken: for each horizontal (h) or vertical (v) line, the stretches used along it. */
 class Tracks {
@@ -105,6 +128,19 @@ class Tracks {
    * How much of a stretch is already taken, weighted: in full on its own
    * track, and by closeness on tracks less than a grid step and a bit away.
    */
+  /** How many existing tracks a stretch crosses at right angles. */
+  crosses(p: Pt, q: Pt): number {
+    const horizontal = Math.abs(p.y - q.y) < 1e-6;
+    const other = horizontal ? 'v' : 'h';
+    const level = horizontal ? p.y : p.x;
+    const [a, b] = horizontal ? [Math.min(p.x, q.x), Math.max(p.x, q.x)] : [Math.min(p.y, q.y), Math.max(p.y, q.y)];
+    const list = this.sorted[other];
+    let n = 0;
+    for (let i = lowerBound(list, key(a) + 1); i < list.length && list[i] < key(b); i++) {
+      for (const [lo, hi] of this.lines[other].get(list[i])!) if (level > lo + 1e-6 && level < hi - 1e-6) n++;
+    }
+    return n;
+  }
   shared(p: Pt, q: Pt): number {
     const o = Math.abs(p.y - q.y) < 1e-6 ? 'h' : 'v';
     const line = key(o === 'h' ? p.y : p.x);
@@ -212,7 +248,7 @@ function axis(lo: number, hi: number, exact: number[]): number[] {
 }
 
 /** The cheapest grid path from any start to any finish, as world points from start to finish (excluding the anchors). */
-function search(starts: End[], finishes: End[], walls: Walls, tracks: Tracks, window: Rect, budget: Budget) {
+function search(starts: End[], finishes: End[], walls: Walls, tracks: Tracks, window: Rect, budget: Budget, except: ReadonlySet<string>) {
   const lead = (e: End) => ({ x: e.at.x + DIRS[e.out].x * STUB, y: e.at.y + DIRS[e.out].y * STUB });
   const S = starts.map(lead);
   const F = finishes.map(lead);
@@ -282,7 +318,8 @@ function search(starts: End[], finishes: End[], walls: Walls, tracks: Tracks, wi
       const p = { x: xs[i], y: ys[j] };
       const q = { x: xs[ni], y: ys[nj] };
       const len = Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
-      const step = len + (nd === dir ? 0 : BEND) + SHARED * tracks.shared(p, q);
+      const label = walls.costly((p.x + q.x) / 2, (p.y + q.y) / 2, except) ? LABEL_SPACE * len : 0;
+      const step = len + (nd === dir ? 0 : BEND) + SHARED * tracks.shared(p, q) + label + CROSS * tracks.crosses(p, q);
       const ns = next * 4 + nd;
       if (c + step < cost[ns]) {
         cost[ns] = c + step;
@@ -313,11 +350,12 @@ const bounds = (pts: Pt[], pad: number): Rect => ({
 
 function route(a: DiagramNode, b: DiagramNode, from: End[], to: End[], walls: Walls, tracks: Tracks, level: Rect, budget: Budget, wide = true) {
   const pts = [...from, ...to].map((e) => e.at);
-  const near = search(from, to, walls, tracks, bounds(pts, MARGIN), budget);
+  const own = new Set([a.id, b.id]);
+  const near = search(from, to, walls, tracks, bounds(pts, MARGIN), budget, own);
   const found =
     near ??
     (wide
-      ? search(from, to, walls, tracks, { x0: Math.min(level.x0, ...pts.map((p) => p.x)) - MARGIN, y0: Math.min(level.y0, ...pts.map((p) => p.y)) - MARGIN, x1: Math.max(level.x1, ...pts.map((p) => p.x)) + MARGIN, y1: Math.max(level.y1, ...pts.map((p) => p.y)) + MARGIN }, budget)
+      ? search(from, to, walls, tracks, { x0: Math.min(level.x0, ...pts.map((p) => p.x)) - MARGIN, y0: Math.min(level.y0, ...pts.map((p) => p.y)) - MARGIN, x1: Math.max(level.x1, ...pts.map((p) => p.x)) + MARGIN, y1: Math.max(level.y1, ...pts.map((p) => p.y)) + MARGIN }, budget, own)
       : null);
   if (!found) return null;
   const { path, start, finish } = found;
@@ -352,7 +390,97 @@ export function routeLevel(d: Diagram): Diagram {
     if (!r) return d.edges[i].routed === 'auto' && e !== d.edges[i] ? d.edges[i] : e;
     return { ...e, fromAnchor: r.from, toAnchor: r.to, waypoints: r.pts.slice(1, -1).map((p) => ({ x: round(p.x), y: round(p.y) })), routed: 'auto' as const };
   });
-  return { ...d, edges };
+  return placeLabels({ ...d, edges });
+}
+
+// ---------- labels ----------
+
+/** Where an item's label sits (under its footprint, centred), in world units. */
+export function itemLabelBox(n: DiagramNode): Rect {
+  const w = Math.max(1, n.label!.length * (7 / TILE)) / 2 + 0.2;
+  const cx = n.x + n.w / 2;
+  return { x0: cx - w, y0: n.y + n.d, x1: cx + w, y1: n.y + n.d + 0.85 };
+}
+
+/** The point a fraction `t` of the way along a polyline, by length. */
+export function pointAlong(pts: Pt[], t: number): Pt {
+  const lens = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
+  let left = lens.reduce((a, b) => a + b, 0) * Math.min(1, Math.max(0, t));
+  for (let i = 0; i < lens.length; i++) {
+    if (left <= lens[i] && lens[i] > 0) {
+      const k = left / lens[i];
+      return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k };
+    }
+    left -= lens[i];
+  }
+  return pts[pts.length - 1] ?? pts[0];
+}
+
+/** A connection label's pill around a point, in world units (the pill is drawn in screen pixels). */
+export function labelBox(label: string, at: Pt): Rect {
+  const w = (label.length * 6.6 + 12) / TILE / 2;
+  const h = 18 / TILE / 2;
+  return { x0: at.x - w, y0: at.y - h, x1: at.x + w, y1: at.y + h };
+}
+
+const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+/** Does a segment pass through a box? */
+function segmentHits([p, q]: [Pt, Pt], b: Rect): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = q.x - p.x;
+  const dy = q.y - p.y;
+  for (const [pp, qq] of [[-dx, p.x - b.x0], [dx, b.x1 - p.x], [-dy, p.y - b.y0], [dy, b.y1 - p.y]] as const) {
+    if (pp === 0) {
+      if (qq < 0) return false;
+      continue;
+    }
+    const t = qq / pp;
+    if (pp < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/** What a label sitting somewhere costs: on an item, across a line, on another label. */
+const ON_ITEM = 10;
+const ON_LINE = 4;
+const ON_LABEL = 6;
+/** Per unit of distance along the line from its middle, so labels stay near the middle when they can. */
+const OFF_MIDDLE = 0.6;
+
+/**
+ * Put each connection's label at the clearest spot along its line, from a
+ * fifth of the way along to four fifths: off items (and their labels), off
+ * other lines, and off labels already placed. Saved as `labelT`.
+ */
+export function placeLabels(d: Diagram): Diagram {
+  const byId = new Map(d.nodes.map((n) => [n.id, n]));
+  const solid = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
+  const boxes: Rect[] = [...solid.map((n) => ({ x0: n.x, y0: n.y, x1: n.x + n.w, y1: n.y + n.d })), ...solid.filter((n) => n.label).map(itemLabelBox)];
+  const lines = d.edges
+    .filter((e) => e.from !== e.to && byId.has(e.from) && byId.has(e.to))
+    .map((e) => ({ e, pts: resolveEdge(e, byId.get(e.from)!, byId.get(e.to)!).pts }));
+  const segs = (pts: Pt[]) => pts.slice(1).map((p, i) => [pts[i], p] as [Pt, Pt]);
+  const placed: Rect[] = [];
+  const at = new Map<string, number>();
+  // Longest lines first: they have the most room to give.
+  const length = (pts: Pt[]) => segs(pts).reduce((t, [p, q]) => t + Math.hypot(q.x - p.x, q.y - p.y), 0);
+  for (const { e, pts } of [...lines].filter((l) => l.e.label).sort((p, q) => length(q.pts) - length(p.pts))) {
+    let best = { t: 0.5, cost: Infinity };
+    for (let t = 0.2; t <= 0.8 + 1e-9; t += 0.05) {
+      const box = labelBox(e.label!, pointAlong(pts, t));
+      let cost = OFF_MIDDLE * Math.abs(t - 0.5) * length(pts);
+      for (const b of boxes) if (overlaps(box, b)) cost += ON_ITEM;
+      for (const l of lines) if (l.e !== e && segs(l.pts).some((sg) => segmentHits(sg, box))) cost += ON_LINE;
+      for (const b of placed) if (overlaps(box, b)) cost += ON_LABEL;
+      if (cost < best.cost - 1e-9) best = { t: Math.round(t * 100) / 100, cost };
+    }
+    placed.push(labelBox(e.label!, pointAlong(pts, best.t)));
+    at.set(e.id, best.t);
+  }
+  return { ...d, edges: d.edges.map((e) => (at.has(e.id) ? { ...e, labelT: at.get(e.id) } : e)) };
 }
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
@@ -360,7 +488,11 @@ const round = (v: number) => Math.round(v * 1000) / 1000;
 function computeRoutes(d: Pick<Diagram, 'nodes' | 'edges'>): Map<string, ResolvedEdge> {
   const byId = new Map(d.nodes.map((n) => [n.id, n]));
   const solid = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
-  const walls = new Walls(solid.map((n) => ({ x0: n.x - CLEAR, y0: n.y - CLEAR, x1: n.x + n.w + CLEAR, y1: n.y + n.d + CLEAR })));
+  const walls = new Walls(
+    solid.map((n) => ({ x0: n.x - CLEAR, y0: n.y - CLEAR, x1: n.x + n.w + CLEAR, y1: n.y + n.d + CLEAR })),
+    // The label under each item: dear to run through (an item's own lines may leave through its own).
+    solid.filter((n) => n.label).map((n) => ({ ...itemLabelBox(n), owner: n.id })),
+  );
   const level = solid.length ? bounds(solid.flatMap((n) => [{ x: n.x, y: n.y }, { x: n.x + n.w, y: n.y + n.d }]), 0) : { x0: 0, y0: 0, x1: 0, y1: 0 };
   const edges = d.edges.filter((e) => routed(e) && byId.has(e.from) && byId.has(e.to));
   const out = new Map<string, ResolvedEdge>();

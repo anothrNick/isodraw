@@ -70,13 +70,17 @@ describe('routeEdges', () => {
     for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(0.5 - 1e-6);
   });
 
-  it('leaves hand-placed bends and curves alone', () => {
+  it('leaves hand-placed bends alone, and routes a curve while keeping it curved', () => {
     const d: Diagram = {
       version: 1,
-      nodes: [node('a', 0, 0), node('b', 10, 0)],
+      nodes: [node('a', 0, 0), node('wall', 5, -0.5, { d: 3 }), node('b', 10, 0)],
       edges: [edge('bent', 'a', 'b', { waypoints: [{ x: 5, y: 6 }] }), edge('curve', 'a', 'b', { routing: 'curved' })],
     };
-    expect(routeLevel(d).edges).toEqual(d.edges);
+    const out = routeLevel(d);
+    expect(out.edges[0]).toEqual(d.edges[0]);
+    expect(out.edges[1].routing).toBe('curved');
+    expect(out.edges[1].routed).toBe('auto');
+    expect(through(drawn(out, 'curve'), d.nodes[1])).toBe(false);
   });
 
   it('saves the route on the connection, so moving something else leaves the line as it was', () => {

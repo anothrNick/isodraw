@@ -118,11 +118,11 @@ export class Client {
    * version with this edit item by item (as the app does) and try again, so
    * nobody's work is overwritten.
    */
-  async edit<T>(ref: string, change: (d: Diagram) => { diagram: Diagram; result: T }): Promise<{ meta: DiagramMeta; result: T; merged: boolean }> {
+  async edit<T>(ref: string, change: (d: Diagram) => { diagram: Diagram; result: T } | Promise<{ diagram: Diagram; result: T }>): Promise<{ meta: DiagramMeta; result: T; merged: boolean }> {
     const start = await this.get(ref);
     let base = start.content;
     let version = start.version;
-    let { diagram: mine, result } = change(base);
+    let { diagram: mine, result } = await change(base);
     let merged = false;
     for (let attempt = 0; attempt < 5; attempt++) {
       try {

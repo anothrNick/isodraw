@@ -4,7 +4,7 @@ import { CliError, Client, type DiagramMeta } from './client';
 import { clearConfig, configPath, loadConfig, saveConfig } from './config';
 import { describeText, outline } from './describe';
 import { GUIDE } from './guide';
-import { exportDocsMarkdown, iconTypes, importTerraform, isTerraformJson, isoIconLibrary, layoutLevel, levelAt, parseDiagram, withLevel } from './lib';
+import { exportDocsMarkdown, iconTypes, importTerraform, isTerraformJson, isoIconLibrary, layoutLevelAsync, levelAt, parseDiagram, withLevel } from './lib';
 import { browserLogin } from './login';
 import { serveStdio } from './mcpStdio';
 import { applyOps, OpError, parseLevel, readDoc, resolveLevel, type Op } from './ops';
@@ -109,11 +109,11 @@ async function change(ref: string, ops: Op[], dryRun = false) {
   const level = parseLevel(opt.level);
   if (dryRun) {
     const d = await client.get(ref);
-    const r = applyOps(d.content, ops, resolveLevel(d.content, level));
+    const r = await applyOps(d.content, ops, resolveLevel(d.content, level));
     return out({ dryRun: true, changes: r.changes, added: r.added }, ['Would make these changes (nothing saved):', ...r.changes.map((c) => `- ${c}`)].join('\n'));
   }
-  const { meta, result, merged } = await client.edit(ref, (content) => {
-    const r = applyOps(content, ops, resolveLevel(content, level));
+  const { meta, result, merged } = await client.edit(ref, async (content) => {
+    const r = await applyOps(content, ops, resolveLevel(content, level));
     return { diagram: r.diagram, result: r };
   });
   out(
@@ -268,10 +268,11 @@ async function main() {
 
     case 'layout': {
       const level = parseLevel(opt.level);
-      const { meta, result } = await client.edit(need(sub, 'a diagram'), (content) => {
+      const { meta, result } = await client.edit(need(sub, 'a diagram'), async (content) => {
         const at = resolveLevel(content, level);
         const before = levelAt(content, at)!;
-        return { diagram: withLevel(content, at, layoutLevel), result: before.nodes.filter((n) => n.kind !== 'text').length };
+        const laid = await layoutLevelAsync(before);
+        return { diagram: withLevel(content, at, () => laid), result: before.nodes.filter((n) => n.kind !== 'text').length };
       });
       return out({ diagram: meta.id, version: meta.version, items: result }, `Laid out ${result} items. Saved ${meta.title} (version ${meta.version}).`);
     }

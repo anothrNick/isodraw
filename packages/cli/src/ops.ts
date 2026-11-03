@@ -13,7 +13,7 @@ import {
   levelNodes,
   lineTop,
   nodeTitle,
-  settleLevel,
+  settleLevelAsync,
   SHAPES,
   withLevel,
   type Diagram,
@@ -246,7 +246,7 @@ export interface Applied {
 }
 
 /** Apply edits in order. Each op works on the result of the ones before it. */
-export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = []): Applied {
+export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = []): Promise<Applied> {
   let diagram = root;
   const changes: string[] = [];
   const added: string[] = [];
@@ -447,7 +447,7 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
       throw e;
     }
   }
-  diagram = arrange(diagram, touched, loose);
+  diagram = await arrange(diagram, touched, loose);
   return { diagram, changes, added };
 }
 
@@ -457,12 +457,12 @@ export function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath = [])
  * that weren't put near something move, to sit beside what they connect to:
  * after something that feeds them, or before something they feed.
  */
-function arrange(root: Diagram, touched: Map<string, LevelPath>, loose: { level: LevelPath; id: string }[]): Diagram {
+async function arrange(root: Diagram, touched: Map<string, LevelPath>, loose: { level: LevelPath; id: string }[]): Promise<Diagram> {
   let diagram = root;
   for (const level of touched.values()) {
     const before = levelAt(diagram, level);
     if (!before) continue;
-    const settled = settleLevel(before);
+    const settled = await settleLevelAsync(before);
     if (settled !== before) {
       diagram = withLevel(diagram, level, () => settled);
       continue;

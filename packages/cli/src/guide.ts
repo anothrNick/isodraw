@@ -70,9 +70,11 @@ sequence switches to the flat view, where sequences read best.
 ## Layout is the platform's job
 Never pass coordinates. Items you add are placed for you, and a level made
 only of platform-placed items is laid out again after each change, so it
-stays tidy. Items a person moved stay where they are. \`isodraw layout <diagram>\`
-lays out a whole level, moving everything on it, so only use it when the user
-asks for a tidy-up or the level is clearly a mess. A sequence on the level is
+stays tidy: items in columns by flow with as few crossings as possible, lines
+routed around items and kept apart, labels in clear spots. Items a person
+moved stay where they are. \`isodraw layout <diagram>\` lays out a whole level,
+moving everything on it, so only use it when the user asks for a tidy-up or
+the level is clearly a mess. A sequence on the level is
 laid out as one: participants in a row, a message per row in their order.
 
 ## Show the user what you made

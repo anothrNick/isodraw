@@ -4,7 +4,7 @@ import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, sn
 import { containerOf, descendantsOf, isContainer } from './containers';
 import { hasDoc } from './docs';
 import { fitIsoIcon, isIsoIcon } from './isoIcons';
-import { SceneContent, TargetHighlight, edgeGeometry, isoIconRect, midpoint, standingRect } from './render';
+import { SceneContent, TargetHighlight, edgeGeometry, isoIconRect, labelPoint, standingRect } from './render';
 import {
   SIDES,
   type InferredRoute,
@@ -1012,7 +1012,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
             .map((ed) => {
               const ends = edgeEnds(ed);
               if (!ends) return null;
-              const m = midpoint(edgeGeometry(ed, ends[0], ends[1], proj).screen);
+              const m = labelPoint(ed, edgeGeometry(ed, ends[0], ends[1], proj).screen);
               // Sit beside the edge label pill when there is one.
               const dx = ed.label ? (ed.label.length * 6.6 + 12) / 2 + 12 : 0;
               return badge(`edge:${ed.id}`, { x: m.x + dx, y: m.y - (ed.label ? 0 : badgeSize * 0.9) }, ed.label || 'connection');

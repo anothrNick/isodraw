@@ -22,4 +22,6 @@ export type * from './types';
 export { levelAt, validLevel, withLevel, liftEmbeds } from './levels';
 export { mergeDiagrams } from './merge';
 export { layoutLevel, settleLevel, layeredLayout } from './layout';
+export { layoutLevelAsync, settleLevelAsync } from './elkLayout';
+export { routeLevel } from './autoRoute';
 export type { LevelPath } from './levels';

@@ -10,8 +10,9 @@ import type { Diagram } from './types';
 /**
  * The layout test bench: every example, tidied as drawn and from shuffled
  * positions, by each engine, scored. Both engines must never overlap items or
- * move them out of their areas; `BENCH=1 npx vitest run layoutBench` prints
- * the whole table for comparing them.
+ * move them out of their areas, and ELK (what Tidy uses; 'layered' is the
+ * fallback) must keep lines off items, labels and each other.
+ * `BENCH=1 npx vitest run layoutBench` prints the whole table for comparing them.
  */
 
 /** Swap components' places with others in the same area, deterministically, as if they'd been added in a jumble. */
@@ -33,7 +34,8 @@ function shuffled(d: Diagram): Diagram {
   return {
     ...d,
     nodes: d.nodes.map((n) => (spot.has(n.id) ? { ...n, x: spot.get(n.id)!.x - n.w / 2, y: spot.get(n.id)!.y - n.d / 2 } : n)),
-    edges: d.edges.map(({ waypoints: _w, fromAnchor: _f, toAnchor: _t, ...e }) => e),
+    // Bends and ends go too (a message's place on a lifeline is part of what it is, so that stays).
+    edges: d.edges.map(({ waypoints: _w, fromAnchor: f, toAnchor: t, ...e }) => ({ ...e, ...(f?.line !== undefined ? { fromAnchor: f } : {}), ...(t?.line !== undefined ? { toAnchor: t } : {}) })),
   };
 }
 
@@ -60,6 +62,12 @@ describe('layout bench', () => {
         rows.push({ case: name, engine, ms, ...score });
         expect(score.overlaps).toBe(0);
         expect(score.regrouped).toBe(0);
+        if (engine === 'elk') {
+          // The layout Tidy uses: no line through an item or a label, no two lines on one track.
+          expect(score.through).toBe(0);
+          expect(score.throughLabel).toBe(0);
+          expect(score.parallel).toBeLessThan(0.5);
+        }
       });
     }
   }
@@ -71,7 +79,7 @@ describe('layout bench', () => {
     console.table(
       ENGINES.map(([engine]) => ({
         engine,
-        ...Object.fromEntries((['through', 'parallel', 'crossings', 'overlaps', 'regrouped', 'length', 'sprawl'] as const).map((k) => [k, total(engine, k)])),
+        ...Object.fromEntries((['through', 'throughLabel', 'parallel', 'close', 'crossings', 'labelOnItem', 'labelOnLine', 'labelOnLabel', 'overlaps', 'regrouped', 'length', 'sprawl'] as const).map((k) => [k, total(engine, k)])),
         ms: rows.filter((r) => r.engine === engine).reduce((t, r) => t + r.ms, 0),
       })),
     );

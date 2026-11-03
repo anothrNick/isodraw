@@ -256,8 +256,8 @@ export function createMcpServer(client: Client, options: Omit<ServerOptions, 'in
         const created = await client.create(a.title);
         let summary = '';
         if (a.changes?.length) {
-          const { result } = await client.edit(created.id, (content) => {
-            const r = applyOps(content, a.changes as Op[]);
+          const { result } = await client.edit(created.id, async (content) => {
+            const r = await applyOps(content, a.changes as Op[]);
             return { diagram: r.diagram, result: r };
           });
           summary = '\n' + result.changes.map((c) => `- ${c}`).join('\n');
@@ -285,11 +285,11 @@ export function createMcpServer(client: Client, options: Omit<ServerOptions, 'in
         const ops = a.changes as Op[];
         if (a.dry_run) {
           const d = await client.get(a.diagram);
-          const r = applyOps(d.content, ops, resolveLevel(d.content, parseLevel(a.level)));
+          const r = await applyOps(d.content, ops, resolveLevel(d.content, parseLevel(a.level)));
           return text(['Would make these changes (nothing saved):', ...r.changes.map((c) => `- ${c}`)].join('\n'));
         }
-        const { meta, result, merged } = await client.edit(a.diagram, (content) => {
-          const r = applyOps(content, ops, resolveLevel(content, parseLevel(a.level)));
+        const { meta, result, merged } = await client.edit(a.diagram, async (content) => {
+          const r = await applyOps(content, ops, resolveLevel(content, parseLevel(a.level)));
           return { diagram: r.diagram, result: r };
         });
         const lines = [

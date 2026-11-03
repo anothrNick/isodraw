@@ -138,6 +138,8 @@ export interface DiagramEdge {
   /** Color of packets / pulses; defaults to a lighter edge color. */
   animationColor?: string;
   label?: string;
+  /** Where along the line the label sits (0..1 by length; default the middle). Tidy picks the clearest spot. */
+  labelT?: number;
   /** Markdown documentation for this connection. */
   doc?: string;
   /** @deprecated use lineStyle */

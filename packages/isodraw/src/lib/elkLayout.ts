@@ -1,7 +1,8 @@
-import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk.bundled.js';
+import type ELK from 'elkjs/lib/elk.bundled.js';
+import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk.bundled.js';
 import { routeLevel } from './autoRoute';
 import { isContainer } from './containers';
-import { applyPlacements, COL_GAP, laidOut, levelInput, PAD, PAD_TOP, ROW_GAP, type Placement } from './layout';
+import { applyPlacements, COL_GAP, isAutoPlaced, laidOut, layoutLevel, levelInput, PAD, PAD_TOP, ROW_GAP, type Placement } from './layout';
 import { layoutSequence } from './sequenceLayout';
 import type { Diagram } from './types';
 
@@ -10,7 +11,8 @@ import type { Diagram } from './types';
  * components in columns by flow like ours, but lays out areas and their
  * contents in one pass and works harder at keeping lines from crossing. Areas
  * keep their contents, a sequence still gets its own layout, and the result
- * starts where the old content did.
+ * starts where the old content did. ELK is loaded the first time it's needed
+ * (it's big), so Tidy is the only thing that pays for it.
  */
 
 /** ELK units per world unit: ELK's own defaults are tuned for pixel-ish sizes. */
@@ -19,7 +21,27 @@ const S = 10;
 const LABEL = 1;
 const half = (v: number) => Math.round(v * 2) / 2;
 
-let elk: InstanceType<typeof ELK> | null = null;
+let elk: Promise<InstanceType<typeof ELK>> | null = null;
+const loadElk = () => (elk ??= import('elkjs/lib/elk.bundled.js').then((m) => new m.default()));
+
+/**
+ * The best layout for a level: ELK's placement, then our routing. Falls back
+ * to the built-in layout if ELK can't be loaded (an old browser, say), so a
+ * tidy-up always does something.
+ */
+export async function layoutLevelAsync(d: Diagram): Promise<Diagram> {
+  try {
+    return await layoutLevelElk(d);
+  } catch {
+    return layoutLevel(d);
+  }
+}
+
+/** settleLevel with the best layout: a level the platform placed in full is laid out again. */
+export async function settleLevelAsync(d: Diagram): Promise<Diagram> {
+  const items = d.nodes.filter(laidOut);
+  return items.length && items.every(isAutoPlaced) ? layoutLevelAsync(d) : d;
+}
 
 /** ELK layout options, for trying settings out (the bench); the defaults are what IsoDraw uses. */
 export type ElkOptions = Record<string, string>;
@@ -103,6 +125,8 @@ async function layoutItemsElk(d: Diagram, include: Parameters<typeof levelInput>
       'elk.spacing.edgeEdge': String(S / 2),
       'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+      // Work harder at crossings than the default (7): it's cheap, and crossings are decided here.
+      'elk.layered.thoroughness': '30',
       // Then pull everything as close as the lines allow.
       'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
       'elk.layered.compaction.postCompaction.constraints': 'SCANLINE',
@@ -110,8 +134,7 @@ async function layoutItemsElk(d: Diagram, include: Parameters<typeof levelInput>
     },
   };
 
-  elk ??= new ELK();
-  const out = await elk.layout(graph);
+  const out = await (await loadElk()).layout(graph);
 
   // ELK positions are relative to the parent; IsoDraw's are absolute, on a half-unit grid.
   const placed = new Map<string, Placement>();

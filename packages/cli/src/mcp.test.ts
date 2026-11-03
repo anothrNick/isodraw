@@ -23,9 +23,9 @@ function fakeClient() {
       store.set(d.id, d);
       return d;
     },
-    edit: async <T,>(ref: string, change: (d: Diagram) => { diagram: Diagram; result: T }) => {
+    edit: async <T,>(ref: string, change: (d: Diagram) => { diagram: Diagram; result: T } | Promise<{ diagram: Diagram; result: T }>) => {
       const d = find(ref);
-      const { diagram, result } = change(structuredClone(d.content));
+      const { diagram, result } = await change(structuredClone(d.content));
       d.content = diagram;
       d.version++;
       return { meta: meta(d), result, merged: false };

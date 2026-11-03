@@ -9,7 +9,8 @@ import { CANVAS_BG, ThemeContext, useResolvedTheme, type Theme } from './theme';
 import { diagramImages, iconColor, loadAwsIconLibrary, loadAzureIconLibrary, loadGcpIconLibrary, loadLucideIconLibrary, withIconColor } from './icons';
 import { fitIsoIcon, imageHref, isIsoIcon, isoIconLibrary } from './isoIcons';
 import { importTerraform, isTerraformJson } from './terraform';
-import { layoutLevel, markMoved, movesItem } from './layout';
+import { layoutLevelAsync } from './elkLayout';
+import { markMoved, movesItem } from './layout';
 import { lineTop, withBars } from './lifelines';
 import { canHaveDetail, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
@@ -193,6 +194,9 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   pathRef.current = path;
   /** The diagram on screen: the top one, or the detail diagram drilled into. */
   const diagram = levelAt(root, path) ?? root;
+  /** The one showing now, for work that finishes later (a tidy-up) to check nothing changed meanwhile. */
+  const diagramRef = useRef(diagram);
+  diagramRef.current = diagram;
   // The view is a diagram setting, so Edit, View and published pages agree. Detail diagrams follow the top one.
   const view: ViewMode = root.view ?? props.defaultView ?? '3d';
   const [rotation, setRotation] = useState<Rotation>(0);
@@ -1033,13 +1037,17 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           {!readOnly && (
             <ToolButton
               icon="tidy"
-              label="Tidy up: lay out this level in columns by flow (undo with ⌘Z)"
+              label="Tidy up: lay out this level by flow, route its lines around things and place the labels (undo with ⌘Z)"
               disabled={!diagram.nodes.some((n) => n.kind !== 'text')}
               onClick={() => {
-                const next = layoutLevel(diagram);
-                commit(next);
-                fitTo(next, proj);
-                setToast('Tidied up. ⌘Z undoes it.');
+                const from = diagram;
+                layoutLevelAsync(from).then((next) => {
+                  // Only if nothing changed meanwhile: the layout is of what was there when Tidy was pressed.
+                  if (diagramRef.current !== from) return;
+                  commit(next);
+                  fitTo(next, proj);
+                  setToast('Tidied up. ⌘Z undoes it.');
+                });
               }}
             />
           )}

@@ -19,6 +19,7 @@ import {
 import { depthMap, isContainer } from './containers';
 import { ISO_ICON_BOX, imageHref, isIsoIcon, isoIconPlacement, isoIconScale } from './isoIcons';
 import { CANVAS_BG, INK, themedDiagram, useTheme } from './theme';
+import { pointAlong } from './autoRoute';
 import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget, LineStyle, MarkerKind } from './types';
 
@@ -352,18 +353,10 @@ export function NodeShape({ node, proj, idPrefix }: { node: DiagramNode; proj: P
 
 // ---------- edges ----------
 
-export function midpoint(pts: Pt[]): Pt {
-  let half = polylineLength(pts) / 2;
-  for (let i = 1; i < pts.length; i++) {
-    const len = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-    if (half <= len && len > 0) {
-      const t = half / len;
-      return { x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t, y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t };
-    }
-    half -= len;
-  }
-  return pts[0];
-}
+export const midpoint = (pts: Pt[]): Pt => pointAlong(pts, 0.5);
+
+/** Where a connection's label (and its doc badge) sits on its drawn line. */
+export const labelPoint = (edge: DiagramEdge, screen: Pt[]): Pt => pointAlong(screen, edge.labelT ?? 0.5);
 
 /** Scene-space geometry of an edge: path data, projected points and length. */
 /** Convex hull of screen points (monotone chain), for outlining a solid. */
@@ -626,7 +619,7 @@ export function EdgeShape({
 export function EdgeLabel({ edge, a, b, proj }: { edge: DiagramEdge; a: DiagramNode; b: DiagramNode; proj: Projector }) {
   const theme = useTheme();
   if (!edge.label) return null;
-  const mid = midpoint(edgeGeometry(edge, a, b, proj).screen);
+  const mid = labelPoint(edge, edgeGeometry(edge, a, b, proj).screen);
   const labelW = edge.label.length * 6.6 + 12;
   return (
     <g data-edge-id={edge.id}>
