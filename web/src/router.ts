@@ -18,6 +18,8 @@ import { useEffect, useState } from 'react';
  */
 export type Route =
   | { page: 'home' }
+  /** The editor with no account: one diagram kept in the browser. */
+  | { page: 'draw' }
   | { page: 'diagrams'; org: string }
   | { page: 'diagram'; org: string; id: string }
   | { page: 'docs'; org: string; id: string }
@@ -36,6 +38,7 @@ export type AdminSection = 'overview' | 'users' | 'workspaces' | 'log';
 export function parseRoute(path: string): Route {
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (parts.length === 0) return { page: 'home' };
+  if (parts.length === 1 && parts[0] === 'draw') return { page: 'draw' };
   // "invite" is a reserved slug, so it never names an organization.
   if (parts.length === 2 && parts[0] === 'invite') return { page: 'invite', token: parts[1] };
   if (parts.length === 2 && parts[0] === 'cli' && parts[1] === 'login') return { page: 'cli-login' };

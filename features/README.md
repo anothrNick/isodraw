@@ -28,6 +28,7 @@ Keep the status and priority current, and record decisions in the file as they'r
 | high · planned | [Workspace plans and billing](workspace-plans.md) | Each workspace has its own plan and billing (Free personal, Pro for up to 4 people, Team, Business), flat prices with no seats; founding lifetime becomes Pro forever. |
 | high · planned | [Launch: lifetime access cohort](launch.md) | Free for personal use; $99 one-time lifetime access with team workspaces for the first 100 buyers. The checklist from decisions and billing to email, backups, legal and launch day. |
 | high · in progress | [CLI for people and AI agents](cli.md) | A command line tool built for Claude, ChatGPT and scripts to read and change diagrams and docs. |
+| next · in progress | [Draw without signing up](no-signup-editor.md) | A public editor at `/draw` that runs entirely in the browser: one diagram saved on the device, import and export, and a hand-off into a free account. |
 | high · in progress | [MCP server](mcp-server.md) | IsoDraw as a connector in Claude, ChatGPT and Cursor: read, draw and document diagrams in plain words, with pictures in the chat. |
 | next | [Diagram from a code repo](diagram-from-repo.md) | A GitHub Action in the customer's CI keeps a repo's diagram in step with its code, and comments on PRs with the architecture change. |
 | next | [Diagram as code](diagram-as-code.md) | A YAML format with a JSON Schema for a diagram's structure, `describe`/`push` round trips, `isodraw lint` for CI, and Mermaid import. |

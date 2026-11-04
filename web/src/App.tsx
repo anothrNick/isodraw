@@ -7,6 +7,7 @@ import { ConnectAiDialog } from './ConnectAiDialog';
 import { ConnectPage } from './ConnectPage';
 import { DiagramList } from './DiagramList';
 import { DocsPage } from './DocsPage';
+import { DrawPage } from './DrawPage';
 import { EditorPage } from './EditorPage';
 import { InvitePage } from './InvitePage';
 import { LandingPage } from './LandingPage';
@@ -52,7 +53,8 @@ export function App() {
   const authPage = route.page === 'login' || route.page === 'signup' || route.page === 'verify' || route.page === 'forgot' || route.page === 'reset';
 
   useEffect(() => {
-    if (authPage) return;
+    // Signing in isn't needed (or asked for) on the auth pages or at /draw.
+    if (authPage || route.page === 'draw') return;
     reload().catch((err) => {
       if (err instanceof ApiError && err.status === 401) {
         if (location.pathname === '/') setSignedOut(true);
@@ -60,7 +62,7 @@ export function App() {
       }
       else setError(err instanceof Error ? err.message : String(err));
     });
-  }, [reload, authPage]);
+  }, [reload, authPage, route.page]);
 
   // "/" opens the first organization (the personal one).
   useEffect(() => {
@@ -69,6 +71,7 @@ export function App() {
 
   if (route.page === 'login' || route.page === 'signup' || route.page === 'verify' || route.page === 'forgot' || route.page === 'reset')
     return <AuthPages route={route} />;
+  if (route.page === 'draw') return <DrawPage />;
   if (signedOut && route.page === 'home') return <LandingPage />;
   if (error) return <Message title="Can't reach IsoDraw" body={error} />;
   if (!session) return <Loading />;
