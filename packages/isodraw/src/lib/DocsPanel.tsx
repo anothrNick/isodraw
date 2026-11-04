@@ -23,6 +23,7 @@ import {
 } from './docs';
 import { IsoDiagramEditor } from './IsoDiagramEditor';
 import { detailSize } from './levels';
+import { renderMermaid } from './mermaid';
 import { StaticDiagram } from './render';
 import { KIND_NAMES, emptyDiagram, parseDiagram } from './shapes';
 import type { Diagram, DocTarget } from './types';
@@ -381,6 +382,176 @@ const DiagramEmbed = TiptapNode.create({
   },
 });
 
+// ---------- mermaid ----------
+
+const MERMAID_EXAMPLE = `flowchart LR
+  Client --> API --> DB[(Database)]`;
+
+function MermaidView({ node, updateAttributes, editor, selected }: NodeViewProps) {
+  const source = node.attrs.source as string;
+  const editable = editor.isEditable;
+  const theme = useTheme();
+  const [mode, setMode] = useState<'diagram' | 'text'>('diagram');
+  const [draft, setDraft] = useState(source);
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(true);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+
+  // A block just inserted with /Mermaid opens on its text.
+  useEffect(() => {
+    if (node.attrs.autoOpen && editable) {
+      setMode('text');
+      updateAttributes({ autoOpen: false });
+    }
+  }, [node.attrs.autoOpen, editable]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (mode === 'text') textRef.current?.focus();
+  }, [mode]);
+
+  // Render whenever the stored text or the theme changes; a stale render never lands over a newer one.
+  useEffect(() => {
+    let live = true;
+    if (!source.trim()) {
+      setSvg('');
+      setError(null);
+      setPending(false);
+      return;
+    }
+    setPending(true);
+    renderMermaid(source, theme).then(
+      (out) => {
+        if (!live) return;
+        setSvg(out);
+        setError(null);
+        setPending(false);
+      },
+      (e: unknown) => {
+        if (!live) return;
+        setSvg('');
+        setError(e instanceof Error ? e.message : String(e));
+        setPending(false);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [source, theme]);
+
+  const commit = () => {
+    if (draft !== source) updateAttributes({ source: draft });
+  };
+  const show = (m: 'diagram' | 'text') => {
+    if (m === 'diagram') commit();
+    else setDraft(source);
+    setMode(m);
+  };
+
+  return (
+    <NodeViewWrapper className={`isd-embed isd-mermaid${selected && editable ? ' is-selected' : ''}`} contentEditable={false}>
+      {editable && (
+        <div className="isd-embed-bar">
+          <span>Mermaid</span>
+          <div className="isd-mermaid-toggle" role="group" aria-label="Show as">
+            <button type="button" className={`isd-doc-btn${mode === 'diagram' ? ' is-active' : ''}`} onClick={() => show('diagram')}>
+              Diagram
+            </button>
+            <button type="button" className={`isd-doc-btn${mode === 'text' ? ' is-active' : ''}`} onClick={() => show('text')}>
+              Text
+            </button>
+          </div>
+        </div>
+      )}
+      {mode === 'text' && editable ? (
+        <textarea
+          ref={textRef}
+          className="isd-mermaid-text"
+          aria-label="Mermaid text"
+          spellCheck={false}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          rows={Math.max(4, draft.split('\n').length + 1)}
+        />
+      ) : (
+        <>
+          {svg && <div className="isd-mermaid-svg" dangerouslySetInnerHTML={{ __html: svg }} />}
+          {error && (
+            <div className="isd-mermaid-error" role="alert">
+              <strong>Mermaid couldn’t draw this.</strong>
+              <pre>{error}</pre>
+            </div>
+          )}
+          {!svg && !error && (
+            <div className="isd-embed-empty">
+              {pending ? 'Drawing…' : editable ? 'Empty diagram. Switch to Text to write one.' : 'Empty diagram.'}
+            </div>
+          )}
+        </>
+      )}
+    </NodeViewWrapper>
+  );
+}
+
+/**
+ * A Mermaid diagram inside a doc. Stored in Markdown as a fenced ```mermaid
+ * block, as other Markdown tools expect, and drawn here with Mermaid itself.
+ */
+const MermaidEmbed = TiptapNode.create({
+  name: 'mermaidDiagram',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      source: { default: '' },
+      // Transient: set by /Mermaid, cleared once the text opens; never written to Markdown or HTML.
+      autoOpen: { default: false, rendered: false, parseHTML: () => false },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        // Beats the code block rule for fenced ```mermaid blocks.
+        tag: 'pre',
+        priority: 60,
+        getAttrs: (el: HTMLElement) => {
+          const code = el.querySelector('code');
+          return code && /\blanguage-mermaid\b/.test(code.className) ? { source: code.textContent ?? '' } : false;
+        },
+      },
+      {
+        tag: 'div[data-type="mermaid-diagram"]',
+        getAttrs: (el: HTMLElement) => ({ source: el.getAttribute('data-source') ?? '' }),
+      },
+    ];
+  },
+  renderHTML({ node }) {
+    return ['div', { 'data-type': 'mermaid-diagram', 'data-source': node.attrs.source }];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(MermaidView);
+  },
+  addStorage() {
+    return {
+      markdown: {
+        serialize(
+          state: { write: (s: string) => void; ensureNewLine: () => void; closeBlock: (n: unknown) => void },
+          node: { attrs: { source: string } },
+        ) {
+          state.write('```mermaid');
+          state.ensureNewLine();
+          state.write(node.attrs.source.replace(/\n$/, ''));
+          state.ensureNewLine();
+          state.write('```');
+          state.closeBlock(node);
+        },
+        parse: {},
+      },
+    };
+  },
+});
+
 // ---------- slash commands ----------
 
 interface SlashItem {
@@ -408,6 +579,12 @@ const SLASH_ITEMS: SlashItem[] = [
     title: 'Diagram',
     hint: 'isodraw',
     run: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'isodrawDiagram', attrs: { diagram: '', autoOpen: true } }).run(),
+  },
+  {
+    title: 'Mermaid diagram',
+    hint: 'mermaid',
+    run: (e, r) =>
+      e.chain().focus().deleteRange(r).insertContent({ type: 'mermaidDiagram', attrs: { source: MERMAID_EXAMPLE, autoOpen: true } }).run(),
   },
   {
     title: 'Detail diagram',
@@ -500,6 +677,7 @@ export function DocEditor({
       TaskItem.configure({ nested: true }),
       TableKit.configure({ table: { resizable: false } }),
       DiagramEmbed,
+      MermaidEmbed,
       Markdown.configure({ html: true, linkify: true, transformPastedText: true, transformCopiedText: true, breaks: false }),
       ItemMention.configure({
         suggestion: {

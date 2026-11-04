@@ -125,6 +125,42 @@ test('hovering an @ mention in the docs outlines the item on the canvas', async 
   await expect(canvas(page).locator('.isd-target-highlight')).toHaveCount(0);
 });
 
+test('a Mermaid block draws its diagram, toggles to its text, and shows a bad diagram’s error', async ({ page }) => {
+  await page.getByRole('button', { name: 'Show docs (D)' }).click();
+  // After the doc's first block, so the fence lands at the top level rather than indented inside a list.
+  await page.locator('.isd-docs .ProseMirror > :first-child').click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('/mermaid');
+  await page.locator('.isd-doc-popup').getByRole('option', { name: 'Mermaid diagram' }).click();
+
+  // Inserted on its text with an example; Diagram draws it (Mermaid loads on first use).
+  const block = page.locator('.isd-docs .isd-mermaid');
+  const text = block.getByLabel('Mermaid text');
+  await expect(text).toHaveValue(/flowchart LR/);
+  await block.getByRole('button', { name: 'Diagram' }).click();
+  await expect(block.locator('.isd-mermaid-svg svg')).toBeVisible({ timeout: 15_000 });
+  await expect(block.locator('.isd-mermaid-svg')).toContainText('Database');
+
+  // A broken diagram reports its error inside the block, and the doc keeps working.
+  await block.getByRole('button', { name: 'Text' }).click();
+  await text.fill('flowchart LR\n  A --> ');
+  await block.getByRole('button', { name: 'Diagram' }).click();
+  await expect(block.locator('.isd-mermaid-error')).toContainText('Parse error');
+  await text.waitFor({ state: 'detached' });
+  await expect(block.locator('.isd-mermaid-svg')).toHaveCount(0);
+
+  // Stored as a plain ```mermaid fence, so the published page draws it too.
+  await block.getByRole('button', { name: 'Text' }).click();
+  await text.fill('sequenceDiagram\n  Browser->>API: GET /orders');
+  await block.getByRole('button', { name: 'Diagram' }).click();
+  await expect(block.locator('.isd-mermaid-svg')).toContainText('Browser');
+  const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), DIAGRAM_KEY);
+  expect(stored.doc).toContain('```mermaid\nsequenceDiagram\n  Browser->>API: GET /orders\n```');
+  await page.getByRole('radio', { name: 'Published' }).click();
+  await expect(page.locator('.isd-pub-doc .isd-mermaid-svg svg')).toBeVisible();
+});
+
 test('one sidebar holds properties and docs as tabs, and opens when an item is selected', async ({ page }) => {
   const side = page.getByRole('complementary', { name: 'Sidebar' });
   await side.getByRole('button', { name: 'Close sidebar' }).click();

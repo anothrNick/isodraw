@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { useResolvedTheme, type Theme } from './theme';
+import { ThemeContext, useResolvedTheme, type Theme } from './theme';
 import type { Diagram, DocTarget } from './types';
 
 const DocReader = lazy(() => import('./DocsPanel').then((m) => ({ default: m.DocReader })));
@@ -25,10 +25,12 @@ export interface IsoDocViewProps {
 export function IsoDocView({ markdown, diagram, onNavigate, onMentionHover, theme, className }: IsoDocViewProps) {
   const resolved = useResolvedTheme(theme);
   return (
-    <div className={`isd-docview${className ? ` ${className}` : ''}`} data-theme={resolved}>
-      <Suspense fallback={null}>
-        <DocReader markdown={markdown} diagram={diagram} onNavigate={onNavigate ?? (() => undefined)} onMentionHover={onMentionHover} />
-      </Suspense>
-    </div>
+    <ThemeContext.Provider value={resolved}>
+      <div className={`isd-docview${className ? ` ${className}` : ''}`} data-theme={resolved}>
+        <Suspense fallback={null}>
+          <DocReader markdown={markdown} diagram={diagram} onNavigate={onNavigate ?? (() => undefined)} onMentionHover={onMentionHover} />
+        </Suspense>
+      </div>
+    </ThemeContext.Provider>
   );
 }

@@ -58,6 +58,7 @@
     "@tiptap/starter-kit": "3.32.1",
     "@tiptap/suggestion": "3.32.1",
     "elkjs": "0.12.0",
+    "mermaid": "12.2.0",
     "tiptap-markdown": "0.9.0"
   },
   "repository": {
