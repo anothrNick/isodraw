@@ -174,9 +174,11 @@ func (s *Store) Refund(ctx context.Context, paymentIntent string) (p Purchase, f
 		if p.UserID == "" {
 			return nil
 		}
-		_, err = tx.Exec(ctx, `update users set lifetime_since = null where id = $1
-			and not exists (select 1 from purchases where user_id = $1 and status = 'paid')`, p.UserID)
-		return err
+		if _, err = tx.Exec(ctx, `update users set lifetime_since = null where id = $1
+			and not exists (select 1 from purchases where user_id = $1 and status = 'paid')`, p.UserID); err != nil {
+			return err
+		}
+		return dropLifetimeWorkspace(ctx, tx, `$1::uuid`, p.UserID)
 	})
 	return p, found, err
 }

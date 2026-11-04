@@ -133,10 +133,11 @@ export function DiagramList({ org }: { org: Org }) {
             {full
               ? `You're using all ${limit} diagrams of the free plan. Export one you're not working on (Download, then JSON) and delete it to make room; you can import it again any time. `
               : `${used} of ${limit} diagrams on the free plan. Every feature is included. `}
+            A{' '}
             <a className="font-medium text-primary hover:underline" {...linkProps('/settings/plan')}>
-              Lifetime access
+              Pro workspace
             </a>{' '}
-            removes the limit.
+            has no limit, and you can move diagrams into it.
           </p>
         )}
         {readOnly && (

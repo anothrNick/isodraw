@@ -27,7 +27,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	lifetime, err := s.store.HasLifetime(r.Context(), u.ID)
+	lifetime, lifetimeOn, err := s.lifetimeWorkspace(r)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -40,7 +40,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 			internalError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs, "lifetime": lifetime, "admin": admin})
+		writeJSON(w, http.StatusOK, map[string]any{"user": u, "orgs": orgs, "lifetime": lifetime, "lifetimeWorkspace": lifetimeOn, "admin": admin})
 		return
 	}
 	// A token sees only its own organization, with the role it acts as there.

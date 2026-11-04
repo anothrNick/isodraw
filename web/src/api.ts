@@ -94,6 +94,8 @@ export interface Billing {
   /** Lifetime access can be bought (Stripe is set up). */
   available: boolean;
   lifetime: boolean;
+  /** The workspace the user's lifetime access is on (their Pro workspace); null while it's unused. */
+  lifetimeWorkspace: Pick<Org, 'id' | 'name' | 'slug'> | null;
   /** In the currency's smallest unit (cents). */
   price: { amount: number; currency: string };
   seats: { total: number; sold: number; left: number };
@@ -251,7 +253,7 @@ export const authApi = {
 };
 
 export const api = {
-  me: () => request<{ user: User; orgs: Org[]; lifetime: boolean; admin?: boolean }>('GET', '/api/me'),
+  me: () => request<{ user: User; orgs: Org[]; lifetime: boolean; lifetimeWorkspace: Pick<Org, 'id' | 'name' | 'slug'> | null; admin?: boolean }>('GET', '/api/me'),
   plan: (orgId: string) => request<Plan>('GET', `/api/orgs/${orgId}/plan`),
   listDiagrams: (orgId: string) => request<{ diagrams: DiagramMeta[] }>('GET', `/api/orgs/${orgId}/diagrams`),
   createDiagram: (orgId: string, title?: string, content?: Diagram) =>

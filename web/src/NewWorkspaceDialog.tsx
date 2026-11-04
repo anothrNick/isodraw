@@ -12,8 +12,9 @@ import { cn } from '@/lib/utils';
 /**
  * New workspace: a name, then a plan. Every workspace besides your personal
  * one has a plan. Today only Pro can be chosen, bought once (founding
- * lifetime); with lifetime access already, the workspace is made straight
- * away, and otherwise it's made once checkout is paid (see PlanPage).
+ * lifetime), and lifetime covers one workspace: with it unused, the workspace
+ * is made straight away; without it, once checkout is paid (see PlanPage);
+ * with it already on a workspace, there's nothing to choose yet.
  */
 
 const PENDING = 'isodraw:new-workspace';
@@ -61,12 +62,15 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
   }, [open, reload]);
 
   const lifetime = !!session?.lifetime || !!billing?.lifetime;
-  const canBuy = !!billing?.available && billing.seats.left > 0;
+  // Lifetime covers one workspace; this is the one it's on, if it's been used.
+  const used = billing ? billing.lifetimeWorkspace : (session?.lifetimeWorkspace ?? null);
+  const unused = lifetime && !used;
+  const canBuy = !lifetime && !!billing?.available && billing.seats.left > 0;
 
   const create = async () => {
     setBusy(true);
     try {
-      if (lifetime) {
+      if (unused) {
         const org = await api.createTeam(name.trim());
         await session?.reload();
         onOpenChange(false);
@@ -93,9 +97,9 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
       id: 'pro',
       name: 'Pro',
       price: billing ? formatPrice(billing.price) : '$99',
-      note: lifetime ? 'included with your lifetime access' : 'once · founding lifetime',
+      note: used ? `lifetime is on ${used.name}` : unused ? 'included with your lifetime access' : 'once · founding lifetime',
       blurb: 'Up to 4 people, unlimited diagrams.',
-      available: lifetime || canBuy,
+      available: unused || canBuy,
     },
     { id: 'team', name: 'Team', price: '$49', note: '/month · coming soon', blurb: 'Unlimited people, team features.', available: false },
     { id: 'business', name: 'Business', price: '$199', note: '/month · coming soon', blurb: 'SSO, audit log, priority support.', available: false },
@@ -169,10 +173,18 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
                 </button>
               ))}
             </div>
-            {!lifetime && billing && !canBuy && (
+            {used ? (
               <p className="text-sm text-muted-foreground">
-                {billing.available ? `All ${billing.seats.total} founding seats are taken.` : 'Buying Pro opens soon.'} Team and Business are on their way.
+                Your lifetime access covers one Pro workspace, and it's {used.name}. Monthly Pro, Team and Business, for more workspaces, are on their way.
               </p>
+            ) : (
+              !lifetime &&
+              billing &&
+              !canBuy && (
+                <p className="text-sm text-muted-foreground">
+                  {billing.available ? `All ${billing.seats.total} founding seats are taken.` : 'Buying Pro opens soon.'} Team and Business are on their way.
+                </p>
+              )
             )}
             <DialogFooter className="sm:justify-between">
               <Button variant="ghost" onClick={() => setStep('name')}>

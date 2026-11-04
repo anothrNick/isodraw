@@ -301,8 +301,8 @@ function UserDetail({ id }: { id: string }) {
         title={confirm ? 'Grant lifetime access?' : 'Take back lifetime access?'}
         body={
           confirm
-            ? `${u.email} gets unlimited diagrams and can own team workspaces. This is recorded in the admin log.`
-            : `${u.email} goes back to the free plan. Teams they own without another lifetime owner turn read-only (nothing is deleted). This is recorded in the admin log.`
+            ? `${u.email} can make one Pro workspace (up to 4 people, unlimited diagrams), for good. This is recorded in the admin log.`
+            : `${u.email} goes back to the free plan. Their lifetime Pro workspace loses its plan and turns read-only unless another owner has lifetime access (nothing is deleted). This is recorded in the admin log.`
         }
         action={confirm ? 'Grant' : 'Take back'}
         onCancel={() => setConfirm(null)}

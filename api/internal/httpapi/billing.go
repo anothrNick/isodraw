@@ -41,7 +41,7 @@ func (s *Server) billingRoutes(mux, api *http.ServeMux) {
 
 func (s *Server) billingStatus(w http.ResponseWriter, r *http.Request) {
 	u := auth.User(r.Context())
-	lifetime, err := s.store.HasLifetime(r.Context(), u.ID)
+	lifetime, lifetimeOn, err := s.lifetimeWorkspace(r)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -66,9 +66,11 @@ func (s *Server) billingStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"available": s.stripe != nil,
 		"lifetime":  lifetime,
-		"price":     map[string]any{"amount": s.cfg.LifetimePrice, "currency": s.cfg.LifetimeCurrency},
-		"seats":     map[string]any{"total": s.cfg.LifetimeSeats, "sold": paid, "left": max(0, s.cfg.LifetimeSeats-paid-pending)},
-		"purchase":  bought,
+		// The workspace their lifetime access is on; null while it's unused.
+		"lifetimeWorkspace": lifetimeOn,
+		"price":             map[string]any{"amount": s.cfg.LifetimePrice, "currency": s.cfg.LifetimeCurrency},
+		"seats":             map[string]any{"total": s.cfg.LifetimeSeats, "sold": paid, "left": max(0, s.cfg.LifetimeSeats-paid-pending)},
+		"purchase":          bought,
 	})
 }
 

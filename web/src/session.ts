@@ -4,8 +4,10 @@ import type { Org, User } from './api';
 export interface Session {
   user: User;
   orgs: Org[];
-  /** Lifetime access: no diagram limit in the personal workspace, and team workspaces. */
+  /** Founding lifetime access: Pro, forever, on one workspace. */
   lifetime: boolean;
+  /** The workspace it's on; null while it's unused (creating a workspace uses it). */
+  lifetimeWorkspace: Pick<Org, 'id' | 'name' | 'slug'> | null;
   /** A platform admin, who gets the admin screens (/admin). */
   admin?: boolean;
   /** Fetch the user's organizations again, after joining or creating one. */

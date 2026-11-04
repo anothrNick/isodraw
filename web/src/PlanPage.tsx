@@ -5,11 +5,11 @@ import { api, formatPrice, type Billing } from './api';
 import { Loading } from './App';
 import { useSession } from './session';
 import { createPendingWorkspace, forgetPendingWorkspace } from './NewWorkspaceDialog';
-import { navigate } from './router';
+import { linkProps, navigate } from './router';
 import { Button } from '@/components/ui/button';
 
 const FREE = ['Every feature in your personal workspace', 'Up to 10 diagrams', 'The CLI and the MCP server for AI apps'];
-const LIFETIME = ['Unlimited diagrams', 'Shared workspaces for you and your team', 'Everything we add to the editor, for good'];
+const LIFETIME = ['A Pro workspace, for good', 'Up to 4 people, any role', 'Unlimited diagrams', 'Everything we add to the editor'];
 
 /**
  * Your plan, and buying lifetime access. Stripe Checkout comes back here: with
@@ -95,11 +95,24 @@ export function PlanPage() {
             highlight
             footer={
               lifetime ? (
-                <p className="text-sm text-muted-foreground">
-                  {billing.purchase?.seat
-                    ? `Founding member #${billing.purchase.seat}, since ${new Date(billing.purchase.paidAt!).toLocaleDateString()}.`
-                    : 'Lifetime access is on your account.'}
-                </p>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    {billing.purchase?.seat
+                      ? `Founding member #${billing.purchase.seat}, since ${new Date(billing.purchase.paidAt!).toLocaleDateString()}.`
+                      : 'Lifetime access is on your account.'}
+                  </p>
+                  {billing.lifetimeWorkspace ? (
+                    <p>
+                      Your Pro workspace is{' '}
+                      <a className="font-medium text-primary hover:underline" {...linkProps(`/${billing.lifetimeWorkspace.slug}`)}>
+                        {billing.lifetimeWorkspace.name}
+                      </a>
+                      .
+                    </p>
+                  ) : (
+                    <p>Make your Pro workspace with New workspace in the workspace menu; lifetime covers one.</p>
+                  )}
+                </div>
               ) : (
                 <BuyLifetime billing={billing} />
               )

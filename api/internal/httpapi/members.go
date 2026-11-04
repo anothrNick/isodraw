@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -80,10 +81,26 @@ func (s *Server) createTeam(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_name", msg)
 		return
 	}
-	if !s.mayOwnTeams(w, r) {
+	// Every shared workspace has a plan; for now the only one to have is Pro
+	// from founding lifetime access, which covers one workspace.
+	has, used, err := s.lifetimeWorkspace(r)
+	if err != nil {
+		internalError(w, err)
 		return
 	}
-	org, err := s.store.CreateTeam(r.Context(), auth.User(r.Context()).ID, name)
+	if !has {
+		planLimit(w, "Every shared workspace has a plan. Founding lifetime access comes with one Pro workspace; your personal workspace has every feature for free.")
+		return
+	}
+	if used != nil {
+		planLimit(w, fmt.Sprintf("Lifetime access covers one Pro workspace, and yours is %s. Plans for more workspaces are on their way; until then you can rename it, or move diagrams in and out of it.", used.Name))
+		return
+	}
+	org, err := s.store.CreateLifetimeWorkspace(r.Context(), auth.User(r.Context()).ID, name)
+	if errors.Is(err, store.ErrLifetimeUsed) {
+		planLimit(w, "Lifetime access covers one Pro workspace, and you already have yours.")
+		return
+	}
 	if err != nil {
 		internalError(w, err)
 		return

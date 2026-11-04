@@ -1,19 +1,25 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
 )
 
-// team creates a team owned by the cookie's user, who is given lifetime access
-// (teams come with it), and returns its id and slug.
+// team creates a team owned by the cookie's user, who is given lifetime
+// access, and returns its id and slug. It's a team as they were before
+// workspace plans (no plan of its own; editable while an owner has lifetime
+// access, with store.TeamEditors editors), so tests can make as many as they
+// need; creating one through the API is TestLifetimeWorkspace's.
 func (f *fixture) team(c *http.Cookie, name string) (string, string) {
 	f.t.Helper()
 	f.lifetime(c, true)
-	res, out := f.do(req{method: "POST", path: "/api/orgs", body: `{"name":"` + name + `"}`, cookie: c})
-	expect(f.t, res, 201, out)
-	return out["id"].(string), out["slug"].(string)
+	org, err := f.store.CreateTeam(context.Background(), userID(f.t, f, c), name)
+	if err != nil {
+		f.t.Fatalf("team: %v", err)
+	}
+	return org.ID, org.Slug
 }
 
 // invite invites an address and returns the link's token.
@@ -49,7 +55,10 @@ func userID(t *testing.T, f *fixture, c *http.Cookie) string {
 func TestCreateTeam(t *testing.T) {
 	f := setup(t)
 	c, _ := f.user("dev@example.com")
-	id, slug := f.team(c, "Platform Team")
+	f.lifetime(c, true)
+	res, out := f.do(req{method: "POST", path: "/api/orgs", body: `{"name":"Platform Team"}`, cookie: c})
+	expect(t, res, 201, out)
+	id, slug := out["id"].(string), out["slug"].(string)
 	if slug != "platform-team" {
 		t.Fatal(slug)
 	}
@@ -60,11 +69,11 @@ func TestCreateTeam(t *testing.T) {
 	if _, s := f.team(c, "Invite"); s != "invite-team" {
 		t.Fatalf("reserved words stay out of URLs: %s", s)
 	}
-	_, out := f.do(req{method: "GET", path: "/api/me", cookie: c})
+	_, out = f.do(req{method: "GET", path: "/api/me", cookie: c})
 	if n := len(out["orgs"].([]any)); n != 4 {
 		t.Fatalf("personal org plus three teams, got %d", n)
 	}
-	res, out := f.do(req{method: "PATCH", path: "/api/orgs/" + id, body: `{"name":"Platform"}`, cookie: c})
+	res, out = f.do(req{method: "PATCH", path: "/api/orgs/" + id, body: `{"name":"Platform"}`, cookie: c})
 	expect(t, res, 200, out)
 	if out["name"] != "Platform" || out["slug"] != "platform-team" {
 		t.Fatalf("renaming keeps the slug: %v", out)

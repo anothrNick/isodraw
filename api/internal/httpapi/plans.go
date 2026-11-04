@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/store"
 )
 
 // Plans: free personal workspaces hold store.FreeDiagrams diagrams; lifetime
@@ -57,23 +58,25 @@ func (s *Server) roomForDiagram(w http.ResponseWriter, r *http.Request, orgID st
 		planLimit(w, readOnlyTeam)
 		return false
 	case p.DiagramLimit > 0 && p.Diagrams >= p.DiagramLimit:
-		planLimit(w, fmt.Sprintf("The free plan holds %d diagrams in your personal workspace. Export one you're not using (Download, then JSON) and delete it to make room; you can import it again any time. Lifetime access removes the limit.", p.DiagramLimit))
+		planLimit(w, fmt.Sprintf("The free plan holds %d diagrams in your personal workspace. Export one you're not using (Download, then JSON) and delete it to make room; you can import it again any time. A Pro workspace has no limit, and you can move diagrams into it.", p.DiagramLimit))
 		return false
 	}
 	return true
 }
 
-// mayOwnTeams checks the signed-in user has lifetime access, which team workspaces come with.
-func (s *Server) mayOwnTeams(w http.ResponseWriter, r *http.Request) bool {
-	ok, err := s.store.HasLifetime(r.Context(), auth.User(r.Context()).ID)
+// lifetimeWorkspace is the user's lifetime access and the workspace it's on,
+// for /api/me and /api/billing: nil when they don't have it, an empty
+// workspace while it's unused.
+func (s *Server) lifetimeWorkspace(r *http.Request) (has bool, on *store.Org, err error) {
+	has, orgID, err := s.store.LifetimeWorkspace(r.Context(), auth.User(r.Context()).ID)
+	if err != nil || orgID == "" {
+		return has, nil, err
+	}
+	o, err := s.store.GetOrg(r.Context(), orgID)
 	if err != nil {
-		internalError(w, err)
-		return false
+		return has, nil, err
 	}
-	if !ok {
-		planLimit(w, "Team workspaces come with lifetime access. Your personal workspace has every feature for free.")
-	}
-	return ok
+	return has, &o, nil
 }
 
 // seatFor checks a team has an editor seat for someone (by email or user id) who is to edit.

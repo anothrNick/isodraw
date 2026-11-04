@@ -108,11 +108,19 @@ func (s *Store) UserWorkspaces(ctx context.Context, userID string) ([]AdminOrg, 
 
 // SetLifetimeByID grants or takes back a user's lifetime access.
 func (s *Store) SetLifetimeByID(ctx context.Context, userID string, on bool) error {
-	tag, err := s.db.Exec(ctx, `update users set lifetime_since = case when $2 then coalesce(lifetime_since, now()) end where id = $1`, userID, on)
-	if err == nil && tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return notFound(err)
+	return pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `update users set lifetime_since = case when $2 then coalesce(lifetime_since, now()) end where id = $1`, userID, on)
+		if err != nil {
+			return notFound(err)
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		if on {
+			return nil
+		}
+		return dropLifetimeWorkspace(ctx, tx, `$1::uuid`, userID)
+	})
 }
 
 type AdminOrg struct {

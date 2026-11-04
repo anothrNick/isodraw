@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/anothrNick/isodraw/api/internal/store"
@@ -57,11 +58,11 @@ func TestFreePersonalDiagramLimit(t *testing.T) {
 	expect(t, res, 204, out)
 	res, out = newDiagram(f, c, org, 11)
 	expect(t, res, 201, out)
-	// Lifetime lifts the limit.
+	// Lifetime access is a Pro workspace of its own: the personal one stays free, at 10.
 	f.lifetime(c, true)
 	res, out = newDiagram(f, c, org, 12)
-	expect(t, res, 201, out)
-	if p := f.plan(c, org); p["diagramLimit"].(float64) != 0 || p["lifetime"] != true {
+	expect(t, res, 402, out)
+	if p := f.plan(c, org); p["diagramLimit"].(float64) != store.FreeDiagrams || p["lifetime"] != true {
 		t.Fatal(p)
 	}
 	_, out = f.do(req{method: "GET", path: "/api/me", cookie: c})
@@ -70,17 +71,32 @@ func TestFreePersonalDiagramLimit(t *testing.T) {
 	}
 }
 
-func TestTeamsNeedLifetime(t *testing.T) {
+func TestLifetimeWorkspace(t *testing.T) {
 	f := setup(t)
 	c, _ := f.user("ada@example.com")
 	res, out := f.do(req{method: "POST", path: "/api/orgs", body: `{"name":"Shop"}`, cookie: c})
 	expect(t, res, 402, out)
 	f.lifetime(c, true)
+	_, out = f.do(req{method: "GET", path: "/api/me", cookie: c})
+	if out["lifetime"] != true || out["lifetimeWorkspace"] != nil {
+		t.Fatalf("lifetime access, not used yet: %v", out)
+	}
 	res, out = f.do(req{method: "POST", path: "/api/orgs", body: `{"name":"Shop"}`, cookie: c})
 	expect(t, res, 201, out)
 	team := out["id"].(string)
-	if p := f.plan(c, team); p["editorLimit"].(float64) != store.TeamEditors || p["editors"].(float64) != 1 || p["diagramLimit"].(float64) != 0 {
+	// It's Pro, from lifetime: up to 4 people, unlimited diagrams.
+	if p := f.plan(c, team); p["plan"] != "pro" || p["planSource"] != "lifetime" || p["peopleLimit"].(float64) != store.ProPeople || p["diagramLimit"].(float64) != 0 || p["editorLimit"].(float64) != 0 {
 		t.Fatal(p)
+	}
+	_, out = f.do(req{method: "GET", path: "/api/me", cookie: c})
+	if ws, _ := out["lifetimeWorkspace"].(map[string]any); ws == nil || ws["id"] != team || ws["name"] != "Shop" {
+		t.Fatalf("lifetime is on Shop: %v", out)
+	}
+	// Lifetime covers one workspace.
+	res, out = f.do(req{method: "POST", path: "/api/orgs", body: `{"name":"Second"}`, cookie: c})
+	expect(t, res, 402, out)
+	if msg := out["error"].(map[string]any)["message"].(string); !strings.Contains(msg, "Shop") {
+		t.Fatal(msg)
 	}
 
 	// A refund makes the team read-only, but nothing is lost, and members can still be managed.
@@ -98,9 +114,14 @@ func TestTeamsNeedLifetime(t *testing.T) {
 	if p := f.plan(c, team); p["editable"] != false {
 		t.Fatal(p)
 	}
-	f.lifetime(c, true)
-	res, out = f.do(req{method: "PATCH", path: "/api/diagrams/" + id, body: `{"title":"New"}`, cookie: c})
-	expect(t, res, 200, out)
+	// Its Pro plan went with the refund; lifetime access again can go on a workspace afresh.
+	if p := f.plan(c, team); p["plan"] != "" || p["planSource"] != "" {
+		t.Fatal(p)
+	}
+	_, out = f.do(req{method: "GET", path: "/api/me", cookie: c})
+	if out["lifetimeWorkspace"] != nil {
+		t.Fatal(out)
+	}
 }
 
 func TestTeamEditorSeats(t *testing.T) {

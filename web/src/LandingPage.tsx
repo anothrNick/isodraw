@@ -595,7 +595,7 @@ const FAQ = [
   },
   {
     q: 'Can I get a refund?',
-    a: 'Within 30 days of buying lifetime access, no questions. Your diagrams stay; the workspace goes back to the free limits.',
+    a: 'Within 30 days of buying lifetime access, no questions. Nothing is deleted: your Pro workspace turns read-only, so everything in it can still be viewed and exported.',
   },
 ];
 

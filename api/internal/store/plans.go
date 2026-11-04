@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 const (
@@ -61,10 +64,9 @@ func (s *Store) OrgPlan(ctx context.Context, orgID string) (Plan, error) {
 	}
 	switch {
 	case personal:
+		// Free and just you, whatever else someone has: more diagrams means a Pro workspace.
 		p.Editable = true
-		if !p.Lifetime {
-			p.DiagramLimit = FreeDiagrams
-		}
+		p.DiagramLimit = FreeDiagrams
 	case p.Name != "":
 		// Its own plan: editable, with Pro's people limit.
 		p.Editable = true
@@ -102,12 +104,81 @@ func (s *Store) HasLifetime(ctx context.Context, userID string) (bool, error) {
 }
 
 // SetLifetime grants (or, with on false, takes back) lifetime access by email,
-// and reports how many accounts matched.
+// and reports how many accounts matched. Taking it back also takes the Pro
+// plan off their lifetime workspace.
 func (s *Store) SetLifetime(ctx context.Context, email string, on bool) (int64, error) {
-	tag, err := s.db.Exec(ctx, `
-		update users set lifetime_since = case when $2 then coalesce(lifetime_since, now()) end
-		where lower(email) = lower($1)`, email, on)
-	return tag.RowsAffected(), err
+	var n int64
+	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			update users set lifetime_since = case when $2 then coalesce(lifetime_since, now()) end
+			where lower(email) = lower($1)`, email, on)
+		if err != nil {
+			return err
+		}
+		n = tag.RowsAffected()
+		if on {
+			return nil
+		}
+		return dropLifetimeWorkspace(ctx, tx, `(select id from users where lower(email) = lower($1))`, email)
+	})
+	return n, err
+}
+
+// LifetimeWorkspace reports whether a user has lifetime access and, if they've
+// used it, the workspace it's on (orgID is empty while it's unused).
+func (s *Store) LifetimeWorkspace(ctx context.Context, userID string) (has bool, orgID string, err error) {
+	err = s.db.QueryRow(ctx, `
+		select u.lifetime_since is not null, coalesce((select o.id::text from orgs o where o.lifetime_of = u.id), '')
+		from users u where u.id = $1`, userID).Scan(&has, &orgID)
+	return has, orgID, notFound(err)
+}
+
+// ErrLifetimeUsed: the user's lifetime access is already on a workspace.
+var ErrLifetimeUsed = errors.New("lifetime access is already on a workspace")
+
+// CreateLifetimeWorkspace makes a team workspace owned by the user, on Pro
+// from their lifetime access. It fails with ErrLifetimeUsed when they
+// already have their lifetime workspace.
+func (s *Store) CreateLifetimeWorkspace(ctx context.Context, userID, name string) (Org, error) {
+	var org Org
+	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+		// One at a time per person, so two at once can't both take it.
+		if _, err := tx.Exec(ctx, `select 1 from users where id = $1 for update`, userID); err != nil {
+			return err
+		}
+		var used bool
+		if err := tx.QueryRow(ctx, `select exists (select 1 from orgs where lifetime_of = $1)`, userID).Scan(&used); err != nil {
+			return err
+		}
+		if used {
+			return ErrLifetimeUsed
+		}
+		id, err := createOrg(ctx, tx, name, slugify(name), false)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `insert into memberships (org_id, user_id, role) values ($1, $2, 'owner')`, id, userID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `update orgs set plan = 'pro', plan_source = 'lifetime', lifetime_of = $2 where id = $1`, id, userID); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `select id, name, slug, personal from orgs where id = $1`, id).Scan(&org.ID, &org.Name, &org.Slug, &org.Personal)
+	})
+	org.Role = Owner
+	return org, err
+}
+
+// dropLifetimeWorkspace takes the Pro plan off the lifetime workspace of the
+// user that `who` (a subquery with one parameter) picks, when they no longer
+// have lifetime access. The workspace then follows the old rules: read-only
+// unless another owner has lifetime access. Nothing in it is deleted.
+func dropLifetimeWorkspace(ctx context.Context, tx pgx.Tx, who string, arg any) error {
+	_, err := tx.Exec(ctx, `
+		update orgs set plan = null, plan_source = null, lifetime_of = null
+		where lifetime_of = `+who+` and plan_source = 'lifetime'
+		  and (select lifetime_since from users where id = orgs.lifetime_of) is null`, arg)
+	return err
 }
 
 // PeopleIn counts a workspace's people (see Plan.People), leaving out one email:

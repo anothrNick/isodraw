@@ -49,6 +49,7 @@ Yearly billing gets about two months free. Metered AI (features that call a mode
 
 ## Built so far
 
+- 2026-11-04: lifetime is on one workspace. Creating a workspace with lifetime access unused makes it Pro from lifetime (`orgs.lifetime_of` is the buyer, unique, so one each); with it used, creating another is refused with the workspace's name. The personal workspace stays at 10 diagrams whatever plan someone has. A refund, or an admin taking lifetime back, takes the Pro plan off that workspace (it turns read-only, nothing deleted). Carried over: each lifetime holder's oldest team without a plan became their lifetime workspace, and any other team they owned was grandfathered, so nothing anyone had stopped working. `users.lifetime_since` stays, as the entitlement (a purchase or an admin's grant); the app and `/api/billing` say which workspace it's on (`lifetimeWorkspace`).
 - 2026-11-02: workspaces can have their own plan (`orgs.plan`, `orgs.plan_source`). Platform admins create a workspace for any user on Pro, Team or Business without payment (`plan_source = 'comp'`), for selling by hand and demos, and can change or remove a workspace's plan; each change is in the admin log with a note. Pro's 4-person limit (any role, open invites included) is enforced; Team and Business have no people limit. Workspaces without a plan still follow their owners' lifetime access or grandfathering.
 
 ## What changes from what's built
