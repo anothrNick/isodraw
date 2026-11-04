@@ -473,15 +473,16 @@ textarea.isd-input { resize: vertical; }
 .isd-embed-canvas { padding: 6px; }
 .isd-embed-empty { padding: 28px 16px; text-align: center; color: var(--isd-muted, #64748b); font-size: 13px; }
 .isd-mermaid-toggle { display: inline-flex; gap: 2px; }
-.isd-mermaid-svg { padding: 10px 12px; overflow-x: auto; line-height: 0; text-align: center; }
+.isd-mermaid-svg { padding: 10px 12px; overflow-x: auto; line-height: 0; text-align: center; background: var(--isd-canvas, #f4f7fb); color: var(--isd-text); }
 .isd-mermaid-svg svg { max-width: 100%; height: auto; }
 .isd-mermaid-text {
   display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 12px 14px; border: 0; resize: vertical; outline: none;
   background: var(--isd-code-bg); color: var(--isd-code-text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12.5px; line-height: 1.6; white-space: pre; tab-size: 2;
 }
-.isd-mermaid-error { padding: 10px 14px; background: var(--isd-notice-bg); color: var(--isd-notice-text); font-size: 12.5px; }
-.isd-mermaid-error pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.isd-mermaid-error { padding: 10px 14px; background: var(--isd-bg); border-top: 2px solid var(--isd-danger); color: var(--isd-text); font-size: 12.5px; }
+.isd-mermaid-error strong { color: var(--isd-danger); }
+.isd-mermaid-error pre { margin: 6px 0 0; padding: 8px 10px; border-radius: 6px; background: var(--isd-code-inline-bg); color: var(--isd-doc-text); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
 .isd-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(15 23 42 / 0.55); }
 .isd-modal-box { display: flex; flex-direction: column; width: min(1400px, 100%); height: min(900px, 100%); border-radius: 12px; background: var(--isd-bg); box-shadow: 0 24px 60px rgb(var(--isd-shadow) / 0.35); overflow: hidden; font: 13px/1.4 Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--isd-text); }
