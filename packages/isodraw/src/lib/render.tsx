@@ -20,6 +20,7 @@ import { depthMap, isContainer } from './containers';
 import { ISO_ICON_BOX, imageHref, isIsoIcon, isoIconPlacement, isoIconScale } from './isoIcons';
 import { CANVAS_BG, INK, themedDiagram, useTheme } from './theme';
 import { pointAlong } from './autoRoute';
+import { NOTE_FOLD, NOTE_FONT, NOTE_PAD, noteDepth, noteLines } from './notes';
 import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget, LineStyle, MarkerKind } from './types';
 
@@ -170,6 +171,74 @@ function Sphere({ node, proj, gradId }: { node: DiagramNode; proj: Projector; gr
   );
 }
 
+/** A sticky note: a pale box with a folded corner and wrapped text, flat on the ground. */
+function NoteNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
+  const theme = useTheme();
+  const f = uprightFrame(node, proj, 'flip');
+  const fs = (node.fontSize ?? NOTE_FONT) * TILE;
+  // The box grows to fit its text if it was left too short.
+  const depth = Math.max(f.d, noteDepth({ ...node, w: f.w }));
+  const [x0, y0, w, d] = [(f.cx - f.w / 2) * TILE, (f.cy - f.d / 2) * TILE, f.w * TILE, depth * TILE];
+  const fold = Math.min(NOTE_FOLD, w / 4);
+  const pad = NOTE_PAD;
+  const lines = noteLines({ ...node, w: f.w });
+  const ink = node.labelColor ?? (theme === 'dark' ? '#1f2937' : '#1f2937');
+  return (
+    <Ground proj={proj} z={node.z}>
+      <g transform={f.transform}>
+        <path
+          d={`M${x0},${y0} H${x0 + w - fold} L${x0 + w},${y0 + fold} V${y0 + d} H${x0} Z`}
+          fill={node.color}
+          fillOpacity={node.opacity ?? (theme === 'dark' ? 0.85 : 0.9)}
+          stroke={shade(node.color, 0.75)}
+          strokeWidth={1}
+          strokeLinejoin="round"
+        />
+        <path d={`M${x0 + w - fold},${y0} V${y0 + fold} H${x0 + w}`} fill={shade(node.color, 0.82)} stroke={shade(node.color, 0.7)} strokeWidth={1} strokeLinejoin="round" />
+        <text x={x0 + pad} y={y0 + pad} fontSize={fs} fill={ink} dominantBaseline="hanging" style={{ userSelect: 'none' }} pointerEvents="none">
+          {lines.map((l, i) => (
+            <tspan key={i} x={x0 + pad} dy={i === 0 ? 0 : fs * 1.25}>
+              {l || ' '}
+            </tspan>
+          ))}
+        </text>
+      </g>
+    </Ground>
+  );
+}
+
+/** A frame: a thin outline with a title tab in its top-left corner, nothing filled in. */
+function FrameNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
+  const theme = useTheme();
+  const pts = footprint(node).map((q) => proj.project(q.x, q.y, node.z));
+  const f = uprightFrame(node, proj, 'flip');
+  const [x0, y0] = [(f.cx - f.w / 2) * TILE, (f.cy - f.d / 2) * TILE];
+  const tabW = node.label ? Math.min(f.w * TILE - 4, node.label.length * 7 + 16) : 0;
+  return (
+    <>
+      <polygon
+        points={pointsAttr(pts)}
+        fill={node.color}
+        fillOpacity={node.opacity ?? 0.04}
+        stroke={node.color}
+        strokeWidth={1.5}
+        strokeDasharray={node.dashed ? '6 4' : undefined}
+        strokeLinejoin="round"
+      />
+      {node.label && (
+        <Ground proj={proj} z={node.z}>
+          <g transform={f.transform}>
+            <path d={`M${x0},${y0} H${x0 + tabW} V${y0 + 14} L${x0 + tabW - 6},${y0 + 20} H${x0} Z`} fill={node.color} fillOpacity={theme === 'dark' ? 0.9 : 1} />
+            <text x={x0 + 8} y={y0 + 10} fontSize={11} fontWeight={700} dominantBaseline="central" fill={node.labelColor ?? contrastText(node.color)} style={{ userSelect: 'none' }} pointerEvents="none">
+              {node.label}
+            </text>
+          </g>
+        </Ground>
+      )}
+    </>
+  );
+}
+
 function TextNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
   const c = center(node);
   const fs = (node.fontSize ?? 0.7) * TILE;
@@ -262,7 +331,8 @@ export function labelAnchor(node: DiagramNode, proj: Projector): Pt {
 
 function Label({ node, proj }: { node: DiagramNode; proj: Projector }) {
   const theme = useTheme();
-  if (!node.label || node.kind === 'text') return null;
+  // Text and notes carry their own text; a frame's title is its tab.
+  if (!node.label || node.kind === 'text' || node.kind === 'note' || node.kind === 'frame') return null;
   if (node.kind === 'area') {
     // Area labels sit inside the (upright) top-left corner, painted on the ground.
     const f = uprightFrame(node, proj, 'flip');
@@ -334,6 +404,12 @@ export function NodeShape({ node, proj, idPrefix }: { node: DiagramNode; proj: P
     case 'text':
       body = <TextNode node={node} proj={proj} />;
       break;
+    case 'note':
+      body = <NoteNode node={node} proj={proj} />;
+      break;
+    case 'frame':
+      body = <FrameNode node={node} proj={proj} />;
+      break;
     case 'sphere':
       body = <Sphere node={node} proj={proj} gradId={`${idPrefix}-sph-${node.id}`} />;
       break;
@@ -343,7 +419,7 @@ export function NodeShape({ node, proj, idPrefix }: { node: DiagramNode; proj: P
     default:
       body = <SolidFaces node={node} proj={proj} />;
   }
-  const isArea = node.kind === 'area' || node.kind === 'circleArea';
+  const isArea = node.kind === 'area' || node.kind === 'circleArea' || node.kind === 'frame' || node.kind === 'note';
   return (
     <g data-node-id={node.id} opacity={isArea ? undefined : node.opacity ?? 1}>
       {body}

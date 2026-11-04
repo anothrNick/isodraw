@@ -342,6 +342,8 @@ export function IsoCanvas(props: IsoCanvasProps) {
         return n && isContainer(n) && !n.locked;
       });
       const moving = new Set([...nodes, ...descendantsOf(containers, diagram.nodes)]);
+      // Notes pinned to anything moving come too.
+      for (const n of diagram.nodes) if (n.kind === 'note' && n.pin && moving.has(n.pin)) moving.add(n.id);
       const origins = new Map<string, Pt>();
       for (const id of moving) {
         const n = nodeById.get(id);

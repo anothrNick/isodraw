@@ -14,7 +14,11 @@ export type ShapeKind =
   | 'area'
   | 'circleArea'
   | 'text'
-  | 'image';
+  | 'image'
+  /** A sticky note: a flat box of wrapped text, which can follow an item (`pin`). */
+  | 'note'
+  /** A frame: a thin titled outline around things, like an area without the fill (sequence fragments, steps). */
+  | 'frame';
 
 /** How an image node is drawn in the 2.5D view. */
 export type ImageStyle = 'tile' | 'flat' | 'standing';
@@ -50,6 +54,8 @@ export interface DiagramNode {
   imageStyle?: ImageStyle;
   /** Locked nodes can be selected but not moved. */
   locked?: boolean;
+  /** For notes: the id of the item it follows (moves and layout carry it along). */
+  pin?: string;
   /**
    * A lifeline: a dashed line this long (world units) hanging below the node,
    * as in a sequence diagram. Connections attach anywhere along it.

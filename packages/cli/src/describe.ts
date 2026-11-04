@@ -59,6 +59,7 @@ export function outline(root: Diagram, meta: { title: string; version: number },
         ...(n.doc?.trim() ? { doc: { chars: n.doc.length, firstLine: firstLine(n.doc) } } : {}),
         ...(n.detail ? { detail: { items: n.detail.nodes.filter((x) => x.kind !== 'text').length } } : {}),
         ...(n.lifeline ? { lifeline: true as const } : {}),
+        ...(n.kind === 'note' ? { text: n.text ?? '', ...(n.pin ? { on: n.pin } : {}) } : {}),
       })),
     sequence: d.edges
       .filter((e) => heights.has(e.id))

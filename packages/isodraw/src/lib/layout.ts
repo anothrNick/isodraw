@@ -264,8 +264,8 @@ export function layeredLayout(input: LayoutInput): Map<string, Placement> {
 /** Whether the platform placed this item (true) or a person did (false). */
 export const isAutoPlaced = (n: DiagramNode) => n.placed === 'auto';
 
-/** Items that take part in layout: everything but free text. */
-export const laidOut = (n: DiagramNode) => n.kind !== 'text';
+/** Items that take part in layout: everything but free text and notes (a note follows what it's pinned to). */
+export const laidOut = (n: DiagramNode) => n.kind !== 'text' && n.kind !== 'note';
 
 /**
  * Lay out a whole level: areas keep their contents, components go in columns
@@ -315,13 +315,31 @@ export function applyPlacements(d: Diagram, items: DiagramNode[], placed: Map<st
     if (next.x !== n.x || next.y !== n.y || next.w !== n.w || next.d !== n.d) moved.add(n.id);
     return next;
   });
-  const edges = d.edges.map((e) => {
+  return { ...followPins(d, { ...d, nodes }), edges: retargetEdges(d, moved) };
+}
+
+/** Connections between moved items lose their bends and anchors (a message keeps its place on a lifeline). */
+function retargetEdges(d: Diagram, moved: ReadonlySet<string>): Diagram['edges'] {
+  return d.edges.map((e) => {
     if (!moved.has(e.from) && !moved.has(e.to)) return e;
     const { waypoints: _w, fromAnchor: f, toAnchor: t, ...rest } = e;
-    // A message keeps its place on a lifeline.
     return { ...rest, ...(f?.line !== undefined ? { fromAnchor: f } : {}), ...(t?.line !== undefined ? { toAnchor: t } : {}) };
   });
-  return { ...d, nodes, edges };
+}
+
+/** Notes pinned to an item move by the same amount it did, from `before` to `after`. */
+export function followPins(before: Diagram, after: Diagram): Diagram {
+  const was = new Map(before.nodes.map((n) => [n.id, n]));
+  const now = new Map(after.nodes.map((n) => [n.id, n]));
+  let changed = false;
+  const nodes = after.nodes.map((n) => {
+    if (n.kind !== 'note' || !n.pin) return n;
+    const [a, b] = [was.get(n.pin), now.get(n.pin)];
+    if (!a || !b || (a.x === b.x && a.y === b.y)) return n;
+    changed = true;
+    return { ...n, x: n.x + b.x - a.x, y: n.y + b.y - a.y };
+  });
+  return changed ? { ...after, nodes } : after;
 }
 
 /** Lay out some of a level's items by flow, starting at `at` (by default where they are now). */

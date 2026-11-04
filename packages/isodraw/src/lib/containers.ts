@@ -6,7 +6,7 @@ import type { DiagramNode } from './types';
  * moving or deleting the area takes its contents along. Membership is derived
  * from geometry rather than stored, so it always matches what you see.
  */
-export const isContainer = (n: DiagramNode) => n.kind === 'area' || n.kind === 'circleArea';
+export const isContainer = (n: DiagramNode) => n.kind === 'area' || n.kind === 'circleArea' || n.kind === 'frame';
 
 const EPS = 1e-6;
 

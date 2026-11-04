@@ -12,6 +12,7 @@ import {
   levelAt,
   levelNodes,
   lineTop,
+  noteDepth,
   nodeTitle,
   settleLevelAsync,
   SHAPES,
@@ -74,6 +75,15 @@ export type Op = { level?: string } & (
     }
   /** One more message between two participants, below the last one on the level. */
   | ({ op: 'addMessage' } & Message)
+  | {
+      /** A sticky note, beside an item (and following it) or on its own. */
+      op: 'addNote';
+      text: string;
+      /** The item it sits beside and follows. */
+      on?: string;
+      id?: string;
+      color?: string;
+    }
 );
 
 export class OpError extends Error {
@@ -277,7 +287,8 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
             const kind = op.kind ?? (op.icon ? 'image' : 'block');
             if (!KINDS.has(kind)) throw new OpError(`Unknown kind "${kind}". Use one of: ${[...KINDS].join(', ')}.`);
             const id = op.id ? (d.nodes.some((n) => n.id === op.id) ? fail(`An item with id "${op.id}" already exists.`) : op.id) : freeId(d, slug(op.label));
-            const base = op.icon ? createImageNode(iconUrl(op.icon), op.label, 0, 0) : createShape(kind, 0, 0, { label: op.label });
+            // A note's label is its text; a frame's its title.
+            const base = op.icon ? createImageNode(iconUrl(op.icon), op.label, 0, 0) : createShape(kind, 0, 0, kind === 'note' ? { text: op.label } : { label: op.label });
             // Placed by the platform: automatic layout may move it until a person does.
             const node: DiagramNode = { ...base, id, label: op.label, placed: 'auto', ...(op.color ? { color: op.color } : {}), ...(op.doc ? { doc: op.doc } : {}) };
             const area = op.in ? findNode(d, op.in) : undefined;
@@ -422,6 +433,23 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
               return { ...next, view: '2d' };
             }
             return next;
+          }
+          case 'addNote': {
+            if (!op.text?.trim()) throw new OpError('A note needs some text.');
+            const on = op.on ? findNode(d, op.on) : undefined;
+            const id = op.id ? (d.nodes.some((n) => n.id === op.id) ? fail(`An item with id "${op.id}" already exists.`) : op.id) : freeId(d, 'note');
+            const shape = createShape('note', 0, 0, { text: op.text });
+            const note: DiagramNode = { ...shape, d: noteDepth(shape), id, ...(op.color ? { color: op.color } : {}), ...(on ? { pin: on.id } : {}) };
+            added.push(id);
+            changes.push(`added a note${on ? ` on ${nodeTitle(on)}` : ''}${where}`);
+            if (!on) {
+              // On its own: under everything, where it's out of the way.
+              const bottom = d.nodes.length ? Math.max(...d.nodes.map((n) => (n.lifeline ? lineTop(n).y + n.lifeline : n.y + n.d))) + 1.5 : 0;
+              const left = d.nodes.length ? Math.min(...d.nodes.map((n) => n.x)) : 0;
+              return { ...d, nodes: [...d.nodes, { ...note, x: left, y: bottom }] };
+            }
+            // Beside the item's top-right corner, clear of its label.
+            return { ...d, nodes: [...d.nodes, { ...note, x: on.x + on.w + 0.6, y: on.y - 0.4 }] };
           }
           case 'addMessage': {
             const a = findNode(d, op.from);

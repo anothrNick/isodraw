@@ -23,6 +23,7 @@ How to work:
 - Find the diagram with list_diagrams, then call describe_diagram before changing anything, and again after to check.
 - Make related changes in one apply_changes call. Use dry_run first when the change is large or the user should confirm.
 - Never think about coordinates or layout: the platform places and lays out items.
+- Notes and frames: addNote puts a short remark beside an item (it follows the item); addNode with kind "frame" makes a thin titled outline for grouping without an area's fill (a sequence fragment such as "loop" or "alt", or a step).
 - Sequence diagrams: use addSequence (participants left to right, messages top to bottom: call, async, return, self) and addMessage to add more. Participants are components with lifelines, so the same items can appear in the architecture and in sequences. Activation bars come from calls and their returns. describe_diagram lists the messages in order.
 - Icons: find_icons gives references for the "icon" field (isodraw:laptop, aws_lambda_function, …). Isometric icons (isodraw:…) take the item's color.
 - Finish by showing the user the picture. Tools that change a diagram, and preview_diagram, return the picture as an image plus Markdown for it (a PNG linking to the editor); put that Markdown in your reply.
@@ -32,7 +33,7 @@ How to work:
 const level = z.string().optional().describe('A detail level: the path of components drilled into, like "orders/validate". Omit for the top level.');
 const diagram = z.string().describe('The diagram, by id or title (a unique start of a title works).');
 
-const NodeKind = z.enum(['block', 'cylinder', 'hexagon', 'pyramid', 'cone', 'sphere', 'area', 'circleArea', 'text']);
+const NodeKind = z.enum(['block', 'cylinder', 'hexagon', 'pyramid', 'cone', 'sphere', 'area', 'circleArea', 'text', 'note', 'frame']);
 const LineStyle = z.enum(['solid', 'dashed', 'dotted']);
 const at = { level: z.string().optional().describe('Apply this change on another level than the call\'s "level".') };
 
@@ -99,6 +100,14 @@ const Change = z.discriminatedUnion('op', [
     ...at,
   }),
   z.object({ op: z.literal('addMessage'), ...Message.shape, ...at }).describe('One more message, below the last one on the level.'),
+  z.object({
+    op: z.literal('addNote'),
+    text: z.string().describe('Short: a sentence or two.'),
+    on: z.string().optional().describe('The item it sits beside and follows (by id or label). Omit for a free-standing note.'),
+    id: z.string().optional(),
+    color: z.string().optional().describe('#rrggbb; default a sticky-note yellow.'),
+    ...at,
+  }).describe('A sticky note: a remark on the diagram, beside an item or on its own.'),
 ]);
 
 const text = (t: string): CallToolResult => ({ content: [{ type: 'text', text: t }] });

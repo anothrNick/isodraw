@@ -28,7 +28,8 @@ label is ambiguous the error lists the ids to use.
   IsoDraw's isometric icons (\`isodraw:laptop\`, \`isodraw:database\`; they
   take the item's \`--color\`), a Terraform resource type, or an image URL.
   \`isodraw icons <search>\` lists them all.
-  Kinds: block, cylinder, hexagon, pyramid, cone, sphere, area, circleArea, text.
+  Kinds: block, cylinder, hexagon, pyramid, cone, sphere, area, circleArea, text,
+  note (a sticky note; the label is its text), frame (a thin titled outline).
 - \`isodraw nodes update <diagram> <item> [--label …] [--color #hex] [--icon …]\`
 - \`isodraw nodes remove <diagram> <item>\` (also removes its connections)
 - \`isodraw edges add <diagram> <from> <to> [--label "SQL"] [--style dashed]\`
@@ -45,7 +46,9 @@ with a JSON array of ops, and \`--dry-run\` first to see what would change:
       {"op": "setDoc", "item": "Redis", "markdown": "Caches order lookups for 5 minutes."}
     ]
 
-Ops: addNode, updateNode, removeNode, addEdge, updateEdge, removeEdge, setDoc,
+Ops: addNote ({"text": …, "on": item}: a sticky note beside an item, which it
+follows; leave out "on" for one on its own), addNode, updateNode, removeNode,
+addEdge, updateEdge, removeEdge, setDoc,
 addDetail, addSequence, addMessage. Every op may have "level": "a/b".
 
 ## Sequence diagrams

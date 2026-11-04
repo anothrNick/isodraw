@@ -26,6 +26,8 @@ export const SHAPES: ShapeDef[] = [
     name: 'Text',
     defaults: { w: 4, d: 1, h: 0, color: '#1f2937', text: 'Text', fontSize: 0.7 },
   },
+  { kind: 'note', name: 'Note', defaults: { w: 3.5, d: 1, h: 0, color: '#fbbf24', text: 'Note', fontSize: 0.42 } },
+  { kind: 'frame', name: 'Frame', defaults: { w: 6, d: 4, h: 0, color: '#64748b', label: 'Frame' } },
 ];
 
 export const SWATCHES = [
@@ -165,4 +167,6 @@ export const KIND_NAMES: Record<ShapeKind, string> = {
   circleArea: 'Circle area',
   text: 'Text',
   image: 'Image',
+  note: 'Note',
+  frame: 'Frame',
 };

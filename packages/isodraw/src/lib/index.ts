@@ -24,4 +24,5 @@ export { mergeDiagrams } from './merge';
 export { layoutLevel, settleLevel, layeredLayout } from './layout';
 export { layoutLevelAsync, settleLevelAsync } from './elkLayout';
 export { routeLevel } from './autoRoute';
+export { noteDepth, noteLines } from './notes';
 export type { LevelPath } from './levels';

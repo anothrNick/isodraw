@@ -12,6 +12,7 @@ import { importTerraform, isTerraformJson } from './terraform';
 import { layoutLevelAsync } from './elkLayout';
 import { markMoved, movesItem } from './layout';
 import { lineTop, withBars } from './lifelines';
+import { noteDepth } from './notes';
 import { canHaveDetail, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
@@ -1136,7 +1137,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                       onClick={() => placePayload({ type: 'shape', kind: s.kind }, viewCenter())}
                       title={`${s.name} — click or drag onto canvas`}
                     >
-                      <ShapePreview node={createShape(s.kind, 0, 0, { id: `pv-${s.kind}`, text: 'Aa', fontSize: 1.4 })} />
+                      <ShapePreview node={createShape(s.kind, 0, 0, { id: `pv-${s.kind}`, ...(s.kind === 'note' ? { text: 'Note', fontSize: 0.9 } : { text: 'Aa', fontSize: 1.4 }) })} />
                       <span>{s.name}</span>
                     </button>
                   ))}
@@ -1377,7 +1378,12 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 }
                 onFitContents={() => fitContainer(selNode.id)}
                 onUngroup={ungroupSelection}
-                onChange={(patch, key) => updateNode(selNode.id, patch, key)}
+                items={diagram.nodes}
+                onChange={(patch, key) => {
+                  // A note is as deep as its text needs.
+                  const fit = selNode.kind === 'note' && ('text' in patch || 'w' in patch || 'fontSize' in patch) ? { d: noteDepth({ ...selNode, ...patch }) } : {};
+                  updateNode(selNode.id, { ...patch, ...fit }, key);
+                }}
                 onDelete={deleteSelection}
                 onDuplicate={() => {
                   copySelection();
@@ -1562,8 +1568,11 @@ function NodeInspector({
   onSelectContents,
   onFitContents,
   onUngroup,
+  items,
 }: {
   node: DiagramNode;
+  /** The other items on this level a note can follow. */
+  items: DiagramNode[];
   /** Adds an activation bar to its lifeline (turning automatic bars into placed ones first). */
   onAddBar: () => void;
   /** Container this node sits in, if any. */
@@ -1580,7 +1589,8 @@ function NodeInspector({
   onUngroup: () => void;
 }) {
   const flat = isFlat(node);
-  const isArea = node.kind === 'area' || node.kind === 'circleArea';
+  const isArea = node.kind === 'area' || node.kind === 'circleArea' || node.kind === 'frame';
+  const hasText = node.kind === 'text' || node.kind === 'note';
   const solidKinds: ShapeKind[] = ['block', 'cylinder', 'hexagon', 'pyramid', 'cone', 'sphere'];
   return (
     <div className="isd-panel">
@@ -1610,7 +1620,7 @@ function NodeInspector({
           )}
         </div>
       )}
-      {node.kind === 'text' ? (
+      {hasText ? (
         <Field label="Text">
           <textarea className="isd-input" rows={3} value={node.text ?? ''} onChange={(e) => onChange({ text: e.target.value }, 'text')} />
         </Field>
@@ -1681,7 +1691,21 @@ function NodeInspector({
           <NumberInput value={node.z} step={0.25} onChange={(z) => onChange({ z }, 'z')} />
         </Field>
       </div>
-      {!isArea && node.kind !== 'text' && (
+      {node.kind === 'note' && (
+        <Field label="Follows">
+          <select className="isd-input" value={node.pin ?? ''} onChange={(e) => onChange({ pin: e.target.value || undefined })}>
+            <option value="">Nothing: stays where it's put</option>
+            {items
+              .filter((n) => n.id !== node.id && n.kind !== 'note' && n.kind !== 'text')
+              .map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.label || KIND_NAMES[n.kind]}
+                </option>
+              ))}
+          </select>
+        </Field>
+      )}
+      {!isArea && !hasText && (
         <Field label="Lifeline">
           <div className="isd-row">
             <label className="isd-check">
@@ -1733,9 +1757,9 @@ function NodeInspector({
           <p className="isd-hint">Drag from the line to draw a message; drag the handle at its end to change its length.</p>
         </>
       )}
-      {node.kind === 'text' && (
+      {hasText && (
         <Field label="Font size">
-          <NumberInput value={node.fontSize ?? 0.7} min={0.2} step={0.1} onChange={(fontSize) => onChange({ fontSize }, 'fs')} />
+          <NumberInput value={node.fontSize ?? (node.kind === 'note' ? 0.42 : 0.7)} min={0.2} step={0.05} onChange={(fontSize) => onChange({ fontSize }, 'fs')} />
         </Field>
       )}
       <Field label={isArea ? 'Fill opacity' : 'Opacity'}>
@@ -1744,7 +1768,7 @@ function NodeInspector({
           min={0}
           max={1}
           step={0.05}
-          value={node.opacity ?? (isArea ? 0.18 : 1)}
+          value={node.opacity ?? (node.kind === 'frame' ? 0.04 : isArea ? 0.18 : node.kind === 'note' ? 0.9 : 1)}
           onChange={(e) => onChange({ opacity: parseFloat(e.target.value) }, 'opacity')}
         />
       </Field>

@@ -261,3 +261,24 @@ describe('sequence diagrams', () => {
     expect(d.nodes.find((n) => n.id === 'db')!.lifeline).toBeUndefined();
   });
 });
+
+describe('notes and frames', () => {
+  it('addNote puts a note beside an item and pins it there', async () => {
+    const { diagram, added, changes } = await applyOps(base(), [{ op: 'addNote', text: 'Scales to zero overnight', on: 'orders-api' }]);
+    const note = diagram.nodes.find((n) => n.id === added[0])!;
+    const api = diagram.nodes.find((n) => n.id === 'api')!;
+    expect(note).toMatchObject({ kind: 'note', text: 'Scales to zero overnight', pin: 'api' });
+    expect(note.x).toBeGreaterThan(api.x + api.w);
+    expect(changes[0]).toMatch(/added a note on/);
+  });
+
+  it('addNote without an item stands on its own, and addNode makes frames', async () => {
+    const { diagram } = await applyOps(base(), [
+      { op: 'addNote', text: 'Free note' },
+      { op: 'addNode', label: 'retry loop', kind: 'frame' },
+    ]);
+    expect(diagram.nodes.find((n) => n.kind === 'note')).toMatchObject({ text: 'Free note' });
+    expect(diagram.nodes.find((n) => n.kind === 'frame')).toMatchObject({ label: 'retry loop' });
+    expect(diagram.nodes.find((n) => n.kind === 'note')!.pin).toBeUndefined();
+  });
+});

@@ -94,7 +94,7 @@ export function layoutSequence(d: Diagram): SequenceLayout | null {
   const after = new Map<string, number>();
   const gap = order.map(() => ROW);
   for (const n of notes) {
-    if (holds(n)) continue;
+    if (holds(n) || isContainer(n)) continue;
     const k = order.findIndex((m, i) => i + 1 < order.length && m.y <= n.y && order[i + 1].y > n.y);
     if (k < 0) continue;
     after.set(n.id, k);
@@ -126,7 +126,17 @@ export function layoutSequence(d: Diagram): SequenceLayout | null {
       // A frame around the participants keeps them inside, top to bottom.
       const y = round(Math.min(n.y + (top - Math.min(...people.map((p) => p.y))), top - 0.5));
       moved.set(n.id, { ...n, x, w, y, d: round(Math.max(n.d, last + 1.2 - y)) });
+    } else if (isContainer(n)) {
+      // A frame over some of the messages (a fragment) keeps spanning the same ones.
+      const y = round(ys(n.y));
+      moved.set(n.id, { ...n, x, w, y, d: round(Math.max(1, ys(n.y + n.d) - y)) });
     } else moved.set(n.id, { ...n, x, w, y: round(k !== undefined ? rows[k] + 0.55 : ys(n.y)) });
+  }
+  // A note pinned to a participant goes where it went.
+  for (const n of d.nodes) {
+    if (n.kind !== 'note' || !n.pin || !moved.has(n.pin)) continue;
+    const [was, now] = [byId.get(n.pin)!, moved.get(n.pin)!];
+    moved.set(n.id, { ...n, x: round(n.x + now.x - was.x), y: round(n.y + now.y - was.y) });
   }
 
   const lineAt = (n: DiagramNode, y: number) => round(Math.min(Math.max(y - lineTop(n).y, 0), n.lifeline ?? 0));
