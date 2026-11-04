@@ -1,7 +1,7 @@
-# Draw without signing up
+# The Playground: draw without signing up
 
 **Status:** in progress (phase 1 built) · **Priority:** next
-**Summary:** A public editor at `isodraw.app/draw` that runs entirely in the browser: one diagram, saved on the device, with import and export, and a one-click hand-off into a free account when someone wants to keep more.
+**Summary:** A public editor, the Playground, at `isodraw.app/playground` (`/draw` also works) that runs entirely in the browser: one diagram, saved on the device, with import and export, and a one-click hand-off into a free account when someone wants to keep more.
 
 ## Why
 
@@ -42,11 +42,11 @@ And what needs an account (each one is a reason to sign up, said plainly where i
 
 1. **The page.** `/draw` with local saving (IndexedDB), the slim header, New with download-first, and the starter. Open and Export come with the editor. *Built:* `web/src/DrawPage.tsx` and `web/src/draft.ts`; the starter is the three-tier example, New offers a blank diagram or any example, and an empty canvas says where to start. Sign in and Sign up free sit in the header; Save to your account is phase 2.
 2. **The hand-off.** Save to your account: sign-up keeps the draft, the post-sign-in import with image upload, and the offer for people already signed in.
-3. **Getting people there.** Landing page and pricing calls to action, the info line, and a decision on the GitHub Pages demo.
+3. **Getting people there.** Landing page and pricing calls to action, the info line, and a decision on the GitHub Pages demo. *Built so far:* the hero's main button is **Try the Playground** (with **Sign up free** beside it), the nav has a Playground link, the hero demo has **Open in Playground** for the example on show (`/playground?example=<id>`, which asks before replacing a saved diagram), and the closing section offers it next to sign-up.
 
 ## Open questions
 
-- **URL:** `/draw` (recommended: short, says what it is) or `/try`, or a subdomain.
+- **URL:** decided: `/playground`, named the Playground everywhere; `/draw` stays as an alias.
 - **Starter:** blank with a hint, or an example to play with (the three-tier app shows the most). Possibly a small "Start from an example" picker.
 - **Examples menu:** include the examples gallery in `/draw`? It's the fastest way to show what IsoDraw can do, at the cost of a busier first screen.
 - **Limits beyond one diagram:** a size cap on images kept in the browser (IndexedDB allows far more, but a 50 MB draft would be slow to import).

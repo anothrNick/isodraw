@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Bot, Box, Check, FileCode2, FileText, Layers, Link2, Monitor, Moon, Scale, Server, Sun, Users } from 'lucide-react';
+import { ArrowRight, Bot, Box, Check, FileCode2, FileText, Layers, Link2, Monitor, Moon, MousePointer2, Scale, Server, Sun, Users } from 'lucide-react';
 import { IsoDocView, StaticDiagram, ThemeContext, docOf, hasDoc, titleOf, type DocTarget } from 'isodraw';
 import type { Example } from 'isodraw-templates';
 import { Logo } from './App';
@@ -90,7 +90,7 @@ function Nav() {
           <Logo />
           IsoDraw
         </a>
-        <nav className="ml-6 hidden items-center gap-1 text-muted-foreground sm:flex">
+        <nav className="ml-4 hidden items-center gap-0.5 whitespace-nowrap text-muted-foreground md:flex lg:ml-6 lg:gap-1">
           <a href="#features" className="rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-foreground">
             Features
           </a>
@@ -99,6 +99,9 @@ function Nav() {
           </a>
           <a href="#pricing" className="rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-foreground">
             Pricing
+          </a>
+          <a {...linkProps('/playground')} className="rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-foreground">
+            Playground
           </a>
         </nav>
         <div className="ml-auto flex items-center gap-1.5">
@@ -109,6 +112,10 @@ function Nav() {
           </Button>
           <Button variant="ghost" size="icon-sm" aria-label={`Theme: ${setting}`} title={`Theme: ${setting}`} onClick={() => setThemeSetting(next)}>
             <ThemeIcon />
+          </Button>
+          {/* Where the nav links don't fit, the Playground keeps its place up here. */}
+          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex md:hidden">
+            <a {...linkProps('/playground')}>Playground</a>
           </Button>
           <Button asChild variant="ghost" size="sm">
             <a {...linkProps('/login')}>Sign in</a>
@@ -159,17 +166,20 @@ function Hero() {
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg">
-              <a {...linkProps('/signup')}>
-                Start drawing free
-                <ArrowRight />
+              <a {...linkProps('/playground')}>
+                <MousePointer2 />
+                Try the Playground
               </a>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <a href="#agents">Connect your AI</a>
+              <a {...linkProps('/signup')}>
+                Sign up free
+                <ArrowRight />
+              </a>
             </Button>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Free for personal use. No card needed.{' '}
+            The Playground needs no sign-up: it runs in your browser, with import and export. Free accounts for personal use, no card needed.{' '}
             <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="underline-offset-4 hover:text-foreground hover:underline">
               Open source on GitHub
             </a>
@@ -233,9 +243,17 @@ function Hero() {
                 )}
               </div>
               {example && (
-                <p className="border-t px-4 py-2.5 text-xs text-muted-foreground">
-                  {example.description} <span className="text-foreground/70">Click a component to read its docs.</span>
-                </p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-2.5 text-xs text-muted-foreground">
+                  <p className="min-w-0 flex-1">
+                    {example.description} <span className="text-foreground/70">Click a component to read its docs.</span>
+                  </p>
+                  <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                    <a {...linkProps(`/playground?example=${encodeURIComponent(example.id)}`)}>
+                      Open in Playground
+                      <ArrowRight />
+                    </a>
+                  </Button>
+                </div>
               )}
             </div>
             {example && <DocsSidebar diagram={example.diagram} page={page} onPage={setPage} onFocus={setFocus} theme={resolved} />}
@@ -602,12 +620,20 @@ function Faq() {
         <div className="mt-16 text-center">
           <h2 className="text-2xl font-bold tracking-tight">Draw your first diagram in a minute</h2>
           <p className="mt-2 text-muted-foreground">Start from a documented template, or ask your agent to draw it for you.</p>
-          <Button asChild size="lg" className="mt-6">
-            <a {...linkProps('/signup')}>
-              Get started free
-              <ArrowRight />
-            </a>
-          </Button>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Button asChild size="lg">
+              <a {...linkProps('/signup')}>
+                Get started free
+                <ArrowRight />
+              </a>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <a {...linkProps('/playground')}>
+                <MousePointer2 />
+                Try the Playground first
+              </a>
+            </Button>
+          </div>
         </div>
       </div>
     </section>

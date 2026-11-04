@@ -21,7 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 /**
- * /draw: the editor with no account. One diagram, kept in this browser (see
+ * The Playground (/playground): the editor with no account. One diagram, kept in this browser (see
  * draft.ts) and saved as it changes; the editor's own Open and Export bring
  * diagrams in and out. Nothing is sent anywhere.
  */
@@ -44,25 +44,36 @@ export function DrawPage() {
   const [replacing, setReplacing] = useState<(() => Promise<Diagram>) | null>(null);
   const [examples, setExamples] = useState<Example[]>([]);
   const { resolved } = useTheme();
+  // ?example=<id> (from the landing page) asks to open that example.
+  const [wanted] = useState(() => new URLSearchParams(location.search).get('example'));
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(draft);
   latest.current = draft;
 
   useEffect(() => {
-    document.title = 'Draw · IsoDraw';
+    document.title = 'Playground · IsoDraw';
     loadTemplates().then(setExamples, () => undefined);
+    // The ?example is read once, then dropped from the address so a reload doesn't ask again.
+    if (wanted) history.replaceState(null, '', location.pathname + location.hash);
     let live = true;
     loadDraft().then(async (saved) => {
       if (!live) return;
-      if (saved) return setDraft({ diagram: saved.diagram, icons: saved.icons });
       const all = await loadTemplates().catch(() => [] as Example[]);
-      if (live) setDraft({ diagram: all.find((e) => e.id === STARTER)?.diagram ?? emptyDiagram(), icons: [] });
+      const asked = wanted ? all.find((e) => e.id === wanted) : undefined;
+      if (!live) return;
+      if (saved) {
+        setDraft({ diagram: saved.diagram, icons: saved.icons });
+        // Their own diagram comes first: opening the example replaces it only if they say so.
+        if (asked) setReplacing(() => async () => asked.diagram);
+        return;
+      }
+      setDraft({ diagram: (asked ?? all.find((e) => e.id === STARTER))?.diagram ?? emptyDiagram(), icons: [] });
     });
     return () => {
       live = false;
       document.title = 'IsoDraw';
     };
-  }, []);
+  }, [wanted]);
 
   const save = useCallback(() => {
     pending.current = null;
@@ -125,6 +136,7 @@ export function DrawPage() {
           IsoDraw
         </a>
         <span className="text-muted-foreground/60">/</span>
+        <span className="px-1 text-sm font-medium">Playground</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="gap-1 px-1.5">
