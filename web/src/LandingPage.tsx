@@ -495,7 +495,7 @@ function Pricing() {
         <SectionHeading
           eyebrow="Pricing"
           title="One price per workspace. Never per seat."
-          body="Your personal workspace is free, with every feature. Shared workspaces have a flat price however many people join, so inviting a teammate never costs a thing."
+          body="Your personal workspace is free, with every feature. Shared workspaces have one flat price per plan: Pro covers up to 4 people and Team has no limit, so adding a teammate never costs extra."
         />
         <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {PLANS.map((p) => (
@@ -579,7 +579,7 @@ const FAQ = [
   },
   {
     q: 'Why per workspace and not per seat?',
-    a: "Because diagrams are for sharing. A workspace has one flat price however many people are in it, so you never have to decide whether a teammate is worth a seat.",
+    a: "Because diagrams are for sharing. Each plan has one flat price for the whole workspace (Pro for up to 4 people, Team for any number), so you never have to decide whether a teammate is worth a seat.",
   },
   {
     q: 'What does founding lifetime mean?',
