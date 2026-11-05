@@ -26,6 +26,7 @@ import (
 	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
 	"github.com/anothrNick/isodraw/api/internal/db"
+	"github.com/anothrNick/isodraw/api/internal/email"
 	"github.com/anothrNick/isodraw/api/internal/httpapi"
 	"github.com/anothrNick/isodraw/api/internal/store"
 )
@@ -151,6 +152,11 @@ func serve(ctx context.Context, cfg config.Config) error {
 	if err != nil {
 		return err
 	}
+	mail, err := email.New(ctx, cfg.Email)
+	if err != nil {
+		return err
+	}
+	a.UseEmail(mail)
 	files := blobs.Dir(cfg.ImageDir)
 	if cfg.BucketName != "" {
 		if files, err = blobs.Bucket(ctx, cfg.BucketName); err != nil {
@@ -159,7 +165,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, s, a, files),
+		Handler:           httpapi.New(cfg, s, a, files, mail),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)

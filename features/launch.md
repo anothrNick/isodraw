@@ -53,10 +53,12 @@ Still open:
 
 ## 3. Email
 
-- [ ] **Cognito's built-in email sends at most 50 a day.** Move it to Amazon SES with our own sender before launch, or sign-ups will stall on launch day. SES starts in a sandbox, so ask AWS for production access early.
-- [ ] A verified sending domain with SPF, DKIM and DMARC.
-- [ ] Invite emails. Today the inviter copies the link; the API sends nothing.
-- [ ] Purchase and refund emails (the provider can send receipts), plus a welcome email.
+- [ ] **Cognito's built-in email sends at most 50 a day.** Move it to Amazon SES with our own sender before launch, or sign-ups will stall on launch day. SES starts in a sandbox, so ask AWS for production access early. *Built:* `cognito_email_via_ses` in Terraform; turn it on once SES has production access (DEPLOY.md, "Email").
+- [ ] A verified sending domain with SPF, DKIM and DMARC. *Built:* the SES domain, MAIL FROM and configuration set in `infra/terraform/email.tf`; the records still go into Cloudflare by hand.
+- [x] Invite emails: the API emails each invite (and Resend), and the form still shows the link to copy.
+- [x] A welcome email after someone's first sign-in.
+- [ ] Purchase and refund emails (Stripe can send receipts).
+- [ ] Replies to hello@isodraw.app: Cloudflare Email Routing to an inbox.
 
 ## 4. Data safety and reliability
 

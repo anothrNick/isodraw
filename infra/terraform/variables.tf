@@ -26,3 +26,27 @@ variable "domain_prefix" {
   type        = string
   default     = "isodraw"
 }
+
+variable "email_domain" {
+  description = "Domain IsoDraw sends email from through Amazon SES, e.g. isodraw.example.com. Leave empty to skip SES (Cognito then sends its own codes, at most 50 a day)."
+  type        = string
+  default     = ""
+}
+
+variable "email_from" {
+  description = "The address emails come from, on email_domain, e.g. hello@isodraw.example.com."
+  type        = string
+  default     = ""
+}
+
+variable "email_from_name" {
+  description = "The name shown with email_from."
+  type        = string
+  default     = "IsoDraw"
+}
+
+variable "cognito_email_via_ses" {
+  description = "Send Cognito's verification and reset codes through SES from email_from. Turn on only once SES has production access, or codes reach verified addresses only."
+  type        = bool
+  default     = false
+}

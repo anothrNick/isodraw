@@ -7,3 +7,9 @@ region  = "us-east-1"
 
 # Only used when creating a pool; must be globally unique.
 # domain_prefix = "isodraw"
+
+# Email through SES (optional): the sending domain and address. Turn on
+# cognito_email_via_ses once SES has production access.
+# email_domain          = "isodraw.example.com"
+# email_from            = "hello@isodraw.example.com"
+# cognito_email_via_ses = true

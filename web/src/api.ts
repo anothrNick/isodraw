@@ -287,7 +287,7 @@ export const api = {
   changeRole: (orgId: string, userId: string, role: Role) => request<void>('PATCH', `/api/orgs/${orgId}/members/${userId}`, { role }),
   removeMember: (orgId: string, userId: string) => request<void>('DELETE', `/api/orgs/${orgId}/members/${userId}`),
   /** Invite an address. No email is sent yet: the answer has the link to share. */
-  invite: (orgId: string, email: string, role: Role) => request<{ invite: Invite; url: string }>('POST', `/api/orgs/${orgId}/invites`, { email, role }),
+  invite: (orgId: string, email: string, role: Role) => request<{ invite: Invite; url: string; emailed: boolean }>('POST', `/api/orgs/${orgId}/invites`, { email, role }),
   revokeInvite: (orgId: string, inviteId: string) => request<void>('DELETE', `/api/orgs/${orgId}/invites/${inviteId}`),
   getInvite: (token: string) => request<InviteDetails>('GET', `/api/invites/${encodeURIComponent(token)}`),
   acceptInvite: (token: string) => request<Org>('POST', `/api/invites/${encodeURIComponent(token)}/accept`),

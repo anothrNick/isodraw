@@ -23,6 +23,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/anothrNick/isodraw/api/internal/config"
+	"github.com/anothrNick/isodraw/api/internal/email"
 	"github.com/anothrNick/isodraw/api/internal/store"
 )
 
@@ -44,6 +45,23 @@ type Auth struct {
 	// password runs IsoDraw's own sign-in pages (AUTH_MODE cognito or local); nil means redirect to the OIDC provider.
 	password PasswordProvider
 	limits   *limiter
+	// mail sends the welcome email, and local accounts' codes; nil sends nothing (see UseEmail).
+	mail email.Sender
+}
+
+// UseEmail has sign-in send through m: a welcome after someone's first
+// sign-in, and, for local accounts, their codes (otherwise written to the log).
+func (a *Auth) UseEmail(m email.Sender) {
+	a.mail = m
+	if l, ok := a.password.(*local); ok {
+		l.Deliver = func(to, purpose, code string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			if err := m.Send(ctx, email.Code(to, purpose, code, int(codeTTL/time.Minute))); err != nil {
+				slog.Error("send sign-in code", "purpose", purpose, "err", err)
+			}
+		}
+	}
 }
 
 func New(cfg config.Config, s *store.Store) (*Auth, error) {
@@ -196,7 +214,18 @@ func (a *Auth) startSession(w http.ResponseWriter, r *http.Request, id Identity)
 		return false
 	}
 	a.setSession(w, token)
+	if u.Created && a.mail != nil && u.Email != "" {
+		go a.welcome(u)
+	}
 	return true
+}
+
+func (a *Auth) welcome(u store.User) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := a.mail.Send(ctx, email.Welcome(u.Email, u.Name, a.cfg.PublicURL, store.FreeDiagrams)); err != nil {
+		slog.Error("send welcome email", "user", u.ID, "err", err)
+	}
 }
 
 // Logout ends the session. It is a POST, so another site cannot sign people out with a link.

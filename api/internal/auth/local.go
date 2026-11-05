@@ -23,9 +23,9 @@ const (
 	codeAttempts = 5
 )
 
-// local keeps accounts in Postgres. Codes aren't emailed: Deliver gets them,
-// and by default writes them to the log, which suits development. A
-// self-hoster would plug in email here.
+// local keeps accounts in Postgres. Deliver gets the codes: by default it
+// writes them to the log, which suits development, and Auth.UseEmail has
+// them emailed instead.
 type local struct {
 	store   *store.Store
 	Deliver func(email, purpose, code string)

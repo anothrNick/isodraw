@@ -54,6 +54,18 @@ resource "aws_cognito_user_pool" "isodraw" {
     email_message        = "Welcome to IsoDraw. Your verification code is {####}. It expires in 24 hours."
   }
 
+  # Codes from our own address through SES (see email.tf), once it has
+  # production access; until then Cognito's own sender (50 a day).
+  dynamic "email_configuration" {
+    for_each = local.email && var.cognito_email_via_ses ? [1] : []
+    content {
+      email_sending_account = "DEVELOPER"
+      source_arn            = aws_sesv2_email_identity.isodraw[0].arn
+      from_email_address    = local.from_header
+      configuration_set     = aws_sesv2_configuration_set.isodraw[0].configuration_set_name
+    }
+  }
+
   deletion_protection = "ACTIVE"
 }
 

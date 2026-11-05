@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/anothrNick/isodraw/api/internal/email"
 )
 
 type Config struct {
@@ -51,6 +53,9 @@ type Config struct {
 	LifetimePrice    int
 	LifetimeCurrency string
 	LifetimeSeats    int
+	// Email: invites, welcome, and codes for local accounts (see package email).
+	// EMAIL_PROVIDER is ses, smtp or log (the default, which only writes them to the log).
+	Email email.Settings
 }
 
 // FromEnv reads the configuration, reporting every missing or invalid setting at once.
@@ -75,6 +80,17 @@ func FromEnv() (Config, error) {
 		StripeAPI:           env("STRIPE_API", "https://api.stripe.com"),
 		StripeAutomaticTax:  os.Getenv("STRIPE_AUTOMATIC_TAX") == "true",
 		LifetimeCurrency:    env("LIFETIME_CURRENCY", "usd"),
+
+		Email: email.Settings{
+			Provider:           env("EMAIL_PROVIDER", "log"),
+			From:               os.Getenv("EMAIL_FROM"),
+			ReplyTo:            os.Getenv("EMAIL_REPLY_TO"),
+			SESRegion:          env("SES_REGION", "us-east-1"),
+			SESAccessKeyID:     os.Getenv("SES_ACCESS_KEY_ID"),
+			SESSecretAccessKey: os.Getenv("SES_SECRET_ACCESS_KEY"),
+			SESConfigSet:       os.Getenv("SES_CONFIGURATION_SET"),
+			SMTPURL:            os.Getenv("SMTP_URL"),
+		},
 	}
 	var errs []error
 	for name, p := range map[string]*int{"LIFETIME_PRICE": &c.LifetimePrice, "LIFETIME_SEATS": &c.LifetimeSeats} {

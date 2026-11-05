@@ -37,6 +37,8 @@ type User struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
+	// Created is set by UpsertUser on someone's first sign-in.
+	Created bool `json:"-"`
 }
 
 // UpsertUser records a sign-in: it creates the user the first time and refreshes their email and name after that.
@@ -47,9 +49,9 @@ func (s *Store) UpsertUser(ctx context.Context, issuer, subject, email, name str
 		values ($1, $2, $3, $4, now())
 		on conflict (issuer, subject) do update
 		  set email = excluded.email, name = excluded.name, last_login_at = now()
-		returning id, email, name`,
+		returning id, email, name, xmax = 0`,
 		issuer, subject, email, name,
-	).Scan(&u.ID, &u.Email, &u.Name)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Created)
 	return u, err
 }
 

@@ -15,7 +15,7 @@ Live at https://isodraw.app since 2026-11-02 (first at https://isodraw.sjostrom.
 
 Still to do:
 
-- **Email for invites:** invites are links to copy; sending them needs SES (or similar) and a mailer in the API.
+- **Email:** invites and a welcome email through SES, SMTP or the log (`api/internal/email`); Cognito's codes through SES once it has production access.
 - **Automatic deploys** of the API and web app from CI on push to `main` (the demo already deploys this way). Needs a Fly deploy token and a Cloudflare API token as repository secrets.
 - **Self-hosting:** `docker-compose.selfhost.yml` and a guide to connecting an identity provider.
 

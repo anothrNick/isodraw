@@ -18,6 +18,7 @@ import (
 	"github.com/anothrNick/isodraw/api/internal/billing"
 	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
+	"github.com/anothrNick/isodraw/api/internal/email"
 	"github.com/anothrNick/isodraw/api/internal/store"
 )
 
@@ -28,10 +29,15 @@ type Server struct {
 	files blobs.Store
 	// stripe is nil when no Stripe key is set: lifetime access then can't be bought.
 	stripe *billing.Stripe
+	// mail sends invites (email.Log only writes them to the log).
+	mail email.Sender
 }
 
-func New(cfg config.Config, s *store.Store, a *auth.Auth, files blobs.Store) http.Handler {
-	srv := &Server{cfg: cfg, store: s, auth: a, files: files}
+func New(cfg config.Config, s *store.Store, a *auth.Auth, files blobs.Store, mail email.Sender) http.Handler {
+	if mail == nil {
+		mail = email.Log{}
+	}
+	srv := &Server{cfg: cfg, store: s, auth: a, files: files, mail: mail}
 	if cfg.StripeSecretKey != "" {
 		srv.stripe = billing.New(cfg.StripeSecretKey)
 		if cfg.StripeAPI != "" {

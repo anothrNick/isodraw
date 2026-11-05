@@ -151,8 +151,8 @@ export function MembersPage({ org }: { org: Org }) {
                         {ROLE_NAMES[i.role]} · {expired ? 'expired' : `expires ${new Date(i.expiresAt).toLocaleDateString()}`}
                       </div>
                     </div>
-                    {/* The link isn't stored, so "copy" makes a fresh one, which replaces the old. */}
-                    <CopyInviteLink org={org} invite={i} onInvited={load} label={expired ? 'Resend' : 'New link'} />
+                    {/* The link isn't stored, so resending makes a fresh one, which replaces the old. */}
+                    <CopyInviteLink org={org} invite={i} onInvited={load} label="Resend" />
                     <Button variant="ghost" size="sm" onClick={() => act(() => api.revokeInvite(org.id, i.id), 'Invite revoked')}>
                       Revoke
                     </Button>
@@ -261,13 +261,13 @@ function InviteForm({ org, roles, onInvited }: { org: Org; roles: Role[]; onInvi
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('editor');
   const [busy, setBusy] = useState(false);
-  const [link, setLink] = useState<{ email: string; url: string } | null>(null);
+  const [link, setLink] = useState<{ email: string; url: string; emailed: boolean } | null>(null);
 
   const send = async () => {
     setBusy(true);
     try {
       const r = await api.invite(org.id, email, role);
-      setLink({ email: r.invite.email, url: r.url });
+      setLink({ email: r.invite.email, url: r.url, emailed: r.emailed });
       setEmail('');
       await onInvited();
     } catch (e) {
@@ -311,13 +311,13 @@ function InviteForm({ org, roles, onInvited }: { org: Org; roles: Role[]; onInvi
           Invite
         </Button>
       </form>
-      {link && <LinkBox email={link.email} url={link.url} />}
+      {link && <LinkBox {...link} />}
     </section>
   );
 }
 
-/** The link to send. Email isn't sent yet, so the inviter copies it into a message. */
-function LinkBox({ email, url }: { email: string; url: string }) {
+/** The invite's link: emailed when the server could, and always here to copy into a message. */
+function LinkBox({ email, url, emailed }: { email: string; url: string; emailed: boolean }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await navigator.clipboard.writeText(url);
@@ -327,7 +327,16 @@ function LinkBox({ email, url }: { email: string; url: string }) {
   return (
     <div className="mt-3 rounded-md border border-dashed bg-muted/50 p-3">
       <p className="text-sm">
-        Send this link to <span className="font-medium">{email}</span>. It works for 7 days, once, and only when they sign in with that address.
+        {emailed ? (
+          <>
+            We emailed the invite to <span className="font-medium">{email}</span>. You can also send them this link yourself.
+          </>
+        ) : (
+          <>
+            Send this link to <span className="font-medium">{email}</span>.
+          </>
+        )}{' '}
+        It works for 7 days, once, and only when they sign in with that address.
       </p>
       <div className="mt-2 flex gap-2">
         <Input readOnly value={url} aria-label="Invite link" className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
@@ -347,7 +356,11 @@ function CopyInviteLink({ org, invite, onInvited, label }: { org: Org; invite: I
       const r = await api.invite(org.id, invite.email, invite.role);
       await navigator.clipboard.writeText(r.url).catch(() => undefined);
       setUrl(r.url);
-      toast.success(`New link for ${invite.email} copied. The old link no longer works.`);
+      toast.success(
+        r.emailed
+          ? `Sent ${invite.email} a new invite, and copied its link. The old link no longer works.`
+          : `New link for ${invite.email} copied. The old link no longer works.`,
+      );
       await onInvited();
     } catch (e) {
       toast.error((e as Error).message);

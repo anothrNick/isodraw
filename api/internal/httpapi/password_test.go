@@ -39,13 +39,15 @@ func setupLocal(t *testing.T) (*fixture, *codes) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mail := &outbox{}
+	a.UseEmail(mail)
 	inbox := &codes{last: map[string]string{}}
 	a.OnCode(func(email, purpose, code string) {
 		inbox.mu.Lock()
 		inbox.last[email+"|"+purpose] = code
 		inbox.mu.Unlock()
 	})
-	return &fixture{t: t, store: s, h: New(cfg, s, a, blobs.Dir(t.TempDir()))}, inbox
+	return &fixture{t: t, store: s, mail: mail, h: New(cfg, s, a, blobs.Dir(t.TempDir()), mail)}, inbox
 }
 
 func sessionFrom(t *testing.T, res *http.Response) *http.Cookie {

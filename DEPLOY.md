@@ -116,6 +116,29 @@ fly secrets unset DATABASE_URL -a isodraw-api
 fly mpg attach <cluster-id> -a isodraw-api   # sets the new DATABASE_URL and restarts the API
 ```
 
+## Email (Amazon SES)
+
+IsoDraw emails invites and a welcome after someone's first sign-in, and Cognito emails sign-up and reset codes. Out of the box Cognito sends its own codes (at most 50 a day) and the API only writes its emails to the log (`EMAIL_PROVIDER=log`). For real use, send both through SES from your own domain:
+
+1. **Terraform.** Set `email_domain` and `email_from` in `terraform.tfvars` (leave `cognito_email_via_ses` off for now) and `terraform apply`. It creates the SES domain with DKIM and a `mail.` MAIL FROM domain, a configuration set that stops sending to addresses that bounced or complained, and an IAM user that may only send from `email_from`.
+2. **DNS.** `terraform output dns_records` lists three DKIM CNAMEs, an MX and SPF record for `mail.<domain>`, and a DMARC record. Add them at your DNS host (on Cloudflare: DNS only, not proxied). SES shows the domain as verified within the hour. Start DMARC at `p=none`, and move to `p=quarantine` once reports look clean.
+3. **Replies.** Emails come from `email_from` and invite replies. To receive them on Cloudflare, turn on Email Routing for the domain and forward the address to your inbox (it adds its own MX and SPF records on the domain itself, which don't clash with SES's on `mail.`).
+4. **Production access.** SES starts in a sandbox that only sends to addresses you've verified, 200 a day. In the SES console, choose *Request production access* (transactional email, your sign-up and invite volume, how bounces are handled: the configuration set's suppression list). AWS usually answers within a day.
+5. **The API.** Once SES is out of the sandbox:
+
+   ```bash
+   cd infra/terraform
+   fly secrets set -a isodraw-api EMAIL_PROVIDER=ses \
+     EMAIL_FROM="$(terraform output -raw email_from)" SES_CONFIGURATION_SET=isodraw \
+     SES_ACCESS_KEY_ID="$(terraform output -raw ses_access_key_id)" \
+     SES_SECRET_ACCESS_KEY="$(terraform output -raw ses_secret_access_key)"
+   ```
+
+   `SES_REGION` defaults to `us-east-1`; `EMAIL_REPLY_TO` sets a different reply address. Self-hosting without SES, use `EMAIL_PROVIDER=smtp` with `SMTP_URL=smtp://user:password@host:587` (STARTTLS) or `smtps://…:465`; with `AUTH_MODE=local` the sign-in codes go out the same way.
+6. **Cognito.** Set `cognito_email_via_ses = true` and `terraform apply`, so codes come from your address through SES too, with no daily cap beyond SES's own.
+
+Check it by inviting yourself to a team (the form says whether it was emailed) and by signing up with a fresh address.
+
 ## Selling lifetime access (Stripe)
 
 Without Stripe settings nothing can be bought (the Plan page says lifetime access "opens soon"), and admins can still grant it. To sell it:

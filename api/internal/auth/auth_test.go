@@ -56,7 +56,7 @@ func server(t *testing.T, issuer string) (*httptest.Server, *store.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(httpapi.New(cfg, s, a, blobs.Dir(t.TempDir())))
+	srv := httptest.NewServer(httpapi.New(cfg, s, a, blobs.Dir(t.TempDir()), nil))
 	t.Cleanup(srv.Close)
 	return srv, s
 }

@@ -1,14 +1,17 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/mail"
 	"strings"
 	"time"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
+	"github.com/anothrNick/isodraw/api/internal/email"
 	"github.com/anothrNick/isodraw/api/internal/store"
 )
 
@@ -307,8 +310,27 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	// No email is sent yet: the inviter shares this link themselves.
-	writeJSON(w, http.StatusCreated, map[string]any{"invite": inv, "url": s.cfg.PublicURL + "/invite/" + token})
+	url := s.cfg.PublicURL + "/invite/" + token
+	// The link comes back either way, so the inviter can share it themselves
+	// when email isn't set up or doesn't go through.
+	writeJSON(w, http.StatusCreated, map[string]any{"invite": inv, "url": url, "emailed": s.sendInvite(r, org, inv, url)})
+}
+
+// sendInvite emails the invite and reports whether it went.
+func (s *Server) sendInvite(r *http.Request, org store.Org, inv store.Invite, url string) bool {
+	who := auth.User(r.Context())
+	inviter := who.Name
+	if inviter == "" {
+		inviter = who.Email
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	m := email.Invite(inv.Email, inviter, org.Name, string(inv.Role), url, int(InviteTTL/(24*time.Hour)))
+	if err := s.mail.Send(ctx, m); err != nil {
+		slog.Error("send invite email", "org", org.ID, "invite", inv.ID, "err", err)
+		return false
+	}
+	return email.Delivers(s.mail)
 }
 
 func (s *Server) revokeInvite(w http.ResponseWriter, r *http.Request) {

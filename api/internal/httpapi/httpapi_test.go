@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/anothrNick/isodraw/api/internal/auth"
 	"github.com/anothrNick/isodraw/api/internal/blobs"
 	"github.com/anothrNick/isodraw/api/internal/config"
+	"github.com/anothrNick/isodraw/api/internal/email"
 	"github.com/anothrNick/isodraw/api/internal/store"
 	"github.com/anothrNick/isodraw/api/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,6 +27,30 @@ type fixture struct {
 	store *store.Store
 	pool  *pgxpool.Pool
 	h     http.Handler
+	mail  *outbox
+}
+
+// outbox keeps the emails the server sends.
+type outbox struct {
+	mu   sync.Mutex
+	sent []email.Message
+	fail error
+}
+
+func (o *outbox) Send(_ context.Context, m email.Message) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.fail != nil {
+		return o.fail
+	}
+	o.sent = append(o.sent, m)
+	return nil
+}
+
+func (o *outbox) messages() []email.Message {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]email.Message(nil), o.sent...)
 }
 
 func setup(t *testing.T) *fixture { return setupWith(t, nil) }
@@ -47,7 +73,8 @@ func setupWith(t *testing.T, change func(*config.Config)) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &fixture{t: t, store: s, pool: pool, h: New(cfg, s, a, blobs.Dir(t.TempDir()))}
+	mail := &outbox{}
+	return &fixture{t: t, store: s, pool: pool, mail: mail, h: New(cfg, s, a, blobs.Dir(t.TempDir()), mail)}
 }
 
 // user signs a new user in and returns their session cookie and personal org id.
