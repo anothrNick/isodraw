@@ -443,11 +443,8 @@ type Plan = {
   later?: string;
   pitch: string;
   items: string[];
-  cta?: { label: string; to: string; variant: 'default' | 'outline' };
+  cta: { label: string; to: string; variant: 'default' | 'outline' };
   badge?: string;
-  soon?: boolean;
-  /** Another way to pay for the same plan, behind a toggle on its card. */
-  alternative?: { toggle: [string, string]; price: string; note: string; later: string; soon: boolean };
 };
 
 const PLANS: Plan[] = [
@@ -468,23 +465,6 @@ const PLANS: Plan[] = [
     items: ['Everything in Personal', 'Unlimited diagrams', 'Up to 4 people, any role', 'Shared image library'],
     cta: { label: 'Get lifetime access', to: '/signup?return=%2Fsettings%2Fplan', variant: 'default' },
     badge: '100 founding seats',
-    alternative: { toggle: ['Lifetime', 'Monthly'], price: '$8', note: '/month', later: 'After the founding seats, or billed yearly at $80', soon: true },
-  },
-  {
-    name: 'Team',
-    price: '$49',
-    note: '/month',
-    pitch: 'One price for the whole team, however big.',
-    items: ['Everything in Pro', 'Unlimited people', 'Version history and GitHub sync, as they ship', 'Private published docs'],
-    soon: true,
-  },
-  {
-    name: 'Business',
-    price: '$199',
-    note: '/month',
-    pitch: 'For companies with sign-in and compliance needs.',
-    items: ['Everything in Team', 'SSO / SAML', 'Audit log', 'Priority support and a signed agreement'],
-    soon: true,
   },
 ];
 
@@ -495,9 +475,9 @@ function Pricing() {
         <SectionHeading
           eyebrow="Pricing"
           title="One price per workspace. Never per seat."
-          body="Your personal workspace is free, with every feature. Shared workspaces have one flat price per plan: Pro covers up to 4 people and Team has no limit, so adding a teammate never costs extra."
+          body="Your personal workspace is free, with every feature. A shared Pro workspace is one flat price for up to 4 people, so adding a teammate never costs extra."
         />
-        <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mx-auto mt-14 grid max-w-3xl gap-4 md:grid-cols-2">
           {PLANS.map((p) => (
             <PlanCard key={p.name} plan={p} />
           ))}
@@ -511,40 +491,16 @@ function Pricing() {
   );
 }
 
-function PlanCard({ plan }: { plan: Plan }) {
-  const [alt, setAlt] = useState(false);
-  // The toggle swaps the price and how it's bought; what the plan includes stays.
-  const p: Plan = alt && plan.alternative ? { ...plan, ...plan.alternative, badge: undefined, cta: undefined } : plan;
-  const featured = !!plan.badge;
+function PlanCard({ plan: p }: { plan: Plan }) {
   return (
-    <div className={cn('relative flex flex-col rounded-xl border bg-card p-6', featured && 'border-primary shadow-lg shadow-primary/10', p.soon && 'bg-card/60')}>
+    <div className={cn('relative flex flex-col rounded-xl border bg-card p-6', p.badge && 'border-primary shadow-lg shadow-primary/10')}>
       {p.badge && (
         <span className="absolute -top-3 left-6 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground">
           <Users className="size-3" />
           {p.badge}
         </span>
       )}
-      <h3 className="flex items-center gap-2 font-semibold">
-        {p.name}
-        {/* With a toggle there's no room; the button says it instead. */}
-        {p.soon && !plan.alternative && <span className="rounded-full border px-2 py-0.5 text-[11px] font-normal text-muted-foreground">Coming soon</span>}
-        {plan.alternative && (
-          <span role="radiogroup" aria-label={`${plan.name} billing`} className="ml-auto inline-flex rounded-md border p-0.5 text-[11px] font-normal">
-            {plan.alternative.toggle.map((label, i) => (
-              <button
-                key={label}
-                type="button"
-                role="radio"
-                aria-checked={alt === (i === 1)}
-                onClick={() => setAlt(i === 1)}
-                className={cn('rounded px-1.5 py-0.5 text-muted-foreground', alt === (i === 1) && 'bg-primary text-primary-foreground')}
-              >
-                {label}
-              </button>
-            ))}
-          </span>
-        )}
-      </h3>
+      <h3 className="font-semibold">{p.name}</h3>
       <p className="mt-1 min-h-10 text-sm text-muted-foreground">{p.pitch}</p>
       <p className="mt-5 flex items-baseline gap-1.5">
         <span className="text-4xl font-bold tracking-tight">{p.price}</span>
@@ -559,15 +515,9 @@ function PlanCard({ plan }: { plan: Plan }) {
           </li>
         ))}
       </ul>
-      {p.cta ? (
-        <Button asChild variant={p.cta.variant} className="mt-6 w-full">
-          <a {...linkProps(p.cta.to)}>{p.cta.label}</a>
-        </Button>
-      ) : (
-        <Button variant="outline" className="mt-6 w-full" disabled>
-          Coming soon
-        </Button>
-      )}
+      <Button asChild variant={p.cta.variant} className="mt-6 w-full">
+        <a {...linkProps(p.cta.to)}>{p.cta.label}</a>
+      </Button>
     </div>
   );
 }
@@ -579,19 +529,15 @@ const FAQ = [
   },
   {
     q: 'Why per workspace and not per seat?',
-    a: "Because diagrams are for sharing. Each plan has one flat price for the whole workspace (Pro for up to 4 people, Team for any number), so you never have to decide whether a teammate is worth a seat.",
+    a: 'Because diagrams are for sharing. Pro has one flat price for the whole workspace, up to 4 people, so you never have to decide whether a teammate is worth a seat.',
   },
   {
     q: 'What does founding lifetime mean?',
-    a: 'The first 100 buyers pay once instead of monthly and keep Pro for good: unlimited diagrams and a shared workspace for up to 4 people.',
+    a: 'The first 100 buyers pay once and keep Pro for good: unlimited diagrams and a shared workspace for up to 4 people.',
   },
   {
     q: 'What happens at 10 diagrams on the free plan?',
     a: "Creating an 11th is refused, with a note on exporting and deleting one, or moving it to a paid workspace. Nothing you've drawn is ever locked or deleted.",
-  },
-  {
-    q: 'When are Team and Business coming?',
-    a: 'Soon after the founding seats. Founding members can move their diagrams into a Team workspace whenever they outgrow 4 people.',
   },
   {
     q: 'Can I get a refund?',
