@@ -34,7 +34,7 @@ func Welcome(to, name, appURL string, diagrams int) Message {
 	steps := []string{
 		"Start from an example, or open Terraform state or a plan to draw what you've deployed.",
 		"Press Tidy to lay a diagram out and route its lines.",
-		"Connect Claude (the button in the header) to have it read, draw and document diagrams for you.",
+		"Connect an AI app like Claude or ChatGPT (Connect MCP in the header) to have it read, draw and document diagrams for you.",
 	}
 	text := hi + ".\n\n" + lead + "\n\n"
 	items := ""

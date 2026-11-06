@@ -7,14 +7,15 @@ import { cn } from '@/lib/utils';
 
 /**
  * How to add IsoDraw's MCP server to an AI app: Claude (web and desktop),
- * Claude Code, Cursor, or anything else that speaks remote MCP. Connecting
+ * ChatGPT, Claude Code, Cursor, or anything else that speaks remote MCP. Connecting
  * signs in here and asks for a workspace and access (see ConnectPage).
  */
 
-type App = 'claude' | 'code' | 'cursor' | 'other';
+type App = 'claude' | 'chatgpt' | 'code' | 'cursor' | 'other';
 
 const APPS: [App, string][] = [
   ['claude', 'Claude'],
+  ['chatgpt', 'ChatGPT'],
   ['code', 'Claude Code'],
   ['cursor', 'Cursor'],
   ['other', 'Other apps'],
@@ -28,9 +29,9 @@ export function ConnectAiDialog({ open, onOpenChange }: { open: boolean; onOpenC
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Connect IsoDraw to Claude</DialogTitle>
+          <DialogTitle>Connect IsoDraw to your AI app</DialogTitle>
           <DialogDescription>
-            Add IsoDraw as a connector, then ask for diagrams in chat. The agent adds components, connections and docs; IsoDraw lays them out.
+            Add IsoDraw's MCP server to your app, then ask for diagrams in chat. The agent adds components, connections and docs; IsoDraw lays them out.
           </DialogDescription>
         </DialogHeader>
 
@@ -72,6 +73,24 @@ export function ConnectAiDialog({ open, onOpenChange }: { open: boolean; onOpenC
           )}
           {app === 'claude' && (
             <p className="mt-3 text-muted-foreground">On a Claude Team or Enterprise plan, an owner may need to add the connector for the organization first.</p>
+          )}
+          {app === 'chatgpt' && (
+            <Steps>
+              <li>
+                In ChatGPT on the web, open <b>Plugins</b>, select the <b>+</b> button and choose <b>Add custom MCP server</b>.
+              </li>
+              <li>
+                Name it <b>IsoDraw</b> and enter this as the server URL:
+                <CopyLine text={url} />
+              </li>
+              <li>
+                Choose <b>OAuth</b> for authentication, accept the warning, and select <b>Create as a plugin</b>.
+              </li>
+              <li>Install the plugin. You'll come back here to pick a workspace and whether ChatGPT can change diagrams or only read them.</li>
+            </Steps>
+          )}
+          {app === 'chatgpt' && (
+            <p className="mt-3 text-muted-foreground">Custom MCP servers aren't on every ChatGPT plan, and in a work account an admin may need to allow them first.</p>
           )}
           {app === 'code' && (
             <Steps>

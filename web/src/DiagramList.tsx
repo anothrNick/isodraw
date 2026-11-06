@@ -182,7 +182,7 @@ export function DiagramList({ org }: { org: Org }) {
                 </Button>
                 <Button variant="ghost" onClick={() => setConnecting(true)}>
                   <Sparkles />
-                  Or have Claude draw it
+                  Or have an AI app draw it
                 </Button>
               </div>
             )}

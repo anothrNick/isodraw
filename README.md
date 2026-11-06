@@ -73,7 +73,7 @@ npx isodraw guide          # how agents should use it
 
 ### In Claude, ChatGPT, Cursor and other AI apps (MCP)
 
-**Hosted (for everyone):** add `https://isodraw.app/mcp` as a connector. In Claude: *Settings → Connectors → Add custom connector*, paste the URL, then *Connect*. ChatGPT and other apps that take a remote MCP server URL work the same way. The app sends you to IsoDraw's **Connect** page, where you pick a workspace, read-only or read-and-write access, and an expiry; *Allow* sends you back and the app can use your diagrams. The connection is an ordinary API token named after the app ("Claude (connected Nov 3)"), so it's listed under *API tokens*, and revoking it disconnects the app.
+**Hosted (for everyone):** add `https://isodraw.app/mcp` as a connector. In Claude: *Settings → Connectors → Add custom connector*, paste the URL, then *Connect*. In ChatGPT (web): *Plugins → + → Add custom MCP server*, with OAuth, then install the plugin. Other apps that take a remote MCP server URL work the same way. The app sends you to IsoDraw's **Connect** page, where you pick a workspace, read-only or read-and-write access, and an expiry; *Allow* sends you back and the app can use your diagrams. The connection is an ordinary API token named after the app ("Claude (connected Nov 3)"), so it's listed under *API tokens*, and revoking it disconnects the app.
 
 **Local (for apps that launch a local server):** `isodraw mcp` serves the same tools over stdio, signed in with `isodraw login` (or `ISODRAW_TOKEN`). Until the CLI is on npm, build it once with `npm run build -w @isodraw/cli` and point apps at `packages/cli/dist/isodraw.mjs`:
 

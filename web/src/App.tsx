@@ -199,7 +199,7 @@ function OrgSwitcher({ orgs, current }: { orgs: Org[]; current?: Org }) {
   );
 }
 
-/** Opens the guide to adding IsoDraw to Claude and other AI apps. */
+/** Opens the guide to adding IsoDraw's MCP server to AI apps. */
 function ConnectAiButton({ compact }: { compact: boolean }) {
   const [open, setOpen] = useState(false);
   return (
@@ -209,12 +209,12 @@ function ConnectAiButton({ compact }: { compact: boolean }) {
         variant="ghost"
         size={compact ? 'icon' : 'sm'}
         className="flex-none text-muted-foreground"
-        aria-label="Connect to Claude"
-        title="Connect to Claude"
+        aria-label="Connect MCP"
+        title="Connect Claude, ChatGPT, Cursor and other AI apps over MCP"
         onClick={() => setOpen(true)}
       >
         <Sparkles />
-        {!compact && <span className="hidden sm:inline">Connect to Claude</span>}
+        {!compact && <span className="hidden sm:inline">Connect MCP</span>}
       </Button>
       <ConnectAiDialog open={open} onOpenChange={setOpen} />
     </>
