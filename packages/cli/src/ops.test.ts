@@ -260,6 +260,83 @@ describe('sequence diagrams', () => {
     const d = (await applyOps(seq.diagram, [{ op: 'updateNode', item: 'DB', lifeline: null }])).diagram;
     expect(d.nodes.find((n) => n.id === 'db')!.lifeline).toBeUndefined();
   });
+
+  it('takes a participant\'s messages away with its lifeline, and says so', async () => {
+    const { diagram, changes } = await applyOps(seq.diagram, [{ op: 'updateNode', item: 'DB', lifeline: null }]);
+    expect(changes[0]).toMatch(/and removed 2 message\(s\)/);
+    expect(diagram.edges.some((e) => e.from === 'db' || e.to === 'db')).toBe(false);
+    expect(outline(diagram, { title: 'Orders', version: 1 }).connections).toEqual([]);
+  });
+
+  it('won\'t change a message\'s line style, which would change its kind', async () => {
+    await expect(applyOps(seq.diagram, [{ op: 'updateEdge', from: 'Browser', to: 'API', style: 'dotted' }])).rejects.toThrow(/its style can't be changed/);
+    // Its label still can be, and so can the style of an ordinary connection.
+    const d = (await applyOps(seq.diagram, [{ op: 'updateEdge', from: 'Browser', to: 'API', label: 'POST /v2/orders' }])).diagram;
+    expect(outline(d, { title: 'Orders', version: 1 }).sequence[0]).toMatchObject({ kind: 'call', label: 'POST /v2/orders' });
+  });
+
+  it('refuses a self message between two items', async () => {
+    await expect(applyOps(seq.diagram, [{ op: 'addMessage', from: 'Browser', to: 'DB', kind: 'self' }])).rejects.toThrow(/"from" and "to" must be the same/);
+    await expect(applyOps(empty, [{ op: 'addSequence', participants: [{ label: 'A' }, { label: 'B' }], messages: [{ from: 'A', to: 'B', kind: 'self' }] }])).rejects.toThrow(/Message 1: .*must be the same/);
+  });
+
+  describe('reusing an item as a participant', () => {
+    const messages = [
+      { from: 'Shopper', to: 'Checkout', label: 'buy' },
+      { from: 'Checkout', to: 'Payments', label: 'charge' },
+      { from: 'Payments', to: 'Ledger', label: 'record', kind: 'async' as const },
+      { from: 'Payments', to: 'Checkout', label: 'ok', kind: 'return' as const },
+      { from: 'Checkout', to: 'Shopper', label: 'done', kind: 'return' as const },
+    ];
+    const participants = [{ label: 'Shopper' }, { label: 'Checkout' }, { label: 'Payments' }, { label: 'Ledger' }];
+    const labels = (d: Diagram) => outline(d, { title: 'T', version: 1 }).sequence.map((m) => m.label);
+    const centerX = (d: Diagram, id: string) => { const n = d.nodes.find((x) => x.id === id)!; return n.x + n.w / 2; };
+
+    it('puts an item the platform placed in its column, keeps the messages in order, and goes flat', async () => {
+      const { diagram } = await applyOps(empty, [
+        { op: 'addNode', label: 'Payments' },
+        { op: 'addSequence', participants, messages },
+      ]);
+      expect(labels(diagram)).toEqual(['buy', 'charge', 'record', 'ok', 'done']);
+      const xs = ['shopper', 'checkout', 'payments', 'ledger'].map((id) => centerX(diagram, id));
+      expect(xs).toEqual([...xs].sort((a, b) => a - b));
+      expect(new Set(xs).size).toBe(4);
+      expect(diagram.view).toBe('2d');
+    });
+
+    it('leaves an item a person placed where it is, with the messages still in order', async () => {
+      const placed: Diagram = { version: 1, nodes: [node('payments', 'Payments', { x: 40, y: 3 })], edges: [] };
+      const { diagram } = await applyOps(placed, [{ op: 'addSequence', participants, messages }]);
+      expect(diagram.nodes.find((n) => n.id === 'payments')).toMatchObject({ x: 40, y: 3 });
+      expect(labels(diagram)).toEqual(['buy', 'charge', 'record', 'ok', 'done']);
+      expect(diagram.view).toBeUndefined();
+    });
+
+    it('leaves an item in an area in that area', async () => {
+      const { diagram } = await applyOps(base(), [{ op: 'addSequence', participants: [{ label: 'orders-api' }, { label: 'Queue' }], messages: [{ from: 'orders-api', to: 'Queue', label: 'publish' }] }]);
+      expect(outline(diagram, { title: 'T', version: 1 }).areas.find((a) => a.id === 'vpc')!.contains).toContain('api');
+    });
+  });
+});
+
+describe('text items', () => {
+  it('shows what addNode was given, and describe lists them', async () => {
+    const { diagram } = await applyOps(base(), [{ op: 'addNode', label: 'Just text', kind: 'text' }]);
+    expect(diagram.nodes.find((n) => n.kind === 'text')).toMatchObject({ text: 'Just text' });
+    expect(outline(diagram, { title: 'T', version: 1 }).components.map((c) => c.label)).toContain('Just text');
+  });
+
+  it('updateNode changes the words of notes and text items', async () => {
+    const { diagram } = await applyOps(base(), [
+      { op: 'addNote', text: 'Before', id: 'n1', on: 'CDN' },
+      { op: 'addNode', label: 'Old', kind: 'text', id: 't1' },
+      { op: 'updateNode', item: 'n1', label: 'After' },
+      { op: 'updateNode', item: 't1', label: 'New' },
+    ]);
+    expect(diagram.nodes.find((n) => n.id === 'n1')).toMatchObject({ text: 'After' });
+    expect(diagram.nodes.find((n) => n.id === 'n1')!.label).toBeUndefined();
+    expect(diagram.nodes.find((n) => n.id === 't1')).toMatchObject({ text: 'New', label: 'New' });
+  });
 });
 
 describe('notes and frames', () => {

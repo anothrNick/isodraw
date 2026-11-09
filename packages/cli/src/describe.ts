@@ -40,7 +40,7 @@ export function outline(root: Diagram, meta: { title: string; version: number },
   const owners = levelNodes(root, level);
   const overviewDoc = level.length ? owners[owners.length - 1]?.doc : root.doc;
   const areaOf = (n: DiagramNode) => containerOf(n, d.nodes)?.id;
-  const items = d.nodes.filter((n) => n.kind !== 'text');
+  const items = d.nodes;
   const heights = messageHeights(d);
   return {
     title: meta.title,
@@ -57,7 +57,7 @@ export function outline(root: Diagram, meta: { title: string; version: number },
         ...(iconName(n) ? { icon: iconName(n) } : {}),
         ...(areaOf(n) ? { area: areaOf(n) } : {}),
         ...(n.doc?.trim() ? { doc: { chars: n.doc.length, firstLine: firstLine(n.doc) } } : {}),
-        ...(n.detail ? { detail: { items: n.detail.nodes.filter((x) => x.kind !== 'text').length } } : {}),
+        ...(n.detail ? { detail: { items: n.detail.nodes.length } } : {}),
         ...(n.lifeline ? { lifeline: true as const } : {}),
         ...(n.kind === 'note' ? { text: n.text ?? '', ...(n.pin ? { on: n.pin } : {}) } : {}),
       })),

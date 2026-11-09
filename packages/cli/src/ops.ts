@@ -7,6 +7,7 @@ import {
   createImageNode,
   createShape,
   edgeTitle,
+  followPins,
   isContainer,
   isIsoIcon,
   levelAt,
@@ -24,7 +25,7 @@ import {
   type LineStyle,
   type ShapeKind,
 } from './lib';
-import { COL, ROW, messageEdge, nextMessageY, reach, type Message } from './sequence';
+import { COL, ROW, messageEdge, messageHeights, nextMessageY, reach, type Message } from './sequence';
 
 /**
  * Edits to a diagram, as data. The CLI's commands and `apply` turn into these,
@@ -114,6 +115,11 @@ export function resolveLevel(root: Diagram, path: string[]): LevelPath {
 }
 
 const norm = (s: string) => s.trim().toLowerCase();
+
+/** Kinds whose words live in `text`, not in a label under the shape. */
+const holdsText = (kind: string) => kind === 'note' || kind === 'text';
+
+const SELF_NEEDS_ONE = 'A self message goes from an item to itself, so "from" and "to" must be the same.';
 
 /** A node by id, or by label (case-insensitive). Ambiguous or missing names fail with the candidates. */
 export function findNode(d: Diagram, ref: string): DiagramNode {
@@ -287,8 +293,8 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
             const kind = op.kind ?? (op.icon ? 'image' : 'block');
             if (!KINDS.has(kind)) throw new OpError(`Unknown kind "${kind}". Use one of: ${[...KINDS].join(', ')}.`);
             const id = op.id ? (d.nodes.some((n) => n.id === op.id) ? fail(`An item with id "${op.id}" already exists.`) : op.id) : freeId(d, slug(op.label));
-            // A note's label is its text; a frame's its title.
-            const base = op.icon ? createImageNode(iconUrl(op.icon), op.label, 0, 0) : createShape(kind, 0, 0, kind === 'note' ? { text: op.label } : { label: op.label });
+            // A note's or text item's label is what it says; a frame's its title.
+            const base = op.icon ? createImageNode(iconUrl(op.icon), op.label, 0, 0) : createShape(kind, 0, 0, holdsText(kind) ? { text: op.label } : { label: op.label });
             // Placed by the platform: automatic layout may move it until a person does.
             const node: DiagramNode = { ...base, id, label: op.label, placed: 'auto', ...(op.color ? { color: op.color } : {}), ...(op.doc ? { doc: op.doc } : {}) };
             const area = op.in ? findNode(d, op.in) : undefined;
@@ -302,7 +308,11 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
           case 'updateNode': {
             const n = findNode(d, op.item);
             const patch: Partial<DiagramNode> = {};
-            if (op.label !== undefined) patch.label = op.label;
+            if (op.label !== undefined) {
+              // What a note or text item shows is its text; a note made by addNote has no label to keep in step.
+              if (holdsText(n.kind)) patch.text = op.label;
+              if (!holdsText(n.kind) || n.label !== undefined) patch.label = op.label;
+            }
             if (op.color) patch.color = op.color;
             if (op.kind) {
               if (!KINDS.has(op.kind)) throw new OpError(`Unknown kind "${op.kind}".`);
@@ -322,8 +332,11 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
               }
               else Object.assign(patch, { kind: 'image', src, imageStyle: n.imageStyle ?? 'tile' });
             }
-            changes.push(`changed ${n.id} (${Object.keys(patch).join(', ') || 'nothing'})${where}`);
-            return { ...d, nodes: d.nodes.map((x) => (x.id === n.id ? { ...x, ...patch } : x)) };
+            // Without its lifeline a participant's messages have nothing to attach to, so they go with it.
+            const heights = messageHeights(d);
+            const lost = op.lifeline !== undefined && !op.lifeline ? new Set(d.edges.filter((e) => heights.has(e.id) && (e.from === n.id || e.to === n.id)).map((e) => e.id)) : new Set<string>();
+            changes.push(`changed ${n.id} (${Object.keys(patch).join(', ') || 'nothing'})${lost.size ? ` and removed ${lost.size} message(s)` : ''}${where}`);
+            return { ...d, nodes: d.nodes.map((x) => (x.id === n.id ? { ...x, ...patch } : x)), edges: d.edges.filter((e) => !lost.has(e.id)) };
           }
           case 'removeNode': {
             const n = findNode(d, op.item);
@@ -345,7 +358,12 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
             const [e] = findEdges(d, op.from, op.to);
             const patch: Partial<DiagramEdge> = {};
             if (op.label !== undefined) patch.label = op.label || undefined;
-            if (op.style) patch.lineStyle = op.style;
+            if (op.style) {
+              if (messageHeights(d).has(e.id) && op.style !== (e.lineStyle ?? (e.dashed ? 'dashed' : 'solid'))) {
+                fail(`${edgeTitle(e, d.nodes)} is a sequence message: its line comes from its kind (a return is dashed), so its style can't be changed.`);
+              }
+              patch.lineStyle = op.style;
+            }
             changes.push(`changed ${edgeTitle(e, d.nodes)}${where}`);
             return { ...d, edges: d.edges.map((x) => (x.id === e.id ? { ...x, ...patch } : x)) };
           }
@@ -376,14 +394,15 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
           }
           case 'addSequence': {
             if (!op.participants?.length) throw new OpError('A sequence needs participants.');
-            const wasEmpty = !d.nodes.length;
             // New participants go in a row below everything on the level, bottoms lined up.
             const bottom = d.nodes.length ? Math.max(...d.nodes.map((n) => (n.lifeline ? lineTop(n).y + n.lifeline : n.y + n.d))) + 3 : 0;
             const left = d.nodes.length ? Math.min(...d.nodes.map((n) => n.x)) : 0;
             let next = d;
             const ids: string[] = [];
-            let col = 0;
+            const joined = new Set<string>();
+            let col = -1;
             for (const p of op.participants) {
+              col++;
               let existing: DiagramNode | undefined;
               try {
                 existing = findNode(next, p.id ?? p.label);
@@ -392,7 +411,11 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
               }
               if (existing) {
                 ids.push(existing.id);
-                if (!existing.lifeline) next = { ...next, nodes: next.nodes.map((x) => (x.id === existing!.id ? { ...x, lifeline: 2 } : x)) };
+                // An item the platform placed joins the row. One a person placed, or one in an area, stays where it is.
+                const joins = existing.placed === 'auto' && !existing.lifeline && !containerOf(existing, next.nodes);
+                if (joins) joined.add(existing.id);
+                const spot = joins ? { x: left + col * COL + 1 - existing.w / 2, y: bottom + 1.5 - existing.d } : {};
+                if (!existing.lifeline) next = { ...next, nodes: next.nodes.map((x) => (x.id === existing!.id ? { ...x, ...spot, lifeline: 2 } : x)) };
                 continue;
               }
               if (!p.label?.trim()) throw new OpError('Each participant needs a label.');
@@ -408,10 +431,18 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
                 ...(p.color ? { color: p.color } : {}),
                 ...(p.doc ? { doc: p.doc } : {}),
               };
-              col++;
               ids.push(id);
               added.push(id);
               next = { ...next, nodes: [...next.nodes, node] };
+            }
+            if (joined.size) {
+              // Their notes come along, and their old connections' bends no longer apply.
+              const edges = next.edges.map((e) => {
+                if (!joined.has(e.from) && !joined.has(e.to)) return e;
+                const { waypoints: _bends, ...rest } = e;
+                return rest;
+              });
+              next = { ...followPins(d, next), edges };
             }
             const byId = () => new Map(next.nodes.map((n) => [n.id, n]));
             const y0 = nextMessageY(next, ids.map((id) => byId().get(id)!));
@@ -422,13 +453,14 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
               const a = findNode(next, m.from);
               const b = findNode(next, m.to);
               if (!ids.includes(a.id) || !ids.includes(b.id)) throw new OpError(`Message ${i + 1}: ${m.from} → ${m.to} isn't between this sequence's participants.`);
+              if (m.kind === 'self' && a.id !== b.id) throw new OpError(`Message ${i + 1}: ${SELF_NEEDS_ONE}`);
               const edge = messageEdge(freeId(next, `${a.id}-${b.id}`), a, b, y0 + i * ROW, m);
               added.push(edge.id);
               next = { ...next, edges: [...next.edges, edge] };
             }
             changes.push(`added a sequence: ${ids.length} participants, ${op.messages?.length ?? 0} messages${where}`);
             // A sequence on its own reads best flat.
-            if (wasEmpty && !level.length) {
+            if (d.nodes.every((n) => joined.has(n.id)) && !level.length) {
               changes.push('switched the diagram to the flat view');
               return { ...next, view: '2d' };
             }
@@ -454,6 +486,7 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
           case 'addMessage': {
             const a = findNode(d, op.from);
             const b = findNode(d, op.to);
+            if (op.kind === 'self' && a.id !== b.id) fail(SELF_NEEDS_ONE);
             const withLine = (n: DiagramNode) => (n.lifeline ? n : { ...n, lifeline: 2 });
             const y = nextMessageY(d, a.id === b.id ? [withLine(a)] : [withLine(a), withLine(b)]);
             const [la, lb] = [reach(withLine(a), y), reach(withLine(b), y)];
@@ -498,7 +531,8 @@ async function arrange(root: Diagram, touched: Map<string, LevelPath>, loose: { 
     for (const { id } of loose.filter((l) => l.level.join('/') === level.join('/'))) {
       diagram = withLevel(diagram, level, (d) => {
         const n = d.nodes.find((x) => x.id === id);
-        if (!n) return d;
+        // A participant stays put: its messages are measured down its lifeline from where it is.
+        if (!n || n.lifeline) return d;
         const into = d.edges.find((e) => e.to === id && e.from !== id);
         const out = d.edges.find((e) => e.from === id && e.to !== id);
         const neighbor = d.nodes.find((x) => x.id === (into ? into.from : out?.to));
