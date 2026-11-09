@@ -223,7 +223,7 @@ func (a *Auth) startSession(w http.ResponseWriter, r *http.Request, id Identity)
 func (a *Auth) welcome(u store.User) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	if err := a.mail.Send(ctx, email.Welcome(u.Email, u.Name, a.cfg.PublicURL, store.FreeDiagrams)); err != nil {
+	if err := a.mail.Send(ctx, email.Welcome(u.Email, u.Name, a.cfg.PublicURL, a.store.DefaultDiagramLimit())); err != nil {
 		slog.Error("send welcome email", "user", u.ID, "err", err)
 	}
 }

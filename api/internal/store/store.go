@@ -27,9 +27,12 @@ func (e *ConflictError) Error() string {
 	return fmt.Sprintf("diagram is at version %d", e.Current.Version)
 }
 
-type Store struct{ db *pgxpool.Pool }
+type Store struct {
+	db           *pgxpool.Pool
+	freeDiagrams int
+}
 
-func New(db *pgxpool.Pool) *Store { return &Store{db: db} }
+func New(db *pgxpool.Pool) *Store { return &Store{db: db, freeDiagrams: FreeDiagrams} }
 
 // ---------- users ----------
 

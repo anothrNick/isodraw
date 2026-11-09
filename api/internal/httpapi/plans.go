@@ -8,7 +8,8 @@ import (
 	"github.com/anothrNick/isodraw/api/internal/store"
 )
 
-// Plans: free personal workspaces hold store.FreeDiagrams diagrams; lifetime
+// Plans: free personal workspaces hold FREE_DIAGRAMS diagrams, or what a
+// platform admin set for that person; lifetime
 // access lifts that and lets people own team workspaces of store.TeamEditors
 // editors. Limits answer 402 with code "plan_limit" and a message that says
 // what to do, which the app, the CLI and the MCP server show as is.
@@ -58,7 +59,7 @@ func (s *Server) roomForDiagram(w http.ResponseWriter, r *http.Request, orgID st
 		planLimit(w, readOnlyTeam)
 		return false
 	case p.DiagramLimit > 0 && p.Diagrams >= p.DiagramLimit:
-		planLimit(w, fmt.Sprintf("The free plan holds %d diagrams in your personal workspace. Export one you're not using (Download, then JSON) and delete it to make room; you can import it again any time. A Pro workspace has no limit, and you can move diagrams into it.", p.DiagramLimit))
+		planLimit(w, fmt.Sprintf("Your personal workspace holds %d diagrams. Export one you're not using (Download, then JSON) and delete it to make room; you can import it again any time. A Pro workspace has no limit, and you can move diagrams into it.", p.DiagramLimit))
 		return false
 	}
 	return true

@@ -68,15 +68,18 @@ type AdminUser struct {
 	PlatformAdmin bool       `json:"platformAdmin"`
 	Workspaces    int        `json:"workspaces"`
 	Diagrams      int        `json:"diagrams"`
+	// DiagramLimit is their personal workspace's own limit: nil follows the default, 0 is no limit.
+	DiagramLimit *int `json:"diagramLimit"`
 }
 
 const adminUserCols = `u.id, u.email, u.name, u.created_at, u.last_login_at, u.lifetime_since, u.platform_admin,
 	(select count(*) from memberships m where m.user_id = u.id),
-	(select count(*) from diagrams d where d.created_by = u.id and d.deleted_at is null)`
+	(select count(*) from diagrams d where d.created_by = u.id and d.deleted_at is null),
+	u.diagram_limit`
 
 func scanAdminUser(r pgx.Row) (AdminUser, error) {
 	var u AdminUser
-	err := r.Scan(&u.ID, &u.Email, &u.Name, &u.CreatedAt, &u.LastLoginAt, &u.LifetimeSince, &u.PlatformAdmin, &u.Workspaces, &u.Diagrams)
+	err := r.Scan(&u.ID, &u.Email, &u.Name, &u.CreatedAt, &u.LastLoginAt, &u.LifetimeSince, &u.PlatformAdmin, &u.Workspaces, &u.Diagrams, &u.DiagramLimit)
 	return u, err
 }
 
@@ -104,6 +107,16 @@ func (s *Store) UserWorkspaces(ctx context.Context, userID string) ([]AdminOrg, 
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (AdminOrg, error) { return scanAdminOrg(r, true) })
+}
+
+// SetDiagramLimit sets how many diagrams a user's personal workspace holds:
+// nil follows the default, 0 is no limit.
+func (s *Store) SetDiagramLimit(ctx context.Context, userID string, limit *int) error {
+	tag, err := s.db.Exec(ctx, `update users set diagram_limit = $2 where id = $1`, userID, limit)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return notFound(err)
 }
 
 // SetLifetimeByID grants or takes back a user's lifetime access.

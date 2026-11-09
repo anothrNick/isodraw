@@ -132,12 +132,15 @@ export interface AdminUser {
   platformAdmin: boolean;
   workspaces: number;
   diagrams: number;
+  /** Their personal workspace's own limit: null follows the default, 0 is no limit. */
+  diagramLimit: number | null;
 }
 
 export interface AdminUserDetail {
   user: AdminUser;
   workspaces: AdminWorkspace[];
   purchases: Purchase[];
+  defaultDiagramLimit: number;
 }
 
 export interface AdminWorkspace {
@@ -313,7 +316,7 @@ export const api = {
       ),
     users: (q: string) => request<{ users: AdminUser[]; limit: number }>('GET', `/api/admin/users?${new URLSearchParams({ q })}`),
     user: (id: string) => request<AdminUserDetail>('GET', `/api/admin/users/${id}`),
-    updateUser: (id: string, change: { lifetime?: boolean }) => request<AdminUserDetail>('PATCH', `/api/admin/users/${id}`, change),
+    updateUser: (id: string, change: { lifetime?: boolean; diagramLimit?: number | null }) => request<AdminUserDetail>('PATCH', `/api/admin/users/${id}`, change),
     workspaces: (q: string, kind: '' | 'team' | 'personal') =>
       request<{ workspaces: AdminWorkspace[]; limit: number }>('GET', `/api/admin/orgs?${new URLSearchParams({ q, kind })}`),
     workspace: (id: string) =>

@@ -53,6 +53,8 @@ type Config struct {
 	LifetimePrice    int
 	LifetimeCurrency string
 	LifetimeSeats    int
+	// FreeDiagrams is how many diagrams a personal workspace holds, unless a platform admin set a limit for that person.
+	FreeDiagrams int
 	// Email: invites, welcome, and codes for local accounts (see package email).
 	// EMAIL_PROVIDER is ses, smtp or log (the default, which only writes them to the log).
 	Email email.Settings
@@ -93,8 +95,8 @@ func FromEnv() (Config, error) {
 		},
 	}
 	var errs []error
-	for name, p := range map[string]*int{"LIFETIME_PRICE": &c.LifetimePrice, "LIFETIME_SEATS": &c.LifetimeSeats} {
-		def := map[string]string{"LIFETIME_PRICE": "9900", "LIFETIME_SEATS": "100"}[name]
+	for name, p := range map[string]*int{"LIFETIME_PRICE": &c.LifetimePrice, "LIFETIME_SEATS": &c.LifetimeSeats, "FREE_DIAGRAMS": &c.FreeDiagrams} {
+		def := map[string]string{"LIFETIME_PRICE": "9900", "LIFETIME_SEATS": "100", "FREE_DIAGRAMS": "10"}[name]
 		n, err := strconv.Atoi(env(name, def))
 		if err != nil || n <= 0 {
 			errs = append(errs, fmt.Errorf("%s must be a positive whole number", name))

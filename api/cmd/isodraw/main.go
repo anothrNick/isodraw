@@ -148,6 +148,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 	}
 	defer pool.Close()
 	s := store.New(pool)
+	s.UseFreeDiagrams(cfg.FreeDiagrams)
 	a, err := auth.New(cfg, s)
 	if err != nil {
 		return err

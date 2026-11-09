@@ -206,6 +206,7 @@ const LifetimeBadge = () => (
 function UserDetail({ id }: { id: string }) {
   const session = useSession();
   const [creating, setCreating] = useState(false);
+  const [changingLimit, setChangingLimit] = useState(false);
   const [data, setData] = useState<AdminUserDetail | null>(null);
   const [confirm, setConfirm] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -245,6 +246,9 @@ function UserDetail({ id }: { id: string }) {
             <Plus />
             Create workspace…
           </Button>
+          <Button variant="outline" onClick={() => setChangingLimit(true)}>
+            Change diagram limit…
+          </Button>
           <Button variant={u.lifetimeSince ? 'outline' : 'default'} disabled={busy} onClick={() => setConfirm(!u.lifetimeSince)}>
             {busy && <Loader2 className="animate-spin" />}
             {u.lifetimeSince ? 'Take back lifetime access' : 'Grant lifetime access'}
@@ -252,12 +256,17 @@ function UserDetail({ id }: { id: string }) {
         </div>
       </div>
       <CreateWorkspaceFor user={u} open={creating} onClose={() => setCreating(false)} />
+      <DiagramLimit data={data} open={changingLimit} onClose={() => setChangingLimit(false)} onChanged={setData} />
       <Facts
         items={[
           ['Joined', new Date(u.createdAt).toLocaleString()],
           ['Last sign-in', u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'],
           ['Lifetime access', u.lifetimeSince ? `Since ${new Date(u.lifetimeSince).toLocaleDateString()}` : 'No (free plan)'],
           ['Diagrams created', String(u.diagrams)],
+          [
+            'Personal diagram limit',
+            u.diagramLimit === null ? `${data.defaultDiagramLimit} (default)` : u.diagramLimit === 0 ? 'No limit' : String(u.diagramLimit),
+          ],
         ]}
       />
       <section className="mt-8">
@@ -689,6 +698,62 @@ function CreateWorkspaceFor({ user, open, onClose }: { user: AdminUser; open: bo
   );
 }
 
+/** How many diagrams a person's personal workspace holds: their own limit, none, or the default. */
+function DiagramLimit({ data, open, onClose, onChanged }: { data: AdminUserDetail; open: boolean; onClose: () => void; onChanged: (d: AdminUserDetail) => void }) {
+  const u = data.user;
+  const [limit, setLimit] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) setLimit(u.diagramLimit === null ? '' : String(u.diagramLimit));
+  }, [open, u.diagramLimit]);
+  const valid = /^\d*$/.test(limit.trim());
+  const run = async () => {
+    setBusy(true);
+    try {
+      onChanged(await api.admin.updateUser(u.id, { diagramLimit: limit.trim() === '' ? null : Number(limit) }));
+      toast.success(`Changed the diagram limit for ${u.email}`);
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Diagram limit for {u.email}</DialogTitle>
+          <DialogDescription>How many diagrams their personal workspace holds. A lower limit never removes diagrams; it only stops new ones.</DialogDescription>
+        </DialogHeader>
+        <form
+          id="diagram-limit"
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (valid) void run();
+          }}
+        >
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium">Diagrams</span>
+            <Input value={limit} onChange={(e) => setLimit(e.target.value)} placeholder={`${data.defaultDiagramLimit} (default)`} inputMode="numeric" autoFocus />
+            <span className="text-xs text-muted-foreground">Leave empty for the default. Enter 0 for no limit.</span>
+          </label>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="diagram-limit" disabled={busy || !valid}>
+            {busy && <Loader2 className="animate-spin" />}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Give a team its own plan without payment, change it, or take it away. */
 function SetPlan({ open, data, onClose, onChanged }: { open: boolean; data: WorkspaceData; onClose: () => void; onChanged: (d: WorkspaceData) => void }) {
   const { workspace: w, plan: p } = data;
@@ -768,6 +833,7 @@ const ACTIONS: Record<string, string> = {
   'team.delete': 'Deleted the workspace',
   'team.create': 'Created the workspace',
   'team.plan': 'Set the plan of',
+  'diagrams.limit': 'Set the diagram limit of',
 };
 
 function Events({ events }: { events: AdminEvent[] }) {

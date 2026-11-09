@@ -192,6 +192,16 @@ fly ssh console -a isodraw-api -C "/isodraw lifetime grant someone@example.com"
 fly ssh console -a isodraw-api -C "/isodraw lifetime revoke someone@example.com"
 ```
 
+## Diagram limits
+
+A personal workspace holds 10 diagrams. Change that for everyone with `FREE_DIAGRAMS` on the API:
+
+```bash
+fly secrets set -a isodraw-api FREE_DIAGRAMS=25
+```
+
+A platform admin can give one person their own limit, including no limit, on their page under Admin → Users. Lowering a limit never removes diagrams; it only stops new ones.
+
 ## Later deploys
 
 ```bash

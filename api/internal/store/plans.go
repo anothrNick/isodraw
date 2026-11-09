@@ -9,7 +9,9 @@ import (
 )
 
 const (
-	// FreeDiagrams is how many diagrams a free personal workspace holds.
+	// FreeDiagrams is how many diagrams a free personal workspace holds unless
+	// FREE_DIAGRAMS says otherwise (see UseFreeDiagrams) or a platform admin set
+	// a limit for that person.
 	FreeDiagrams = 10
 	// TeamEditors is how many members of a team workspace can edit (owners, admins and editors), open invites included.
 	TeamEditors = 5
@@ -44,10 +46,17 @@ type Plan struct {
 	People int `json:"people"`
 }
 
+// UseFreeDiagrams sets the platform's default limit for personal workspaces.
+func (s *Store) UseFreeDiagrams(n int) { s.freeDiagrams = n }
+
+// DefaultDiagramLimit is the limit of a personal workspace whose person has none of their own.
+func (s *Store) DefaultDiagramLimit() int { return s.freeDiagrams }
+
 // OrgPlan works out an organization's plan and usage.
 func (s *Store) OrgPlan(ctx context.Context, orgID string) (Plan, error) {
 	var p Plan
 	var personal bool
+	var ownLimit *int
 	err := s.db.QueryRow(ctx, `
 		select o.personal, o.grandfathered, coalesce(o.plan, ''), coalesce(o.plan_source, ''),
 		  exists (select 1 from memberships m join users u on u.id = m.user_id
@@ -56,9 +65,11 @@ func (s *Store) OrgPlan(ctx context.Context, orgID string) (Plan, error) {
 		  (select count(*) from memberships m where m.org_id = o.id and m.role <> 'viewer') +
 		  (select count(*) from invites i where i.org_id = o.id and i.accepted_at is null and i.expires_at > now() and i.role <> 'viewer'),
 		  (select count(*) from memberships m where m.org_id = o.id) +
-		  (select count(*) from invites i where i.org_id = o.id and i.accepted_at is null and i.expires_at > now())
+		  (select count(*) from invites i where i.org_id = o.id and i.accepted_at is null and i.expires_at > now()),
+		  (select u.diagram_limit from memberships m join users u on u.id = m.user_id
+		   where m.org_id = o.id and m.role = 'owner' limit 1)
 		from orgs o where o.id = $1`, orgID,
-	).Scan(&personal, &p.Grandfathered, &p.Name, &p.Source, &p.Lifetime, &p.Diagrams, &p.Editors, &p.People)
+	).Scan(&personal, &p.Grandfathered, &p.Name, &p.Source, &p.Lifetime, &p.Diagrams, &p.Editors, &p.People, &ownLimit)
 	if err != nil {
 		return p, notFound(err)
 	}
@@ -66,7 +77,10 @@ func (s *Store) OrgPlan(ctx context.Context, orgID string) (Plan, error) {
 	case personal:
 		// Free and just you, whatever else someone has: more diagrams means a Pro workspace.
 		p.Editable = true
-		p.DiagramLimit = FreeDiagrams
+		p.DiagramLimit = s.freeDiagrams
+		if ownLimit != nil {
+			p.DiagramLimit = *ownLimit
+		}
 	case p.Name != "":
 		// Its own plan: editable, with Pro's people limit.
 		p.Editable = true

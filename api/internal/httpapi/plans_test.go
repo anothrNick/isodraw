@@ -179,3 +179,73 @@ func TestGrandfatheredTeams(t *testing.T) {
 		t.Fatal(p)
 	}
 }
+
+func TestDiagramLimits(t *testing.T) {
+	f := setup(t)
+	admin, _ := f.user("admin@example.com")
+	f.makeAdmin(admin)
+	ada, org := f.user("ada@example.com")
+	_, out := f.do(req{method: "GET", path: "/api/admin/users?q=ada", cookie: admin})
+	path := "/api/admin/users/" + out["users"].([]any)[0].(map[string]any)["id"].(string)
+	limit := func(body string) map[string]any {
+		t.Helper()
+		res, out := f.do(req{method: "PATCH", path: path, body: body, cookie: admin})
+		expect(t, res, 200, out)
+		return out
+	}
+	create := func(status int) {
+		t.Helper()
+		res, out := newDiagram(f, ada, org, 1)
+		expect(t, res, status, out)
+	}
+	diagramLimit := func() float64 { return f.plan(ada, org)["diagramLimit"].(float64) }
+
+	// The platform's default applies until an admin sets something else.
+	if diagramLimit() != store.FreeDiagrams {
+		t.Fatal(f.plan(ada, org))
+	}
+	f.store.UseFreeDiagrams(2)
+	create(201)
+	create(201)
+	create(402)
+
+	// A person's own limit replaces it.
+	out = limit(`{"diagramLimit":3}`)
+	if out["user"].(map[string]any)["diagramLimit"].(float64) != 3 || out["defaultDiagramLimit"].(float64) != 2 || diagramLimit() != 3 {
+		t.Fatal(out)
+	}
+	create(201)
+	create(402)
+
+	// Changing something else leaves it alone.
+	limit(`{"lifetime":true}`)
+	if diagramLimit() != 3 {
+		t.Fatal(f.plan(ada, org))
+	}
+
+	// 0 is no limit.
+	limit(`{"diagramLimit":0}`)
+	if diagramLimit() != 0 {
+		t.Fatal(f.plan(ada, org))
+	}
+	create(201)
+
+	// null goes back to the default: nothing is removed, but nothing new fits.
+	out = limit(`{"diagramLimit":null}`)
+	if out["user"].(map[string]any)["diagramLimit"] != nil || diagramLimit() != 2 || f.plan(ada, org)["diagrams"].(float64) != 4 {
+		t.Fatal(out)
+	}
+	create(402)
+
+	for _, bad := range []string{`{"diagramLimit":-1}`, `{"diagramLimit":1.5}`, `{"diagramLimit":"5"}`, `{"diagramLimit":1000001}`} {
+		res, out := f.do(req{method: "PATCH", path: path, body: bad, cookie: admin})
+		expect(t, res, 400, out)
+	}
+	res, out := f.do(req{method: "PATCH", path: path, body: `{"diagramLimit":100}`, cookie: ada})
+	expect(t, res, 404, out)
+
+	_, out = f.do(req{method: "GET", path: "/api/admin/events", cookie: admin})
+	if !strings.Contains(fmt.Sprint(out["events"]), "diagrams.limit") {
+		t.Fatal(out)
+	}
+}

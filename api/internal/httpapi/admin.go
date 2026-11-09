@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,7 +16,10 @@ import (
 // the routes don't announce themselves. Changes are recorded in the admin log.
 // Admins see who and what exists, never diagram content.
 
-const adminListLimit = 200
+const (
+	adminListLimit  = 200
+	maxDiagramLimit = 1_000_000
+)
 
 func (s *Server) adminRoutes(api *http.ServeMux) {
 	for pattern, h := range map[string]http.HandlerFunc{
@@ -122,7 +126,7 @@ func (s *Server) adminUser(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": u, "workspaces": orgs, "purchases": purchases})
+	writeJSON(w, http.StatusOK, map[string]any{"user": u, "workspaces": orgs, "purchases": purchases, "defaultDiagramLimit": s.store.DefaultDiagramLimit()})
 }
 
 func (s *Server) adminUpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -132,9 +136,30 @@ func (s *Server) adminUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Lifetime *bool `json:"lifetime"`
+		// DiagramLimit is a number, 0 for no limit, or null for the default. Raw to tell null from leaving it out.
+		DiagramLimit json.RawMessage `json:"diagramLimit"`
 	}
 	if !decode(w, r, 1024, &body) {
 		return
+	}
+	var limit *int
+	if body.DiagramLimit != nil {
+		if err := json.Unmarshal(body.DiagramLimit, &limit); err != nil || (limit != nil && (*limit < 0 || *limit > maxDiagramLimit)) {
+			writeError(w, http.StatusBadRequest, "invalid_limit", fmt.Sprintf("The diagram limit must be a whole number from 0 (no limit) to %d, or null for the default.", maxDiagramLimit))
+			return
+		}
+		if err := s.store.SetDiagramLimit(r.Context(), u.ID, limit); err != nil {
+			internalError(w, err)
+			return
+		}
+		detail := "default"
+		if limit != nil {
+			detail = "no limit"
+			if *limit > 0 {
+				detail = fmt.Sprint(*limit)
+			}
+		}
+		s.record(r, "diagrams.limit", u.Email, detail)
 	}
 	if body.Lifetime != nil {
 		if err := s.store.SetLifetimeByID(r.Context(), u.ID, *body.Lifetime); err != nil {
