@@ -5,6 +5,7 @@ import { api, type DiagramMeta, type Org, type Plan } from './api';
 import { ConnectAiDialog } from './ConnectAiDialog';
 import { NewDiagramDialog } from './NewDiagramDialog';
 import { TransferDialog, type Transfer } from './TransferDialog';
+import { UsageMeter } from './UsageMeter';
 import { linkProps, navigate } from './router';
 import { useTheme } from './theme';
 import {
@@ -68,7 +69,6 @@ export function DiagramList({ org }: { org: Org }) {
   }, [org.id]);
   const limit = plan?.diagramLimit ?? 0;
   const used = diagrams?.length ?? plan?.diagrams ?? 0;
-  const full = limit > 0 && used >= limit;
   const readOnly = plan?.editable === false;
 
   const remove = async (d: DiagramMeta) => {
@@ -84,8 +84,11 @@ export function DiagramList({ org }: { org: Org }) {
   return (
     <div className="overflow-y-auto">
       <div className="mx-auto w-full max-w-6xl px-6 py-10">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">{org.personal ? 'Your diagrams' : org.name}</h1>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">{org.personal ? 'Your diagrams' : org.name}</h1>
+            {limit > 0 && <UsageMeter used={used} limit={limit} lifetime={!!plan?.lifetime} />}
+          </div>
           <div className="flex gap-2">
             <div role="radiogroup" aria-label="Show as" className="inline-flex h-9 items-center rounded-md border bg-muted/50 p-0.5">
               {(
@@ -128,18 +131,6 @@ export function DiagramList({ org }: { org: Org }) {
           </div>
         </div>
 
-        {limit > 0 && (
-          <p className={cn('-mt-3 mb-6 text-sm', full ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
-            {full
-              ? `You're using all ${limit} diagrams of the free plan. Export one you're not working on (Download, then JSON) and delete it to make room; you can import it again any time. `
-              : `${used} of ${limit} diagrams on the free plan. Every feature is included. `}
-            A{' '}
-            <a className="font-medium text-primary hover:underline" {...linkProps('/settings/plan')}>
-              Pro workspace
-            </a>{' '}
-            has no limit, and you can move diagrams into it.
-          </p>
-        )}
         {readOnly && (
           <p className="-mt-3 mb-6 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
             This team is read-only because none of its owners has lifetime access any more. Everything is still here to view and export.
