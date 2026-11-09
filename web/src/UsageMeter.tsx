@@ -20,7 +20,7 @@ export function UsageMeter({ used, limit, lifetime }: { used: number; limit: num
   const filled = full ? tiles : used === 0 ? 0 : Math.min(Math.max(Math.round((used / limit) * tiles), 1), tiles - 1);
   const urgent = full || near;
   return (
-    <div className="flex items-center gap-3 text-xs whitespace-nowrap text-muted-foreground">
+    <div className="flex translate-y-px items-center gap-3 text-xs whitespace-nowrap text-muted-foreground">
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`${used} of ${limit} diagrams used. Show what the free plan includes.`}
