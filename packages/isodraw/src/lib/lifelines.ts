@@ -63,7 +63,9 @@ export interface Activation {
 /**
  * Activation bars on a lifeline, from the messages on it, top to bottom: a
  * message arriving (not dashed) starts a bar; a dashed one leaving (a return)
- * ends the latest. Bars nobody returns from run to the last message.
+ * ends the latest. A bar nobody returns from lasts as long as its participant
+ * keeps working: to its last message before the next call arrives, or briefly
+ * if it does nothing more.
  */
 export function activations(d: Diagram, n: DiagramNode): Activation[] {
   if (!n.lifeline) return [];
@@ -82,8 +84,11 @@ export function activations(d: Diagram, n: DiagramNode): Activation[] {
     if (m.kind === 'in') open.push(m.at);
     else if (m.kind === 'return' && open.length) bars.push({ from: open.pop()!, to: m.at });
   }
-  const last = marks[marks.length - 1].at;
-  for (const from of open) bars.push({ from, to: Math.max(last, from + 0.5) });
+  for (const from of open) {
+    const next = marks.find((m) => m.kind === 'in' && m.at > from)?.at ?? Infinity;
+    const worked = marks.filter((m) => m.kind !== 'in' && m.at > from && m.at < next).map((m) => m.at);
+    bars.push({ from, to: Math.max(from + 0.5, ...worked) });
+  }
   return bars;
 }
 

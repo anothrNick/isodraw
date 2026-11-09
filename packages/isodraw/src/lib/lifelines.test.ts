@@ -55,6 +55,18 @@ describe('lifelines', () => {
       { from: 5, to: 5.5 },
     ]);
     expect(activations(d, a)).toEqual([]);
+
+    // Calls nobody answers end with the work they caused, not at the bottom.
+    const unanswered: Diagram = {
+      version: 1,
+      nodes: [a, b],
+      edges: [msg('c1', 'a', 'b', 1), msg('c2', 'a', 'b', 4), msg('c3', 'b', 'a', 6), msg('c4', 'a', 'b', 8), msg('c5', 'b', 'a', 12)],
+    };
+    expect(activations(unanswered, b)).toEqual([
+      { from: 1, to: 1.5 },
+      { from: 4, to: 6 },
+      { from: 8, to: 12 },
+    ]);
   });
 });
 

@@ -30,7 +30,8 @@ function fakeClient() {
       d.version++;
       return { meta: meta(d), result, merged: false };
     },
-    preview: async (id: string) => ({
+    preview: async (id: string, level: string[] = []) => ({
+      level,
       svg: `https://isodraw.test/p/${id}.svg?s=x`,
       png: `https://isodraw.test/p/${id}.png?s=x`,
       url: `https://isodraw.test/w/d/${id}`,
@@ -65,10 +66,10 @@ describe('the MCP server', () => {
     expect(mcp.getInstructions()).toMatch(/describe_diagram before changing/);
     const { tools } = await mcp.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['apply_changes', 'create_diagram', 'describe_diagram', 'find_icons', 'get_docs', 'import_terraform', 'list_diagrams', 'preview_diagram'].sort(),
+      ['apply_changes', 'create_diagram', 'describe_diagram', 'find_icons', 'get_docs', 'get_guide', 'import_terraform', 'list_diagrams', 'preview_diagram'].sort(),
     );
     const readOnly = tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name);
-    expect(readOnly.sort()).toEqual(['describe_diagram', 'find_icons', 'get_docs', 'list_diagrams', 'preview_diagram']);
+    expect(readOnly.sort()).toEqual(['describe_diagram', 'find_icons', 'get_docs', 'get_guide', 'list_diagrams', 'preview_diagram']);
     expect(tools.find((t) => t.name === 'apply_changes')!.annotations?.destructiveHint).toBe(true);
   });
 
@@ -152,6 +153,58 @@ describe('the MCP server', () => {
     const described = await call('describe_diagram', { diagram: 'Checkout' });
     expect(described.text).toContain('## Sequence (4 messages, top to bottom)');
     expect(described.text).toContain('2. api → api "validate" (self)');
+  });
+
+  it('finds icons by any of several words, and pages through them', async () => {
+    const { call } = await connect();
+    const some = await call('find_icons', { query: 'laptop nosuchword database' });
+    expect(some.text).toContain('isodraw:laptop');
+    expect(some.text).toContain('isodraw:database');
+    const first = await call('find_icons', {});
+    expect(first.text).toMatch(/Showing 1–40 of \d+\. For more, call again with offset 40\./);
+    const second = await call('find_icons', { offset: 40 });
+    expect(second.text).toMatch(/Showing 41–80 of/);
+    expect(second.text.split('\n')[0]).not.toBe(first.text.split('\n')[0]);
+    expect((await call('find_icons', { offset: 100000 })).text).toMatch(/only \d+ icons/);
+  });
+
+  it('leaves the picture out when asked, keeping the link', async () => {
+    const fetched: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      fetched.push(url);
+      return new Response(PNG, { headers: { 'content-type': 'image/png' } });
+    });
+    const { call } = await connect();
+    const r = await call('create_diagram', { title: 'Quick', changes: [{ op: 'addNode', label: 'Web' }], include_image: false });
+    expect(r.images).toEqual([]);
+    expect(r.text).toContain('.png?s=x');
+    expect(fetched).toEqual([]);
+  });
+
+  it('shows the level a call changed', async () => {
+    vi.stubGlobal('fetch', async () => new Response(PNG, { headers: { 'content-type': 'image/png' } }));
+    const { call, client } = await connect();
+    const preview = vi.spyOn(client, 'preview');
+    await call('create_diagram', {
+      title: 'Nested',
+      changes: [
+        { op: 'addNode', id: 'api', label: 'API' },
+        { op: 'addDetail', item: 'api' },
+        { op: 'addNode', label: 'Handler', level: 'API' },
+      ],
+    });
+    expect(preview.mock.lastCall?.[1]).toEqual(['api']);
+    await call('apply_changes', { diagram: 'Nested', changes: [{ op: 'addNode', label: 'Top' }, { op: 'addNode', label: 'Inner', level: 'api' }] });
+    expect(preview.mock.lastCall?.[1]).toEqual(['api']);
+    await call('apply_changes', { diagram: 'Nested', changes: [{ op: 'addNode', label: 'Top too' }] });
+    expect(preview.mock.lastCall?.[1]).toEqual([]);
+  });
+
+  it('explains itself without needing a diagram', async () => {
+    const { call } = await connect();
+    const guide = await call('get_guide', {});
+    expect(guide.text).toMatch(/up to about 50 changes/);
+    expect(guide.text).toMatch(/describe_diagram and compare before retrying/);
   });
 
   it('finds icons of both kinds', async () => {
