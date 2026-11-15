@@ -34,6 +34,7 @@ Keep the status and priority current, and record decisions in the file as they'r
 | next | [Diagram as code](diagram-as-code.md) | A YAML format with a JSON Schema for a diagram's structure, `describe`/`push` round trips, `isodraw lint` for CI, and Mermaid import. |
 | next | [Version history](version-history.md) | Snapshots as autosave runs, a History panel, and restore. |
 | next | [Share links](share-links.md) | Read-only public links to a diagram's docs page, with expiry and revoke. |
+| next · in progress | [Presentation mode](presentation.md) | Slides drawn as regions on the diagram, each with docs to walk through; Present flies the camera from slide to slide with the docs alongside. |
 | next | [Image storage](image-storage.md) | Uploaded images move out of the diagram JSON into an asset store. |
 | shipped | [Hosting](hosting.md) | One container on Fly.io with Postgres, S3, Cognito in Terraform and email; the same image for self-hosting. |
 | next | [Search across diagrams](search.md) | Find components, docs and Terraform addresses across a workspace, from an items index. |

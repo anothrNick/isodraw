@@ -20,6 +20,7 @@ import { depthMap, isContainer } from './containers';
 import { ISO_ICON_BOX, imageHref, isIsoIcon, isoIconPlacement, isoIconScale } from './isoIcons';
 import { CANVAS_BG, INK, themedDiagram, useTheme } from './theme';
 import { pointAlong } from './autoRoute';
+import { isSlide } from './slides';
 import { NOTE_FOLD, NOTE_FONT, NOTE_PAD, noteDepth, noteLines } from './notes';
 import { edgePathD, endMarkerOf, lineStyleOf, polylineLength, resolveEdge, startMarkerOf } from './routing';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget, LineStyle, MarkerKind } from './types';
@@ -239,6 +240,24 @@ function FrameNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
   );
 }
 
+/** A slide's region: a dashed outline with a faint fill, only ever drawn by the editor (and the palette). */
+export function SlideOutline({ node, proj, selected }: { node: DiagramNode; proj: Projector; selected?: boolean }) {
+  const pts = footprint(node).map((q) => proj.project(q.x, q.y, node.z));
+  return (
+    <polygon
+      points={pointsAttr(pts)}
+      fill={node.color}
+      fillOpacity={0.03}
+      stroke={node.color}
+      strokeOpacity={selected ? 1 : 0.7}
+      strokeWidth={selected ? 2 : 1.5}
+      strokeDasharray="10 6"
+      strokeLinejoin="round"
+      vectorEffect="non-scaling-stroke"
+    />
+  );
+}
+
 function TextNode({ node, proj }: { node: DiagramNode; proj: Projector }) {
   const c = center(node);
   const fs = (node.fontSize ?? 0.7) * TILE;
@@ -410,6 +429,9 @@ export function NodeShape({ node, proj, idPrefix }: { node: DiagramNode; proj: P
     case 'frame':
       body = <FrameNode node={node} proj={proj} />;
       break;
+    case 'slide':
+      body = <SlideOutline node={node} proj={proj} />;
+      break;
     case 'sphere':
       body = <Sphere node={node} proj={proj} gradId={`${idPrefix}-sph-${node.id}`} />;
       break;
@@ -419,7 +441,7 @@ export function NodeShape({ node, proj, idPrefix }: { node: DiagramNode; proj: P
     default:
       body = <SolidFaces node={node} proj={proj} />;
   }
-  const isArea = node.kind === 'area' || node.kind === 'circleArea' || node.kind === 'frame' || node.kind === 'note';
+  const isArea = node.kind === 'area' || node.kind === 'circleArea' || node.kind === 'frame' || node.kind === 'note' || node.kind === 'slide';
   return (
     <g data-node-id={node.id} opacity={isArea ? undefined : node.opacity ?? 1}>
       {body}
@@ -728,7 +750,8 @@ export function SceneContent({
   const diagram = useMemo(() => themedDiagram(source, theme), [source, theme]);
   const ground: DiagramNode[] = [];
   const solids: DiagramNode[] = [];
-  for (const n of diagram.nodes) (isFlat(n) ? ground : solids).push(n);
+  // Slides are drawn by the editor and the presenter on top, never as part of the picture.
+  for (const n of diagram.nodes) if (!isSlide(n)) (isFlat(n) ? ground : solids).push(n);
   // Containers paint beneath what they contain.
   const depth = depthMap(diagram.nodes);
   const order = new Map(diagram.nodes.map((n, i) => [n.id, i]));
@@ -756,9 +779,7 @@ export function SceneContent({
         <NodeShape key={n.id} node={n} proj={proj} idPrefix={idPrefix} />
       ))}
       {/* Labels on top so they stay readable. */}
-      {diagram.nodes.map((n) => (
-        <Label key={`l-${n.id}`} node={n} proj={proj} />
-      ))}
+      {diagram.nodes.map((n) => (isSlide(n) ? null : <Label key={`l-${n.id}`} node={n} proj={proj} />))}
       {diagram.edges.map((e) => {
         const a = byId.get(e.from);
         const b = byId.get(e.to);
@@ -853,6 +874,7 @@ export function ShapePreview({ node, size = 44 }: { node: DiagramNode; size?: nu
 export function sceneBounds(d: Diagram, proj: Projector, pad = 28): { x: number; y: number; w: number; h: number } {
   const pts: Pt[] = [];
   for (const n of d.nodes) {
+    if (isSlide(n)) continue;
     const top = n.z + (isFlat(n) ? 0 : n.kind === 'sphere' ? Math.min(n.w, n.d) : n.h);
     for (const q of footprint(n)) pts.push(proj.project(q.x, q.y, n.z), proj.project(q.x, q.y, top));
     if (n.label && n.kind !== 'text' && n.kind !== 'area') pts.push(labelAnchor(n, proj));

@@ -2,12 +2,12 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { containerOf, isContainer, parentMap } from './containers';
 import { DetailContext, DocEditor } from './DocsPanel';
 import { DETAIL_BLOCK, levelAt, levelKey, levelNodes, type LevelPath } from './levels';
-import { edgeTitle, hasDoc, mentionables, nodeTitle } from './docs';
+import { edgeTitle, hasDoc, mentionables, nodeTitle, readingOrder } from './docs';
 import type { PublishedViewProps } from './Published';
 import { ThemeContext } from './theme';
 import { StaticDiagram } from './render';
+import { withoutSlides } from './slides';
 import { KIND_NAMES } from './shapes';
-import { Projector, center } from './geometry';
 import type { Diagram, DiagramNode, DocTarget } from './types';
 
 /**
@@ -22,23 +22,6 @@ interface TocItem {
   page: Page;
   /** What sits in its area, then what is in its detail diagram. */
   children: TocItem[];
-}
-
-/** Within this many pixels left or right, items count as one column and go top to bottom. */
-const SAME_COLUMN = 12;
-
-/**
- * Siblings in reading order, best effort: left to right as the diagram is
- * drawn (its own 2D or 2.5D view), and top to bottom where they line up.
- */
-function readingOrder(nodes: DiagramNode[], d: Diagram): DiagramNode[] {
-  const proj = new Projector(d.view ?? '3d', 0);
-  const at = new Map(nodes.map((n) => [n.id, proj.project(center(n).x, center(n).y, n.z)]));
-  return [...nodes].sort((a, b) => {
-    const p = at.get(a.id)!;
-    const q = at.get(b.id)!;
-    return Math.abs(p.x - q.x) > SAME_COLUMN ? p.x - q.x : p.y - q.y;
-  });
 }
 
 /** Components in reading order, nested under their areas and under the component whose detail they are in. Text labels are left out. */
@@ -104,7 +87,9 @@ function ReadOnlyDoc({ markdown, diagram, onNavigate }: { markdown: string; diag
   );
 }
 
-export default function PublishedView({ diagram, title, useHash, resolvedTheme, className, style }: PublishedViewProps) {
+export default function PublishedView({ diagram: source, title, useHash, resolvedTheme, className, style }: PublishedViewProps) {
+  // Slides are for presenting; the docs site never shows them.
+  const diagram = useMemo(() => withoutSlides(source), [source]);
   const toc = useMemo(() => tableOfContents(diagram), [diagram]);
   const [page, setPage] = useState<Page>(() => (useHash ? readHash() : OVERVIEW));
   const [focus, setFocus] = useState<DocTarget | null>(null);

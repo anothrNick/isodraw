@@ -14,7 +14,7 @@ export const levelKey = (path: LevelPath) => path.map(encodeURIComponent).join('
 export const sameLevel = (a: LevelPath, b: LevelPath) => a.length === b.length && a.every((id, i) => id === b[i]);
 
 /** Text labels are annotations, not components, so they get no detail diagram. */
-export const canHaveDetail = (n: DiagramNode) => n.kind !== 'text';
+export const canHaveDetail = (n: DiagramNode) => n.kind !== 'text' && n.kind !== 'slide';
 
 /** The diagram at `path`, or undefined when a component on the way is gone or has no detail. */
 export function levelAt(root: Diagram, path: LevelPath): Diagram | undefined {
@@ -53,7 +53,7 @@ export function withLevel(root: Diagram, path: LevelPath, fn: (d: Diagram) => Di
 }
 
 /** Item count, for labels like "6 items". */
-export const detailSize = (d: Diagram) => d.nodes.filter((n) => n.kind !== 'text').length;
+export const detailSize = (d: Diagram) => d.nodes.filter((n) => n.kind !== 'text' && n.kind !== 'slide').length;
 
 /** Markdown that marks where a component's doc shows its detail diagram. */
 export const DETAIL_BLOCK = '```isodraw-detail\n```';

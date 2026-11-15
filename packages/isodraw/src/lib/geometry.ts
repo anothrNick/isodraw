@@ -17,7 +17,7 @@ export interface Pt3 extends Pt {
 /** SVG affine matrix [a, b, c, d, e, f]. */
 export type Matrix = [number, number, number, number, number, number];
 
-export const FLAT_KINDS: ReadonlySet<ShapeKind> = new Set(['area', 'circleArea', 'text', 'note', 'frame']);
+export const FLAT_KINDS: ReadonlySet<ShapeKind> = new Set(['area', 'circleArea', 'text', 'note', 'frame', 'slide']);
 
 /** True when a node lies on its base plane and has no volume. */
 export function isFlat(n: DiagramNode): boolean {

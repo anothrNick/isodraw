@@ -18,7 +18,9 @@ export type ShapeKind =
   /** A sticky note: a flat box of wrapped text, which can follow an item (`pin`). */
   | 'note'
   /** A frame: a thin titled outline around things, like an area without the fill (sequence fragments, steps). */
-  | 'frame';
+  | 'frame'
+  /** A slide: a region of the diagram to present. Shown only in the editor and the presenter. */
+  | 'slide';
 
 /** How an image node is drawn in the 2.5D view. */
 export type ImageStyle = 'tile' | 'flat' | 'standing';
@@ -80,6 +82,13 @@ export interface DiagramNode {
    * clears this, and automatic layout never moves items a person placed.
    */
   placed?: 'auto';
+  /** For slides: the docs to walk through, in order (unset: the docs of what's inside). */
+  docs?: DocTarget[];
+  /** For slides: talking points of its own, in Markdown, shown before the docs. */
+  notes?: string;
+  /** For slides: the view to present it in (unset: the diagram's). */
+  slideView?: ViewMode;
+  slideRotation?: Rotation;
 }
 
 export type EdgeRouting = 'straight' | 'orthogonal' | 'curved';
@@ -164,6 +173,8 @@ export interface Diagram {
   doc?: string;
   /** How the diagram is drawn everywhere it appears: 2.5D (default) or flat. */
   view?: ViewMode;
+  /** On the top diagram: the slides in presenting order, across every level (slide node ids). */
+  presentation?: { order: string[] };
 }
 
 /** What a documentation page is about. */

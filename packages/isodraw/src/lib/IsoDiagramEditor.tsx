@@ -15,6 +15,8 @@ import { lineTop, withBars } from './lifelines';
 import { noteDepth } from './notes';
 import { canHaveDetail, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
+import { IsoDiagramPresentation } from './Present';
+import { isSlide, slideContents, slideOrder, slidePages, withSlideOrder, type SlideRef } from './slides';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
 import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
 import { Field, Icon, NumberInput, ToolButton } from './ui';
@@ -63,6 +65,13 @@ export interface IsoDiagramEditorProps {
   level?: LevelPath;
   /** The user went into or out of a component's detail diagram. */
   onLevelChange?: (level: LevelPath) => void;
+  /**
+   * Present the diagram, from a slide or from the start. Without it, the
+   * editor presents in an overlay of its own; hosts with a page for it pass this.
+   */
+  onPresent?: (slideId?: string) => void;
+  /** Show the toolbar's Present button (default true); hosts with their own can hide it. */
+  presentButton?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -227,6 +236,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const tab = readOnly ? 'docs' : sideTab;
   const docsOpen = sideOpen && tab === 'docs';
   const [helpOpen, setHelpOpen] = useState(false);
+  /** Presenting in the editor's own overlay: the slide to start on ('' for the first). */
+  const [presenting, setPresenting] = useState<string | null>(null);
   /** Item whose @ mention is under the pointer in the docs panel; outlined on the canvas. */
   const [mentionHover, setMentionHover] = useState<DocTarget | null>(null);
   const [docsTarget, setDocsTarget] = useState<DocTarget>({ kind: 'diagram' });
@@ -436,7 +447,10 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   // The docs panel follows the selection: one item → its page; nothing → the diagram.
   const selectionTarget: DocTarget | null =
     selection.nodes.length === 1 && !selection.edges.length
-      ? { kind: 'node', id: selection.nodes[0] }
+      ? // A slide has no docs of its own: the panel stays where it was.
+        diagram.nodes.find((n) => n.id === selection.nodes[0] && isSlide(n))
+        ? null
+        : { kind: 'node', id: selection.nodes[0] }
       : selection.edges.length === 1 && !selection.nodes.length
         ? { kind: 'edge', id: selection.edges[0] }
         : !selection.nodes.length && !selection.edges.length
@@ -569,6 +583,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   // ----- editing -----
   const addNode = (node: DiagramNode) => {
     commit((d) => ({ ...d, nodes: [...d.nodes, node] }));
+    // A new slide comes last in the presentation, whichever level it's on (part of the same undo step).
+    if (isSlide(node)) setHist((h) => ({ ...h, d: withSlideOrder(h.d, [...slideOrder(h.d).map((s) => s.node.id).filter((id) => id !== node.id), node.id]) }));
     setSelection({ nodes: [node.id], edges: [] });
     setTool('select');
   };
@@ -944,6 +960,41 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
 
   const selNode = selection.nodes.length === 1 ? diagram.nodes.find((n) => n.id === selection.nodes[0]) : undefined;
 
+  // ----- slides -----
+  const slides = useMemo(() => slideOrder(root), [root]);
+  const slideNumbers = useMemo(() => new Map(slides.map((s, i) => [s.node.id, i + 1])), [slides]);
+  const present = (slideId?: string) => {
+    if (props.onPresent) return props.onPresent(slideId);
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    setPresenting(slideId ?? '');
+  };
+  /** Show a slide in the editor: its level, selected, in the middle of the screen. */
+  const showSlide = (s: SlideRef) => {
+    if (!sameLevel(s.level, path)) {
+      goLevel(s.level, { select: { kind: 'node', id: s.node.id } });
+      return;
+    }
+    setSelection({ nodes: [s.node.id], edges: [] });
+    const c = proj.project(s.node.x + s.node.w / 2, s.node.y + s.node.d / 2, s.node.z);
+    const { w, h } = stageSize();
+    setCamera((cam) => ({ ...cam, x: w / 2 - c.x * cam.zoom, y: h / 2 - c.y * cam.zoom }));
+  };
+  const moveSlide = (id: string, to: number) => {
+    const ids = slides.map((s) => s.node.id).filter((x) => x !== id);
+    ids.splice(Math.max(0, Math.min(ids.length, to)), 0, id);
+    setHist((h) => ({ d: withSlideOrder(h.d, ids), at: pathRef.current, past: [...h.past, { d: h.d, at: h.at }].slice(-HISTORY_LIMIT), future: [] }));
+  };
+  /** A slide around the selected items, with a little room. */
+  const slideAroundSelection = () => {
+    const sel = diagram.nodes.filter((n) => selection.nodes.includes(n.id) && !isSlide(n));
+    if (!sel.length) return;
+    const x0 = Math.min(...sel.map((n) => n.x)) - 1;
+    const y0 = Math.min(...sel.map((n) => n.y)) - 1;
+    const x1 = Math.max(...sel.map((n) => n.x + n.w)) + 1;
+    const y1 = Math.max(...sel.map((n) => n.y + n.d)) + 1;
+    addNode({ ...createShape('slide', 0, 0), x: x0, y: y0, w: x1 - x0, d: y1 - y0, label: `Slide ${slides.length + 1}` });
+  };
+
   /** "Diagram", then each component drilled into. */
   const levelCrumbs = ['Diagram', ...levelNodes(root, path).map(nodeTitle)];
   /** The docs panel's crumbs: the levels above its page. A detail diagram's overview sits under its parent's level. */
@@ -1064,6 +1115,11 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
           </div>
         )}
         <div className="isd-group">
+          {props.presentButton !== false && (
+            <ToolButton icon="present" label={slides.length ? 'Present the slides' : 'Present: draw a Slide from the palette first'} onClick={() => present()}>
+              Present
+            </ToolButton>
+          )}
           {props.docsButton !== false && (
             <ToolButton icon="doc" label={docsOpen ? 'Hide docs (D)' : 'Show docs (D)'} active={docsOpen} onClick={() => (docsOpen ? setSideOpen(false) : openDocs())}>
               Docs
@@ -1128,6 +1184,24 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
               <div className="isd-palette-scroll">
                 <div className="isd-shape-grid">
                   {SHAPES.map((s) => (
+                    s.kind === 'slide' ? (
+                      <button
+                        key={s.kind}
+                        type="button"
+                        className="isd-tile"
+                        draggable
+                        onDragStart={dragStart({ type: 'shape', kind: s.kind })}
+                        onClick={() => placePayload({ type: 'shape', kind: s.kind }, viewCenter())}
+                        title="Slide — a region to present; click or drag onto canvas, then fit it around what it should show"
+                      >
+                        <svg width={44} height={44} viewBox="0 0 44 44" aria-hidden>
+                          <rect x={4} y={10} width={36} height={26} rx={3} fill="#2563eb" fillOpacity={0.08} stroke="#2563eb" strokeWidth={1.6} strokeDasharray="4 3" />
+                          <rect x={4} y={4} width={16} height={8} rx={2} fill="#2563eb" />
+                          <path d="M19 19v10l8-5z" fill="#2563eb" />
+                        </svg>
+                        <span>{s.name}</span>
+                      </button>
+                    ) : (
                     <button
                       key={s.kind}
                       type="button"
@@ -1140,6 +1214,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                       <ShapePreview node={createShape(s.kind, 0, 0, { id: `pv-${s.kind}`, ...(s.kind === 'note' ? { text: 'Note', fontSize: 0.9 } : { text: 'Aa', fontSize: 1.4 }) })} />
                       <span>{s.name}</span>
                     </button>
+                    )
                   ))}
                   {/* A sequence diagram participant: any shape or icon can have a lifeline; this one starts with one. */}
                   <button
@@ -1266,6 +1341,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             onOpenDocs={openDocs}
             onOpenDetail={openDetail}
             focus={docsOpen && sameLevel(docsLevel, path) ? mentionHover : null}
+            slideNumbers={slideNumbers}
             showDocBadges={props.docBadges}
             newEdgeStyle={{ routing: 'orthogonal', rounded: true, ...edgeStyle }}
             onBeginChange={beginChange}
@@ -1312,7 +1388,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             </div>
           )}
           <div className="isd-status">
-            {view === '3d' ? `2.5D · ${['N', 'E', 'S', 'W'][rotation]}` : 'Flat'} · {diagram.nodes.length} nodes · {diagram.edges.length} connections
+            {view === '3d' ? `2.5D · ${['N', 'E', 'S', 'W'][rotation]}` : 'Flat'} · {diagram.nodes.filter((n) => !isSlide(n)).length} nodes · {diagram.edges.length} connections
+            {diagram.nodes.some(isSlide) && ` · ${diagram.nodes.filter(isSlide).length} slide${diagram.nodes.filter(isSlide).length === 1 ? '' : 's'}`}
           </div>
           {toast && <div className="isd-toast">{toast}</div>}
         </div>
@@ -1359,7 +1436,22 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
               </Suspense>
             ) : (
             <div className="isd-side-body">
-            {selNode ? (
+            {selNode && isSlide(selNode) ? (
+              <SlideInspector
+                node={selNode}
+                diagram={diagram}
+                number={slideNumbers.get(selNode.id) ?? 0}
+                total={slides.length}
+                onChange={(patch, key) => updateNode(selNode.id, patch, key)}
+                onMove={(dir) => moveSlide(selNode.id, (slideNumbers.get(selNode.id) ?? 1) - 1 + dir)}
+                onPresent={() => present(selNode.id)}
+                onDelete={deleteSelection}
+                onDuplicate={() => {
+                  copySelection();
+                  paste();
+                }}
+              />
+            ) : selNode ? (
               <NodeInspector
                 node={selNode}
                 onAddBar={() => {
@@ -1410,6 +1502,9 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 <button type="button" className="isd-btn" onClick={groupSelection} title="Wrap the selection in a new area (⌘G)">
                   <Icon name="group" /> Group into area
                 </button>
+                <button type="button" className="isd-btn" onClick={slideAroundSelection} title="Add a slide around the selection, to present it">
+                  <Icon name="present" /> Add a slide around these
+                </button>
                 <div className="isd-row">
                   <button type="button" className="isd-btn" onClick={() => { copySelection(); paste(); }}>
                     <Icon name="copy" /> Duplicate
@@ -1425,6 +1520,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 <p className="isd-hint">
                   Click a shape or icon to add it, or drag it onto the canvas. Select a node to edit it. Press <kbd>?</kbd> for shortcuts.
                 </p>
+                <SlideList slides={slides} root={root} path={path} selected={selection.nodes} onShow={showSlide} onMove={moveSlide} onPresent={present} />
                 {diagram.nodes.length > 0 && (
                   <button
                     type="button"
@@ -1447,6 +1543,11 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
       </div>
       {helpOpen && <HelpModal readOnly={readOnly} onClose={() => setHelpOpen(false)} />}
     </div>
+    {presenting !== null && (
+      <div className="isd-present-overlay">
+        <IsoDiagramPresentation diagram={root} start={presenting || undefined} theme={theme} onExit={() => setPresenting(null)} />
+      </div>
+    )}
     </ThemeContext.Provider>
   );
 }
@@ -1478,6 +1579,15 @@ const HELP: { title: string; edit?: boolean; keys: [string, string][] }[] = [
       ['⌘G / ⇧⌘G', 'Group into an area / ungroup'],
       ['Delete', 'Delete the selection'],
       ['⌘Z / ⇧⌘Z', 'Undo / redo'],
+    ],
+  },
+  {
+    title: 'Presenting',
+    keys: [
+      ['→ / Space', 'Next page or slide'],
+      ['←', 'Back'],
+      ['D / F', 'Docs panel / full screen'],
+      ['Esc', 'Stop presenting'],
     ],
   },
   {
@@ -1799,6 +1909,248 @@ function NodeInspector({
         </button>
         <button type="button" className="isd-btn is-danger" onClick={onDelete} title={contents ? 'Deletes the area and everything inside it' : undefined}>
           <Icon name="trash" /> {contents ? 'Delete all' : 'Delete'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- slides ----------
+
+/** The slides in presenting order: drag to reorder, click to show one. */
+function SlideList({
+  slides,
+  root,
+  path,
+  selected,
+  onShow,
+  onMove,
+  onPresent,
+}: {
+  slides: SlideRef[];
+  root: Diagram;
+  path: LevelPath;
+  selected: string[];
+  onShow: (s: SlideRef) => void;
+  onMove: (id: string, to: number) => void;
+  onPresent: (id?: string) => void;
+}) {
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  return (
+    <>
+      <div className="isd-section-title">Slides</div>
+      {slides.length ? (
+        <>
+          <ol className="isd-slide-list">
+            {slides.map((s, i) => {
+              const where = levelNodes(root, s.level).map(nodeTitle).join(' › ');
+              return (
+                <li
+                  key={s.node.id}
+                  draggable
+                  className={`${selected.includes(s.node.id) ? 'is-selected' : ''}${over === i && dragging && dragging !== s.node.id ? ' is-drop' : ''}`}
+                  title={`Show ${s.node.label?.trim() || 'this slide'}${sameLevel(s.level, path) ? '' : ` (inside ${where})`}; drag to reorder`}
+                  onClick={() => onShow(s)}
+                  onDragStart={(e) => {
+                    setDragging(s.node.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', s.node.id);
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragging) return;
+                    e.preventDefault();
+                    setOver(i);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragging) onMove(dragging, slides.findIndex((x) => x.node.id === dragging) < i ? i - 1 : i);
+                    setDragging(null);
+                    setOver(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragging(null);
+                    setOver(null);
+                  }}
+                >
+                  <span className="isd-slide-num">{i + 1}</span>
+                  <span className="isd-slide-title">{s.node.label?.trim() || `Slide ${i + 1}`}</span>
+                  {where && <span className="isd-slide-where">{where}</span>}
+                </li>
+              );
+            })}
+          </ol>
+          <button type="button" className="isd-btn" onClick={() => onPresent()}>
+            <Icon name="present" /> Present
+          </button>
+        </>
+      ) : (
+        <p className="isd-hint">Drag a Slide from the shapes onto the diagram, around what you want to show, to start a presentation.</p>
+      )}
+    </>
+  );
+}
+
+/** A slide's settings: its title, the docs to walk through, its own notes, and how it's shown. */
+function SlideInspector({
+  node,
+  diagram,
+  number,
+  total,
+  onChange,
+  onMove,
+  onPresent,
+  onDelete,
+  onDuplicate,
+}: {
+  node: DiagramNode;
+  /** The level it's drawn on. */
+  diagram: Diagram;
+  number: number;
+  total: number;
+  onChange: (patch: Partial<DiagramNode>, key?: string) => void;
+  onMove: (dir: -1 | 1) => void;
+  onPresent: () => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+}) {
+  const auto = !node.docs;
+  const pages = slidePages({ ...node, notes: undefined }, diagram);
+  const inside = slideContents(node, diagram);
+  const title = (t: DocTarget) => (t.kind === 'diagram' ? 'Overview' : t.kind === 'node' ? nodeTitle(diagram.nodes.find((n) => n.id === t.id) ?? ({ kind: 'block' } as DiagramNode)) : edgeLabel(t.id));
+  const edgeLabel = (id: string) => {
+    const e = diagram.edges.find((x) => x.id === id);
+    if (!e) return 'Connection';
+    const a = diagram.nodes.find((n) => n.id === e.from);
+    const b = diagram.nodes.find((n) => n.id === e.to);
+    return e.label?.trim() || `${a ? nodeTitle(a) : '?'} → ${b ? nodeTitle(b) : '?'}`;
+  };
+  const docs = node.docs ?? [];
+  const key = (t: DocTarget) => (t.kind === 'diagram' ? 'diagram' : `${t.kind}:${t.id}`);
+  // Documented items to add: what's inside first, then the rest of the level.
+  const has = (md?: string) => !!md && md.trim().length > 0;
+  const insideIds = new Set(inside.nodes.map((n) => n.id));
+  const choices: DocTarget[] = [
+    { kind: 'diagram' } as DocTarget,
+    ...[...diagram.nodes].filter((n) => !isSlide(n) && has(n.doc)).sort((a, b) => Number(insideIds.has(b.id)) - Number(insideIds.has(a.id))).map((n) => ({ kind: 'node' as const, id: n.id })),
+    ...diagram.edges.filter((e) => has(e.doc)).map((e) => ({ kind: 'edge' as const, id: e.id })),
+  ].filter((t) => !docs.some((d) => key(d) === key(t)));
+  const setDocs = (next: DocTarget[]) => onChange({ docs: next });
+  const move = (i: number, dir: -1 | 1) => {
+    const next = [...docs];
+    [next[i], next[i + dir]] = [next[i + dir], next[i]];
+    setDocs(next);
+  };
+  const view = node.slideView ?? '';
+  return (
+    <div className="isd-panel">
+      <h3>
+        Slide {number} of {total}
+      </h3>
+      <Field label="Title">
+        <input className="isd-input" value={node.label ?? ''} placeholder="What this slide shows" onChange={(e) => onChange({ label: e.target.value }, 'label')} />
+      </Field>
+      <p className="isd-hint">
+        {inside.nodes.length
+          ? `Shows ${inside.nodes.length} item${inside.nodes.length === 1 ? '' : 's'}. Resize it to change what's in it.`
+          : 'Nothing inside yet. Move or resize it over the items it should show.'}
+      </p>
+      <Field label="Docs to walk through">
+        <Segmented
+          value={auto ? 'auto' : 'chosen'}
+          options={[
+            ['auto', "What's inside"],
+            ['chosen', 'Choose'],
+          ]}
+          onChange={(v) => onChange({ docs: v === 'auto' ? undefined : pages.flatMap((p) => (p.kind === 'doc' ? [p.target] : [])) })}
+        />
+      </Field>
+      {auto ? (
+        <p className="isd-hint">
+          {pages.length ? `In reading order: ${pages.map((p) => (p.kind === 'doc' ? title(p.target) : '')).join(', ')}.` : 'Nothing inside has docs yet.'}
+        </p>
+      ) : (
+        <>
+          <ul className="isd-slide-docs">
+            {docs.map((t, i) => (
+              <li key={key(t)}>
+                <span>{title(t)}</span>
+                <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Earlier">↑</button>
+                <button type="button" disabled={i === docs.length - 1} onClick={() => move(i, 1)} aria-label="Later">↓</button>
+                <button type="button" onClick={() => setDocs(docs.filter((_, k) => k !== i))} aria-label={`Remove ${title(t)}`}>
+                  <Icon name="close" size={12} />
+                </button>
+              </li>
+            ))}
+            {!docs.length && <li className="isd-hint">No docs: the slide shows its notes only.</li>}
+          </ul>
+          {choices.length > 0 && (
+            <select
+              className="isd-input"
+              value=""
+              onChange={(e) => {
+                const t = choices.find((c) => key(c) === e.target.value);
+                if (t) setDocs([...docs, t]);
+              }}
+            >
+              <option value="">Add a doc…</option>
+              {choices.map((t) => (
+                <option key={key(t)} value={key(t)}>
+                  {title(t)}
+                  {t.kind === 'node' && insideIds.has(t.id) ? ' (inside)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </>
+      )}
+      <Field label="Notes">
+        <textarea
+          className="isd-input"
+          rows={4}
+          value={node.notes ?? ''}
+          placeholder="Talking points, shown before the docs (Markdown)"
+          onChange={(e) => onChange({ notes: e.target.value || undefined }, 'notes')}
+        />
+      </Field>
+      <Field label="View">
+        <select
+          className="isd-input"
+          value={view === '3d' ? `3d:${node.slideRotation ?? 0}` : view}
+          onChange={(e) => {
+            const [v, r] = e.target.value.split(':');
+            onChange(v ? { slideView: v as ViewMode, slideRotation: v === '3d' ? (Number(r) as Rotation) : undefined } : { slideView: undefined, slideRotation: undefined });
+          }}
+        >
+          <option value="">The diagram's view</option>
+          <option value="2d">Flat</option>
+          {(['N', 'E', 'S', 'W'] as const).map((d, r) => (
+            <option key={d} value={`3d:${r}`}>
+              2.5D, facing {d}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Color">
+        <Swatches value={node.color} onChange={(color) => onChange({ color })} />
+      </Field>
+      <div className="isd-row">
+        <button type="button" className="isd-btn" disabled={number <= 1} onClick={() => onMove(-1)}>
+          Earlier
+        </button>
+        <button type="button" className="isd-btn" disabled={number >= total} onClick={() => onMove(1)}>
+          Later
+        </button>
+      </div>
+      <button type="button" className="isd-btn" onClick={onPresent}>
+        <Icon name="present" /> Present from this slide
+      </button>
+      <div className="isd-row">
+        <button type="button" className="isd-btn" onClick={onDuplicate}>
+          <Icon name="copy" /> Duplicate
+        </button>
+        <button type="button" className="isd-btn is-danger" onClick={onDelete}>
+          <Icon name="trash" /> Delete
         </button>
       </div>
     </div>

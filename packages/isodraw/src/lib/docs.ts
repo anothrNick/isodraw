@@ -1,4 +1,5 @@
 import { containerOf, descendantsOf, isContainer, parentMap } from './containers';
+import { Projector, center } from './geometry';
 import { KIND_NAMES } from './shapes';
 import type { Diagram, DiagramEdge, DiagramNode, DocTarget } from './types';
 
@@ -94,9 +95,26 @@ export interface Mentionable {
 
 export function mentionables(d: Diagram): Mentionable[] {
   return [
-    ...d.nodes.map((n) => ({ target: { kind: 'node', id: n.id } as DocTarget, title: nodeTitle(n), kind: KIND_NAMES[n.kind] })),
+    ...d.nodes.filter((n) => n.kind !== 'slide').map((n) => ({ target: { kind: 'node', id: n.id } as DocTarget, title: nodeTitle(n), kind: KIND_NAMES[n.kind] })),
     ...d.edges.map((e) => ({ target: { kind: 'edge', id: e.id } as DocTarget, title: edgeTitle(e, d.nodes), kind: 'Connection' })),
   ];
+}
+
+/** Within this many pixels left or right, items count as one column and go top to bottom. */
+const SAME_COLUMN = 12;
+
+/**
+ * Items in reading order, best effort: left to right as the diagram is drawn
+ * (its own 2D or 2.5D view), and top to bottom where they line up.
+ */
+export function readingOrder(nodes: DiagramNode[], d: Diagram): DiagramNode[] {
+  const proj = new Projector(d.view ?? '3d', 0);
+  const at = new Map(nodes.map((n) => [n.id, proj.project(center(n).x, center(n).y, n.z)]));
+  return [...nodes].sort((a, b) => {
+    const p = at.get(a.id)!;
+    const q = at.get(b.id)!;
+    return Math.abs(p.x - q.x) > SAME_COLUMN ? p.x - q.x : p.y - q.y;
+  });
 }
 
 // ---------- export ----------

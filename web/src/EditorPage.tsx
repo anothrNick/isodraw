@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, BookOpen, Check, CloudOff, Copy, ExternalLink, Eye, FolderInput, Image, Link2, Loader2, MoreHorizontal, Pencil } from 'lucide-react';
+import { AlertCircle, BookOpen, Presentation, Check, CloudOff, Copy, ExternalLink, Eye, FolderInput, Image, Link2, Loader2, MoreHorizontal, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
-import { IsoDiagramEditor, type LevelPath } from 'isodraw';
+import { IsoDiagramEditor, slideOrder, type LevelPath } from 'isodraw';
 import { ApiError, api, type Org, type PreviewLink, type StoredDiagram } from './api';
 import { useAutosave, type SaveStatus } from './autosave';
 import { useWorkspaceImages } from './workspaceImages';
@@ -87,6 +87,12 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
     dismissNotice();
   }, [notice, dismissNotice]);
 
+  /** Open the presenter, on a slide when one is given (the hash holds its number). */
+  const present = async (slideId?: string) => {
+    if (!readOnly) await saveAndWait();
+    const n = slideId ? slideOrder(diagram).findIndex((s) => s.node.id === slideId) + 1 : 0;
+    navigate(`/${org.slug}/d/${initial.id}/present${n > 0 ? `#${n}` : ''}`);
+  };
   const rename = async () => {
     const t = title.trim();
     if (!t || t === initial.title) return setTitle(initial.title);
@@ -126,6 +132,11 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
             <span className="flex-1" />
             {canEdit && <ModeSwitch viewing={viewing} onChange={switchMode} />}
             <ShareMenu id={initial.id} level={level} beforeLink={readOnly ? undefined : saveAndWait} />
+            {/* Present the slides; the presenter loads from the server, so it must have the latest edits first. */}
+            <Button variant="outline" size="sm" onClick={() => void present()}>
+              <Presentation />
+              Present
+            </Button>
             {/* Read the docs, starting on the component whose detail diagram is open. */}
             <Button variant="outline" size="sm" onClick={async () => {
                 // The docs load from the server, so it must have the latest edits first.
@@ -180,6 +191,9 @@ function Editor({ org, initial, canEdit }: { org: Org; initial: StoredDiagram; c
         onUploadImages={images.upload}
         // The top bar links to the docs page; writing docs happens in the sidebar's Docs tab.
         docsButton={false}
+        // Presenting has a page of its own too, opened from the top bar or a slide.
+        presentButton={false}
+        onPresent={(slideId) => void present(slideId)}
         // The library's own styles round and border the editor; full-bleed under the app bar, it needs neither.
         className="min-h-0 flex-1 rounded-none! border-0!"
       />

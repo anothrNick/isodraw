@@ -7,6 +7,7 @@ import { ConnectAiDialog } from './ConnectAiDialog';
 import { ConnectPage } from './ConnectPage';
 import { DiagramList } from './DiagramList';
 import { DocsPage } from './DocsPage';
+import { PresentPage } from './PresentPage';
 import { DrawPage } from './DrawPage';
 import { EditorPage } from './EditorPage';
 import { InvitePage } from './InvitePage';
@@ -125,6 +126,8 @@ export function App() {
           <EditorPage key={route.id} org={org} id={route.id} />
         ) : route.page === 'docs' ? (
           <DocsPage key={route.id} org={org} id={route.id} />
+        ) : route.page === 'present' ? (
+          <PresentPage key={route.id} org={org} id={route.id} />
         ) : route.page === 'members' ? (
           <MembersPage key={org.id} org={org} />
         ) : (
@@ -153,7 +156,7 @@ function Shell({ session, org, children }: { session: Session; org?: Org; childr
         <OrgSwitcher orgs={session.orgs} current={org} />
         {/* The editor and docs pages put the diagram's title and actions here. */}
         <div id="app-bar-slot" className="flex min-w-0 flex-1 items-center gap-2" />
-        <ConnectAiButton compact={route.page === 'diagram' || route.page === 'docs'} />
+        <ConnectAiButton compact={route.page === 'diagram' || route.page === 'docs' || route.page === 'present'} />
         <UserMenu user={session.user} admin={!!session.admin} />
       </header>
       <main className="flex min-h-0 flex-1 flex-col">{children}</main>

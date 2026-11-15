@@ -457,7 +457,7 @@ const OFF_MIDDLE = 0.6;
  */
 export function placeLabels(d: Diagram): Diagram {
   const byId = new Map(d.nodes.map((n) => [n.id, n]));
-  const solid = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
+  const solid = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text' && n.kind !== 'slide');
   const boxes: Rect[] = [...solid.map((n) => ({ x0: n.x, y0: n.y, x1: n.x + n.w, y1: n.y + n.d })), ...solid.filter((n) => n.label).map(itemLabelBox)];
   const lines = d.edges
     .filter((e) => e.from !== e.to && byId.has(e.from) && byId.has(e.to))
@@ -487,7 +487,7 @@ const round = (v: number) => Math.round(v * 1000) / 1000;
 
 function computeRoutes(d: Pick<Diagram, 'nodes' | 'edges'>): Map<string, ResolvedEdge> {
   const byId = new Map(d.nodes.map((n) => [n.id, n]));
-  const solid = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
+  const solid = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text' && n.kind !== 'slide');
   const walls = new Walls(
     solid.map((n) => ({ x0: n.x - CLEAR, y0: n.y - CLEAR, x1: n.x + n.w + CLEAR, y1: n.y + n.d + CLEAR })),
     // The label under each item: dear to run through (an item's own lines may leave through its own).

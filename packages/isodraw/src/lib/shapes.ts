@@ -28,6 +28,7 @@ export const SHAPES: ShapeDef[] = [
   },
   { kind: 'note', name: 'Note', defaults: { w: 3.5, d: 1, h: 0, color: '#fbbf24', text: 'Note', fontSize: 0.42 } },
   { kind: 'frame', name: 'Frame', defaults: { w: 6, d: 4, h: 0, color: '#64748b', label: 'Frame' } },
+  { kind: 'slide', name: 'Slide', defaults: { w: 10, d: 7, h: 0, color: '#2563eb', label: 'Slide' } },
 ];
 
 export const SWATCHES = [
@@ -153,6 +154,7 @@ export function parseDiagram(json: unknown): Diagram {
     edges: obj.edges.filter((e) => ids.has(e.from) && ids.has(e.to)).map(migrateEdge),
     ...(typeof obj.doc === 'string' ? { doc: obj.doc } : {}),
     ...(obj.view === '2d' || obj.view === '3d' ? { view: obj.view } : {}),
+    ...(Array.isArray(obj.presentation?.order) ? { presentation: { order: obj.presentation.order.filter((id) => typeof id === 'string') } } : {}),
   };
 }
 
@@ -169,4 +171,5 @@ export const KIND_NAMES: Record<ShapeKind, string> = {
   image: 'Image',
   note: 'Note',
   frame: 'Frame',
+  slide: 'Slide',
 };

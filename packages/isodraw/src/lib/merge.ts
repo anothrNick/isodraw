@@ -24,7 +24,7 @@ function mergeLevel(base: Diagram, mine: Diagram, theirs: Diagram, count: Counte
   const ids = new Set(nodes.map((n) => n.id));
   const edges = mergeItems(base.edges, mine.edges, theirs.edges, count).filter((e) => ids.has(e.from) && ids.has(e.to));
   const out: Diagram = { ...theirs, nodes, edges };
-  for (const key of ['doc', 'view'] as const) {
+  for (const key of ['doc', 'view', 'presentation'] as const) {
     const v = pick(base[key], mine[key], theirs[key], count);
     if (v === undefined) delete out[key];
     else (out as unknown as Record<string, unknown>)[key] = v;

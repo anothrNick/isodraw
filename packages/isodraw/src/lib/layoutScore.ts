@@ -77,7 +77,7 @@ function hits(s: [Pt, Pt], n: DiagramNode): boolean {
 /** Scores what's drawn: items where they are, lines as their anchors and bends draw them. */
 export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
   const byId = new Map(d.nodes.map((n) => [n.id, n]));
-  const parts = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text');
+  const parts = d.nodes.filter((n) => !isContainer(n) && n.kind !== 'text' && n.kind !== 'slide');
   const routes = d.edges
     .filter((e) => byId.has(e.from) && byId.has(e.to) && e.from !== e.to)
     .map((e) => ({ e, segs: segments(resolveEdge(e, byId.get(e.from)!, byId.get(e.to)!).pts) }));
@@ -157,7 +157,7 @@ export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
   }
 
   const length = routes.reduce((t, r) => t + r.segs.reduce((s, [a, b]) => s + Math.hypot(b.x - a.x, b.y - a.y), 0), 0);
-  const all = d.nodes.filter((n) => n.kind !== 'text');
+  const all = d.nodes.filter((n) => n.kind !== 'text' && n.kind !== 'slide');
   const w = Math.max(...all.map((n) => n.x + n.w)) - Math.min(...all.map((n) => n.x));
   const h = Math.max(...all.map((n) => n.y + n.d)) - Math.min(...all.map((n) => n.y));
   const own = parts.reduce((t, n) => t + n.w * n.d, 0) || 1;

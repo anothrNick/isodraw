@@ -264,8 +264,8 @@ export function layeredLayout(input: LayoutInput): Map<string, Placement> {
 /** Whether the platform placed this item (true) or a person did (false). */
 export const isAutoPlaced = (n: DiagramNode) => n.placed === 'auto';
 
-/** Items that take part in layout: everything but free text and notes (a note follows what it's pinned to). */
-export const laidOut = (n: DiagramNode) => n.kind !== 'text' && n.kind !== 'note';
+/** Items that take part in layout: everything but free text, notes (a note follows what it's pinned to) and slides. */
+export const laidOut = (n: DiagramNode) => n.kind !== 'text' && n.kind !== 'note' && n.kind !== 'slide';
 
 /**
  * Lay out a whole level: areas keep their contents, components go in columns

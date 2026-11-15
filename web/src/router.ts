@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
  *   /:org                  → an organization's diagrams
  *   /:org/d/:id#in/a/b     → a diagram, inside detail diagrams a › b
  *   /:org/d/:id/docs#/node/a/b → a diagram's docs, on component b inside a
+ *   /:org/d/:id/present#3  → presenting a diagram's slides, on the third
  *   /:org/members          → an organization's members and invites
  *   /invite/:token         → an invite to join an organization
  *   /cli/login?port&state  → authorize the CLI (isodraw login opens this)
@@ -23,6 +24,7 @@ export type Route =
   | { page: 'diagrams'; org: string }
   | { page: 'diagram'; org: string; id: string }
   | { page: 'docs'; org: string; id: string }
+  | { page: 'present'; org: string; id: string }
   | { page: 'members'; org: string }
   | { page: 'invite'; token: string }
   | { page: 'cli-login' }
@@ -58,6 +60,7 @@ export function parseRoute(path: string): Route {
   if (parts.length === 2 && parts[1] === 'members') return { page: 'members', org: parts[0] };
   if (parts.length === 3 && parts[1] === 'd') return { page: 'diagram', org: parts[0], id: parts[2] };
   if (parts.length === 4 && parts[1] === 'd' && parts[3] === 'docs') return { page: 'docs', org: parts[0], id: parts[2] };
+  if (parts.length === 4 && parts[1] === 'd' && parts[3] === 'present') return { page: 'present', org: parts[0], id: parts[2] };
   return { page: 'missing' };
 }
 

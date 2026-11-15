@@ -4,7 +4,8 @@ import { Projector, type Pt, center, footprint, isFlat, pointsAttr, rectPoly, sn
 import { containerOf, descendantsOf, isContainer } from './containers';
 import { hasDoc } from './docs';
 import { fitIsoIcon, isIsoIcon } from './isoIcons';
-import { SceneContent, TargetHighlight, edgeGeometry, isoIconRect, labelPoint, standingRect } from './render';
+import { SceneContent, SlideOutline, TargetHighlight, edgeGeometry, isoIconRect, labelPoint, standingRect } from './render';
+import { isSlide } from './slides';
 import {
   SIDES,
   type InferredRoute,
@@ -61,6 +62,8 @@ export interface IsoCanvasProps {
   onOpenDetail?: (id: string) => void;
   /** Emphasise this node or connection, e.g. while a doc mention of it is hovered. */
   focus?: DocTarget | null;
+  /** Each slide's number in the presentation, for its badge. */
+  slideNumbers?: ReadonlyMap<string, number>;
 }
 
 type Drag =
@@ -199,8 +202,11 @@ export function IsoCanvas(props: IsoCanvasProps) {
     return proj.unproject(s.x, s.y, z);
   };
   /** Node under the pointer, ignoring pointer capture. */
-  const nodeAtPoint = (clientX: number, clientY: number) =>
-    closestAttr(document.elementFromPoint(clientX, clientY), 'data-node-id');
+  const nodeAtPoint = (clientX: number, clientY: number) => {
+    const id = closestAttr(document.elementFromPoint(clientX, clientY), 'data-node-id');
+    // Slides are regions to present, not things to connect.
+    return id && closestAttr(document.elementFromPoint(clientX, clientY), 'data-slide-id') ? null : id;
+  };
 
   const nodeById = useMemo(() => new Map(diagram.nodes.map((n) => [n.id, n])), [diagram.nodes]);
   const edgeById = useMemo(() => new Map(diagram.edges.map((e) => [e.id, e])), [diagram.edges]);
@@ -321,7 +327,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
         return;
       }
     }
-    if (nodeId && tool === 'connect' && !readOnly) {
+    if (nodeId && tool === 'connect' && !readOnly && !closestAttr(e.target, 'data-slide-id')) {
       const n = nodeById.get(nodeId)!;
       const w = toWorld(e.clientX, e.clientY, n.z);
       setDrag({ type: 'connect', from: nodeId, trail: [w], cursor: w, target: null });
@@ -373,7 +379,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const onPointerMove = (e: RPointerEvent<SVGSVGElement>) => {
     if (!drag) {
       if (tool === 'connect' && !closestAttr(e.target, 'data-handle')?.startsWith('conn-')) {
-        setHover(closestAttr(e.target, 'data-node-id'));
+        setHover(closestAttr(e.target, 'data-slide-id') ? null : closestAttr(e.target, 'data-node-id'));
       }
       const nodeId = closestAttr(e.target, 'data-node-id');
       const edgeId = closestAttr(e.target, 'data-edge-id');
@@ -625,6 +631,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
     if (!handle) {
       const nodeId = closestAttr(hit, 'data-node-id');
       const edgeId = closestAttr(hit, 'data-edge-id');
+      if (nodeId && closestAttr(hit, 'data-slide-id')) return;
       if (nodeId && nodeById.get(nodeId)?.detail && props.onOpenDetail) props.onOpenDetail(nodeId);
       else if (nodeId) props.onOpenDocs?.({ kind: 'node', id: nodeId });
       else if (edgeId) props.onOpenDocs?.({ kind: 'edge', id: edgeId });
@@ -1050,6 +1057,30 @@ export function IsoCanvas(props: IsoCanvasProps) {
 
   const hoverNode = hover && tool === 'connect' && !drag ? nodeById.get(hover) : undefined;
 
+  // ----- slides: outlines on top of the picture, picked by their border or badge only -----
+  const slideLayer = diagram.nodes.filter(isSlide).map((n) => {
+    const pts = footprint(n).map((q) => proj.project(q.x, q.y, n.z));
+    const top = Math.min(...pts.map((p) => p.y));
+    const corner = pts.filter((p) => p.y - top < 0.5).reduce((a, b) => (b.x < a.x ? b : a));
+    const num = props.slideNumbers?.get(n.id);
+    const title = `${num ? `${num}  ` : ''}${n.label?.trim() || 'Slide'}`;
+    const width = title.length * 6.8 + 16;
+    const selected = selection.nodes.includes(n.id);
+    return (
+      <g key={n.id} data-node-id={n.id} data-slide-id={n.id}>
+        <SlideOutline node={n} proj={proj} selected={selected} />
+        {/* A wide invisible border, so the outline is easy to grab. */}
+        <polygon points={pointsAttr(pts)} fill="none" stroke="transparent" strokeWidth={12} vectorEffect="non-scaling-stroke" pointerEvents="stroke" />
+        <g className="isd-slide-badge" transform={`translate(${corner.x} ${corner.y}) scale(${1 / camera.zoom})`} pointerEvents="all">
+          <rect x={0} y={-26} width={width} height={20} rx={5} fill={n.color} opacity={selected ? 1 : 0.85} />
+          <text x={8} y={-16} fontSize={11.5} fontWeight={600} dominantBaseline="central" fill="#fff">
+            {title}
+          </text>
+        </g>
+      </g>
+    );
+  });
+
   // Items keep the plain arrow on hover (a cursor per item flickers as the
   // pointer crosses areas and connections); the drag itself sets the cursor.
   const dragCursor =
@@ -1107,6 +1138,9 @@ export function IsoCanvas(props: IsoCanvasProps) {
         {grid}
         <g data-scene="">
           <SceneContent diagram={diagram} proj={proj} idPrefix={idPrefix} selectedEdges={selectedSet} animate={animate} />
+        </g>
+        <g data-noexport="" pointerEvents="none" className="isd-slides">
+          {slideLayer}
         </g>
         <g data-noexport="">
           {props.focus && <TargetHighlight target={props.focus} diagram={diagram} proj={proj} />}
