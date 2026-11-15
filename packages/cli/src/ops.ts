@@ -15,6 +15,13 @@ import {
   lineTop,
   noteDepth,
   nodeTitle,
+  collectSlides,
+  isSlide,
+  refitSlides,
+  regionAround,
+  slideContents,
+  slideOrder,
+  withSlideOrder,
   settleLevelAsync,
   SHAPES,
   withLevel,
@@ -22,6 +29,7 @@ import {
   type DiagramEdge,
   type DiagramNode,
   type LevelPath,
+  type DocTarget,
   type LineStyle,
   type ShapeKind,
 } from './lib';
@@ -76,6 +84,15 @@ export type Op = { level?: string } & (
     }
   /** One more message between two participants, below the last one on the level. */
   | ({ op: 'addMessage' } & Message)
+  /**
+   * A presentation slide: a region drawn around some items. Presenting flies
+   * the camera to it and walks through the docs of what's on it.
+   */
+  | ({ op: 'addSlide'; title: string; around: string[]; id?: string } & SlideSettings)
+  /** Change a slide (by id or title): its title, what it's around, docs, notes, view or place in the order. */
+  | ({ op: 'updateSlide'; slide: string; title?: string; around?: string[] } & SlideSettings)
+  /** Put slides in presenting order (by id or title, any level); slides not listed follow in their current order. */
+  | { op: 'orderSlides'; slides: string[] }
   | {
       /** A sticky note, beside an item (and following it) or on its own. */
       op: 'addNote';
@@ -86,6 +103,23 @@ export type Op = { level?: string } & (
       color?: string;
     }
 );
+
+export interface SlideSettings {
+  /** Talking points shown before the docs (Markdown); null clears them. */
+  notes?: string | null;
+  /**
+   * The docs to walk through, in order: items or connections on the slide (by
+   * id or label), or "overview" for the level's overview. null goes back to
+   * the default: everything on the slide that has a doc, in reading order.
+   */
+  docs?: string[] | null;
+  /** How it's shown: the diagram's own view (default), flat, or 2.5D. */
+  view?: 'diagram' | 'flat' | '2.5d';
+  /** In 2.5D, the way the view faces. */
+  facing?: 'N' | 'E' | 'S' | 'W';
+  /** Its place in the presentation, from 1. New slides go last. */
+  position?: number;
+}
 
 export class OpError extends Error {
   constructor(
@@ -157,6 +191,50 @@ export function findEdges(d: Diagram, from: string, to: string): DiagramEdge[] {
   const found = forward.length ? forward : d.edges.filter((e) => e.from === b && e.to === a);
   if (!found.length) throw new OpError(`No connection between ${from} and ${to}.`, 'not_found');
   return found;
+}
+
+/** A slide on a level, by id or title. */
+function findSlide(d: Diagram, ref: string): DiagramNode {
+  const slides = d.nodes.filter(isSlide);
+  const hit = slides.find((n) => n.id === ref) ?? slides.filter((n) => norm(n.label ?? '') === norm(ref));
+  if (hit && !Array.isArray(hit)) return hit;
+  if (Array.isArray(hit) && hit.length === 1) return hit[0];
+  if (Array.isArray(hit) && hit.length > 1) throw new OpError(`"${ref}" matches ${hit.length} slides: ${hit.map((n) => n.id).join(', ')}. Use an id.`, 'ambiguous');
+  throw new OpError(
+    `No slide "${ref}" here.${slides.length ? ` The slides on this level: ${slides.map((n) => `${n.id} (${n.label ?? 'untitled'})`).join(', ')}.` : ' There are none on this level; slides on other levels need "level".'}`,
+    'not_found',
+  );
+}
+
+/** The items a slide goes around: components or areas on the level, never other slides. */
+function slideItems(d: Diagram, refs: string[]): DiagramNode[] {
+  if (!refs?.length) throw new OpError('A slide needs "around": the items it shows.');
+  return refs.map((r) => {
+    const n = findNode(d, r);
+    if (isSlide(n)) throw new OpError(`${nodeTitle(n)} is a slide; a slide goes around components and areas.`);
+    return n;
+  });
+}
+
+/** A doc reference on a slide: "overview", a connection's id or label, or an item's id or label. */
+function docTarget(d: Diagram, ref: string): DocTarget {
+  if (norm(ref) === 'overview') return { kind: 'diagram' };
+  const edge = d.edges.find((e) => e.id === ref) ?? (() => {
+    const byLabel = d.edges.filter((e) => e.label && norm(e.label) === norm(ref));
+    return byLabel.length === 1 ? byLabel[0] : undefined;
+  })();
+  if (edge) return { kind: 'edge', id: edge.id };
+  const n = findNode(d, ref);
+  if (isSlide(n)) throw new OpError(`${nodeTitle(n)} is a slide, not something with a doc.`);
+  return { kind: 'node', id: n.id };
+}
+
+/** A slide's view settings as node fields. */
+function slideView(s: SlideSettings): Partial<DiagramNode> {
+  if (s.view === undefined && s.facing === undefined) return {};
+  if (s.view === 'diagram') return { slideView: undefined, slideRotation: undefined };
+  if (s.view === 'flat') return { slideView: '2d', slideRotation: undefined };
+  return { slideView: '3d', slideRotation: (['N', 'E', 'S', 'W'].indexOf(s.facing ?? 'N') as 0 | 1 | 2 | 3) || 0 };
 }
 
 function slug(label: string) {
@@ -270,12 +348,31 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
   const touched = new Map<string, LevelPath>();
   /** New items placed without --near, to move beside what they end up connected to. */
   const loose: { level: LevelPath; id: string }[] = [];
+  /** Slides added or changed: drawn around their items once layout is done, then checked and put in order. */
+  const slides: { level: LevelPath; id: string; around?: string[]; docs?: boolean; position?: number; added?: boolean }[] = [];
   for (const [i, op] of ops.entries()) {
     try {
       const level = op.level !== undefined ? resolveLevel(diagram, parseLevel(op.level)) : defaultLevel;
       touched.set(level.join('/'), level);
       const where = level.length ? ` in ${levelNodes(diagram, level).map(nodeTitle).join(' › ')}` : '';
       if (!levelAt(diagram, level)) throw new OpError(`No such level: ${level.join('/')}`, 'not_found');
+
+      if (op.op === 'orderSlides') {
+        const all = collectSlides(diagram);
+        const ids = (op.slides ?? []).map((ref) => {
+          const hit = all.filter((s) => s.node.id === ref || norm(s.node.label ?? '') === norm(ref));
+          if (hit.length === 1) return hit[0].node.id;
+          throw new OpError(
+            hit.length ? `"${ref}" matches ${hit.length} slides: ${hit.map((s) => s.node.id).join(', ')}. Use an id.` : `No slide "${ref}". The slides: ${all.map((s) => `${s.node.id} (${s.node.label ?? 'untitled'})`).join(', ') || 'none'}.`,
+            hit.length ? 'ambiguous' : 'not_found',
+          );
+        });
+        if (new Set(ids).size !== ids.length) throw new OpError('A slide is listed twice.');
+        const rest = slideOrder(diagram).map((s) => s.node.id).filter((id) => !ids.includes(id));
+        diagram = withSlideOrder(diagram, [...ids, ...rest]);
+        changes.push(`put the slides in order: ${[...ids, ...rest].join(', ')}`);
+        continue;
+      }
 
       if (op.op === 'setDoc' && !op.item && level.length) {
         // A detail diagram's overview is its component's doc, one level up.
@@ -349,6 +446,7 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
             const a = findNode(d, op.from);
             const b = findNode(d, op.to);
             if (a.id === b.id) throw new OpError('A connection needs two different items. For a self call in a sequence, use addMessage.');
+            if (isSlide(a) || isSlide(b)) throw new OpError('Slides are regions to present, not things to connect.');
             const edge = { ...createEdge(a.id, b.id, { ...(op.label ? { label: op.label } : {}), ...(op.style ? { lineStyle: op.style } : {}) }), id: freeId(d, `${a.id}-${b.id}`) };
             added.push(edge.id);
             changes.push(`connected ${a.id} → ${b.id}${op.label ? ` "${op.label}"` : ''}${where}`);
@@ -466,6 +564,36 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
             }
             return next;
           }
+          case 'addSlide': {
+            if (!op.title?.trim()) throw new OpError('A slide needs a title.');
+            const items = slideItems(d, op.around);
+            const id = op.id ? (d.nodes.some((n) => n.id === op.id) ? fail(`An item with id "${op.id}" already exists.`) : op.id) : freeId(d, `slide-${slug(op.title)}`);
+            const slide: DiagramNode = {
+              ...createShape('slide', 0, 0),
+              id,
+              label: op.title,
+              ...regionAround(items),
+              ...(op.notes ? { notes: op.notes } : {}),
+              ...(op.docs ? { docs: op.docs.map((r) => docTarget(d, r)) } : {}),
+              ...slideView(op),
+            };
+            added.push(id);
+            slides.push({ level, id, around: items.map((n) => n.id), docs: !!op.docs?.length, position: op.position, added: true });
+            changes.push(`added slide ${id} (${op.title}) around ${items.map((n) => n.id).join(', ')}${where}`);
+            return { ...d, nodes: [...d.nodes, slide] };
+          }
+          case 'updateSlide': {
+            const s = findSlide(d, op.slide);
+            const patch: Partial<DiagramNode> = { ...slideView(op) };
+            if (op.title !== undefined) patch.label = op.title;
+            if (op.notes !== undefined) patch.notes = op.notes || undefined;
+            if (op.docs !== undefined) patch.docs = op.docs === null ? undefined : op.docs.map((r) => docTarget(d, r));
+            const items = op.around ? slideItems(d, op.around) : undefined;
+            if (items) Object.assign(patch, regionAround(items));
+            slides.push({ level, id: s.id, around: items?.map((n) => n.id), docs: !!patch.docs?.length, position: op.position });
+            changes.push(`changed slide ${s.id} (${[...Object.keys(patch).filter((k) => !['x', 'y', 'w', 'd'].includes(k)), ...(items ? ['around'] : []), ...(op.position ? ['position'] : [])].join(', ') || 'nothing'})${where}`);
+            return { ...d, nodes: d.nodes.map((x) => (x.id === s.id ? { ...x, ...patch } : x)) };
+          }
           case 'addNote': {
             if (!op.text?.trim()) throw new OpError('A note needs some text.');
             const on = op.on ? findNode(d, op.on) : undefined;
@@ -509,6 +637,7 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
     }
   }
   diagram = await arrange(diagram, touched, loose);
+  diagram = finishSlides(diagram, slides, changes);
   return { diagram, changes, added };
 }
 
@@ -525,7 +654,8 @@ async function arrange(root: Diagram, touched: Map<string, LevelPath>, loose: { 
     if (!before) continue;
     const settled = await settleLevelAsync(before);
     if (settled !== before) {
-      diagram = withLevel(diagram, level, () => settled);
+      // Slides follow what they showed.
+      diagram = withLevel(diagram, level, () => refitSlides(before, settled));
       continue;
     }
     for (const { id } of loose.filter((l) => l.level.join('/') === level.join('/'))) {
@@ -544,6 +674,48 @@ async function arrange(root: Diagram, touched: Map<string, LevelPath>, loose: { 
     }
   }
   return diagram;
+}
+
+/**
+ * Slides changed in a batch, once everything is placed: drawn around their
+ * items where they are now, their docs checked to be on the slide, and put in
+ * the presenting order (new ones last unless given a position).
+ */
+function finishSlides(root: Diagram, slides: { level: LevelPath; id: string; around?: string[]; docs?: boolean; position?: number; added?: boolean }[], changes: string[]): Diagram {
+  if (!slides.length) return root;
+  let diagram = root;
+  for (const s of slides) {
+    diagram = withLevel(diagram, s.level, (d) => {
+      const slide = d.nodes.find((n) => n.id === s.id);
+      if (!slide) return d;
+      let next = slide;
+      if (s.around) {
+        const items = d.nodes.filter((n) => s.around!.includes(n.id));
+        if (items.length) next = { ...slide, ...regionAround(items) };
+      }
+      if (s.docs && next.docs) {
+        const on = slideContents(next, d);
+        const off = next.docs.filter((t) => t.kind !== 'diagram' && !(t.kind === 'node' ? on.nodes.some((n) => n.id === t.id) : on.edges.some((e) => e.id === t.id)));
+        if (off.length) {
+          const name = (t: DocTarget) => (t.kind === 'node' ? nodeTitle(d.nodes.find((n) => n.id === t.id)!) : t.kind === 'edge' ? t.id : 'overview');
+          throw new OpError(`Slide ${slide.id} can only walk through what's on it, and ${off.map(name).join(', ')} ${off.length === 1 ? "isn't" : "aren't"}. Add ${off.length === 1 ? 'it' : 'them'} to "around", or leave ${off.length === 1 ? 'it' : 'them'} out of "docs".`);
+        }
+      }
+      return next === slide ? d : { ...d, nodes: d.nodes.map((n) => (n.id === s.id ? next : n)) };
+    });
+  }
+  // The order: what it was, new slides last, then any positions asked for.
+  let ids = slideOrder(root).map((s) => s.node.id);
+  const all = slideOrder(diagram).map((s) => s.node.id);
+  ids = [...ids.filter((id) => all.includes(id)), ...all.filter((id) => !ids.includes(id))];
+  for (const s of slides) {
+    if (!s.position) continue;
+    const rest = ids.filter((id) => id !== s.id);
+    rest.splice(Math.max(0, Math.min(rest.length, Math.round(s.position) - 1)), 0, s.id);
+    ids = rest;
+    changes.push(`moved slide ${s.id} to position ${ids.indexOf(s.id) + 1}`);
+  }
+  return withSlideOrder(diagram, ids);
 }
 
 function fail(msg: string): never {

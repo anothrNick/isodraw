@@ -359,3 +359,72 @@ describe('notes and frames', () => {
     expect(diagram.nodes.find((n) => n.kind === 'note')!.pin).toBeUndefined();
   });
 });
+
+describe('slides', () => {
+  const slideOf = (d: Diagram, id: string) => d.nodes.find((n) => n.id === id)!;
+
+  it('adds a slide around items, last in the order, with notes and its own docs', async () => {
+    const { diagram, added } = await applyOps(base(), [
+      { op: 'addSlide', title: 'The API', around: ['orders-api', 'Orders DB'], notes: 'Start here.', docs: ['SQL', 'orders-api'] },
+      { op: 'addSlide', title: 'Edge', id: 'edge', around: ['CDN'] },
+    ]);
+    expect(added).toEqual(['slide-the-api', 'edge']);
+    const s = slideOf(diagram, 'slide-the-api');
+    expect(s).toMatchObject({ kind: 'slide', label: 'The API', notes: 'Start here.', docs: [{ kind: 'edge', id: 'e1' }, { kind: 'node', id: 'api' }] });
+    // Around both items, with a unit of room.
+    expect(s).toMatchObject({ x: -1, y: -1, w: 10, d: 4 });
+    expect(diagram.presentation).toEqual({ order: ['slide-the-api', 'edge'] });
+  });
+
+  it('only walks through what is on the slide', async () => {
+    await expect(applyOps(base(), [{ op: 'addSlide', title: 'API', around: ['orders-api'], docs: ['CDN'] }])).rejects.toThrow(/can only walk through what's on it, and CDN isn't/);
+    await expect(applyOps(base(), [{ op: 'addSlide', title: 'API', around: [] }])).rejects.toThrow(/needs "around"/);
+  });
+
+  it('changes a slide: title, docs back to the default, view, and where it goes', async () => {
+    const { diagram: d1 } = await applyOps(base(), [
+      { op: 'addSlide', title: 'One', around: ['orders-api'], docs: ['orders-api'] },
+      { op: 'addSlide', title: 'Two', around: ['CDN'] },
+    ]);
+    const { diagram } = await applyOps(d1, [{ op: 'updateSlide', slide: 'Two', title: 'Edge first', docs: null, view: '2.5d', facing: 'E', notes: 'Hi', position: 1 }]);
+    const s = slideOf(diagram, 'slide-two');
+    expect(s).toMatchObject({ label: 'Edge first', slideView: '3d', slideRotation: 1, notes: 'Hi' });
+    expect(s.docs).toBeUndefined();
+    expect(diagram.presentation?.order).toEqual(['slide-two', 'slide-one']);
+  });
+
+  it('orders slides across levels, and keeps unlisted ones after', async () => {
+    const { diagram: d1 } = await applyOps(base(), [
+      { op: 'addSlide', title: 'Top', around: ['orders-api'] },
+      { op: 'addSlide', title: 'Inside', around: ['validate()'], level: 'api' },
+      { op: 'addSlide', title: 'Edge', around: ['CDN'] },
+    ]);
+    const { diagram } = await applyOps(d1, [{ op: 'orderSlides', slides: ['Inside', 'Edge'] }]);
+    expect(diagram.presentation?.order).toEqual(['slide-inside', 'slide-edge', 'slide-top']);
+    await expect(applyOps(d1, [{ op: 'orderSlides', slides: ['Nope'] }])).rejects.toThrow(/No slide "Nope"/);
+  });
+
+  it('never connects slides, and describe lists them apart from components', async () => {
+    const { diagram } = await applyOps(base(), [{ op: 'addSlide', title: 'API', around: ['orders-api'] }]);
+    await expect(applyOps(diagram, [{ op: 'addEdge', from: 'API', to: 'CDN' }])).rejects.toThrow(/not things to connect|matches/);
+    const o = outline(diagram, { title: 'T', version: 1 });
+    expect(o.components.map((c) => c.id)).not.toContain('slide-api');
+    expect(o.slides).toEqual([{ id: 'slide-api', title: 'API', level: [], shows: ['api'], docs: ['api'], chosen: false }]);
+    expect(describeText(o)).toMatch(/## Slides \(1, in presenting order\)\n1\. slide-api "API": shows api; docs api \(what's on it\)/);
+  });
+
+  it('follows its items when the level is laid out again', async () => {
+    // Everything placed by the platform, so adding an item lays the whole level out again.
+    const { diagram: d1 } = await applyOps({ version: 1, nodes: [], edges: [] }, [
+      { op: 'addNode', label: 'A' },
+      { op: 'addNode', label: 'B' },
+      { op: 'addEdge', from: 'A', to: 'B' },
+      { op: 'addSlide', title: 'B', id: 'sb', around: ['B'] },
+    ]);
+    const { diagram } = await applyOps(d1, [{ op: 'addNode', label: 'C' }, { op: 'addEdge', from: 'C', to: 'A' }]);
+    const b = diagram.nodes.find((n) => n.id === 'b')!;
+    const b1 = d1.nodes.find((n) => n.id === 'b')!;
+    expect([b.x, b.y]).not.toEqual([b1.x, b1.y]);
+    expect(slideOf(diagram, 'sb')).toMatchObject({ x: b.x - 1, y: b.y - 1, w: b.w + 2, d: b.d + 2 });
+  });
+});

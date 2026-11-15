@@ -25,6 +25,7 @@ How to work:
 - get_guide has the full change format, limits and recommended batch sizes.
 - Make related changes in one apply_changes call. Use dry_run first when the change is large or the user should confirm.
 - Never think about coordinates or layout: the platform places and lays out items.
+- Presentations: addSlide draws a slide around some items (its "around"), with a title, optional notes (talking points) and the docs to walk through ("docs", only items on the slide, or "overview"; by default everything on it with a doc, in reading order). updateSlide changes one, orderSlides sets the presenting order. Present in the editor flies from slide to slide. describe_diagram lists the slides in order. A good presentation starts with an overview slide around everything, then a slide per part, a few components each.
 - Notes and frames: addNote puts a short remark beside an item (it follows the item); addNode with kind "frame" makes a thin titled outline for grouping without an area's fill (a sequence fragment such as "loop" or "alt", or a step).
 - Sequence diagrams: use addSequence (participants left to right, messages top to bottom: call, async, return, self) and addMessage to add more. Participants are components with lifelines, so the same items can appear in the architecture and in sequences. Activation bars come from calls and their returns; a call with no return gets a short one. describe_diagram lists the messages in order.
 - Icons: find_icons gives references for the "icon" field (isodraw:laptop, aws_lambda_function, …); it takes several words, and no query lists them all. Isometric icons (isodraw:…) take the item's color.
@@ -39,6 +40,19 @@ const includeImage = z.boolean().optional().describe('Set false to leave the pic
 const NodeKind = z.enum(['block', 'cylinder', 'hexagon', 'pyramid', 'cone', 'sphere', 'area', 'circleArea', 'text', 'note', 'frame']);
 const LineStyle = z.enum(['solid', 'dashed', 'dotted']);
 const at = { level: z.string().optional().describe('Apply this change on another level than the call\'s "level".') };
+
+/** A slide's settings, shared by addSlide and updateSlide. */
+const SlideSettings = {
+  notes: z.string().nullable().optional().describe('Talking points shown before the docs (Markdown, a sentence or two). null clears them.'),
+  docs: z
+    .array(z.string())
+    .nullable()
+    .optional()
+    .describe('The docs to walk through, in order: items or connections on the slide (ids or labels), or "overview". Omit (or null) for everything on the slide that has a doc, in reading order.'),
+  view: z.enum(['diagram', 'flat', '2.5d']).optional().describe("How it's shown; default the diagram's own view."),
+  facing: z.enum(['N', 'E', 'S', 'W']).optional().describe('In 2.5D, the way the view faces.'),
+  position: z.number().int().min(1).optional().describe('Its place in the presentation, from 1. New slides go last.'),
+};
 
 /** A message in a sequence diagram. */
 const Message = z.object({
@@ -103,6 +117,26 @@ const Change = z.discriminatedUnion('op', [
     ...at,
   }),
   z.object({ op: z.literal('addMessage'), ...Message.shape, ...at }).describe('One more message, below the last one on the level.'),
+  z.object({
+    op: z.literal('addSlide'),
+    title: z.string().describe('What the slide shows, e.g. "The front door".'),
+    around: z.array(z.string()).min(1).describe('The items it shows (ids or labels); it is drawn around them, and follows them when the level is laid out.'),
+    id: z.string().optional(),
+    ...SlideSettings,
+    ...at,
+  }).describe('A presentation slide: a region around some items. Presenting flies to it and walks through its docs.'),
+  z.object({
+    op: z.literal('updateSlide'),
+    slide: z.string().describe('The slide, by id or title (on this level).'),
+    title: z.string().optional(),
+    around: z.array(z.string()).min(1).optional().describe('Redraw it around these items instead.'),
+    ...SlideSettings,
+    ...at,
+  }),
+  z.object({
+    op: z.literal('orderSlides'),
+    slides: z.array(z.string()).min(1).describe('Slides by id or title, first to last, from any level. Slides not listed follow in their current order.'),
+  }),
   z.object({
     op: z.literal('addNote'),
     text: z.string().describe('Short: a sentence or two.'),

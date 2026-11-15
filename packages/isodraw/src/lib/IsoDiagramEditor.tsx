@@ -16,7 +16,7 @@ import { noteDepth } from './notes';
 import { canHaveDetail, levelAt, levelKey, levelNodes, liftEmbeds, sameLevel, validLevel, withLevel, type LevelPath } from './levels';
 import { ShapePreview } from './render';
 import { IsoDiagramPresentation } from './Present';
-import { isSlide, slideContents, slideOrder, slidePages, withSlideOrder, type SlideRef } from './slides';
+import { isSlide, refitSlides, regionAround, slideContents, slideOrder, slidePages, withSlideOrder, type SlideRef } from './slides';
 import { EDGE_STYLE_KEYS, KIND_NAMES, SHAPES, SWATCHES, createEdge, createImageNode, createShape, emptyDiagram, parseDiagram } from './shapes';
 import type { Camera, Diagram, DiagramEdge, DiagramNode, DocTarget, EdgeAnimation, IconDef, IconLibrary, MarkerKind, Rotation, ShapeKind, ViewMode } from './types';
 import { Field, Icon, NumberInput, ToolButton } from './ui';
@@ -988,11 +988,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const slideAroundSelection = () => {
     const sel = diagram.nodes.filter((n) => selection.nodes.includes(n.id) && !isSlide(n));
     if (!sel.length) return;
-    const x0 = Math.min(...sel.map((n) => n.x)) - 1;
-    const y0 = Math.min(...sel.map((n) => n.y)) - 1;
-    const x1 = Math.max(...sel.map((n) => n.x + n.w)) + 1;
-    const y1 = Math.max(...sel.map((n) => n.y + n.d)) + 1;
-    addNode({ ...createShape('slide', 0, 0), x: x0, y: y0, w: x1 - x0, d: y1 - y0, label: `Slide ${slides.length + 1}` });
+    addNode({ ...createShape('slide', 0, 0), ...regionAround(sel), label: `Slide ${slides.length + 1}` });
   };
 
   /** "Diagram", then each component drilled into. */
@@ -1096,7 +1092,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
                 layoutLevelAsync(from).then((next) => {
                   // Only if nothing changed meanwhile: the layout is of what was there when Tidy was pressed.
                   if (diagramRef.current !== from) return;
-                  commit(next);
+                  // Slides follow what they showed.
+                  commit(refitSlides(from, next));
                   fitTo(next, proj);
                   setToast('Tidied up. ⌘Z undoes it.');
                 });

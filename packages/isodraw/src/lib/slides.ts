@@ -104,6 +104,35 @@ export function slideContents(slide: DiagramNode, d: Diagram): Diagram {
   };
 }
 
+/** The region for a slide around some items, with a unit of room on each side. */
+export function regionAround(items: Pick<DiagramNode, 'x' | 'y' | 'w' | 'd'>[], margin = 1): { x: number; y: number; w: number; d: number } {
+  const x = Math.min(...items.map((n) => n.x)) - margin;
+  const y = Math.min(...items.map((n) => n.y)) - margin;
+  return { x, y, w: Math.max(...items.map((n) => n.x + n.w)) + margin - x, d: Math.max(...items.map((n) => n.y + n.d)) + margin - y };
+}
+
+/**
+ * After a layout moved things on a level, each slide is drawn again around
+ * the items it held before, so it still shows them. Slides that held nothing
+ * stay put. Returns `after` itself when no slide changed.
+ */
+export function refitSlides(before: Diagram, after: Diagram): Diagram {
+  let changed = false;
+  const nodes = after.nodes.map((n) => {
+    if (!isSlide(n)) return n;
+    const was = before.nodes.find((x) => x.id === n.id);
+    if (!was) return n;
+    const ids = new Set(slideContents(was, before).nodes.map((x) => x.id));
+    const items = after.nodes.filter((x) => ids.has(x.id));
+    if (!items.length) return n;
+    const r = regionAround(items);
+    if (r.x === n.x && r.y === n.y && r.w === n.w && r.d === n.d) return n;
+    changed = true;
+    return { ...n, ...r };
+  });
+  return changed ? { ...after, nodes } : after;
+}
+
 /** A page the presenter walks through on a slide: the slide's own notes, or an item's doc. */
 export type SlidePage = { kind: 'notes' } | { kind: 'doc'; target: DocTarget };
 

@@ -49,7 +49,8 @@ with a JSON array of ops, and \`--dry-run\` first to see what would change:
 Ops: addNote ({"text": …, "on": item}: a sticky note beside an item, which it
 follows; leave out "on" for one on its own), addNode, updateNode, removeNode,
 addEdge, updateEdge, removeEdge, setDoc,
-addDetail, addSequence, addMessage. Every op may have "level": "a/b".
+addDetail, addSequence, addMessage, addSlide, updateSlide, orderSlides.
+Every op may have "level": "a/b" (orderSlides works across levels).
 
 ## Sequence diagrams
 Participants are components with a lifeline; messages are connections down
@@ -69,6 +70,21 @@ with \`{"op": "addMessage", "from": …, "to": …, "label": …, "kind": …}\`
 below the last message. Existing items can be participants (by id or label).
 \`describe\` lists the messages top to bottom. A new diagram made only of a
 sequence switches to the flat view, where sequences read best.
+
+## Presentations
+A slide is a region drawn around some items. Present (in the editor) flies the
+camera from slide to slide and walks through each slide's docs beside it.
+
+    [{"op": "addSlide", "title": "The big picture", "around": ["vpc", "users"], "docs": ["overview"],
+      "notes": "How an order gets from the app to the warehouse."},
+     {"op": "addSlide", "title": "The front door", "around": ["API Gateway", "Cognito"]},
+     {"op": "updateSlide", "slide": "The front door", "docs": ["API Gateway", "Cognito"], "position": 2},
+     {"op": "orderSlides", "slides": ["The big picture", "The front door"]}]
+
+"docs" lists items or connections on the slide (or "overview"); leave it out
+to walk through everything on the slide that has a doc, in reading order.
+Slides follow their items when a level is laid out again. Remove one with
+removeNode. \`describe\` lists the slides in order with what each shows.
 
 ## Layout is the platform's job
 Never pass coordinates. Items you add are placed for you, and a level made
@@ -127,8 +143,20 @@ export const MCP_GUIDE = `# Using IsoDraw's MCP tools
       {"op": "setDoc", "item": "db", "markdown": "Orders and payments."}
     ]
 
-Ops: addNode, updateNode, removeNode, addEdge, updateEdge, removeEdge, setDoc, addNote, addDetail, addSequence, addMessage.
+Ops: addNode, updateNode, removeNode, addEdge, updateEdge, removeEdge, setDoc, addNote, addDetail, addSequence, addMessage, addSlide, updateSlide, orderSlides.
 Never give coordinates: the platform places everything.
+
+## Presentations
+A slide is a region around some items; presenting flies from slide to slide and walks through each one's docs.
+
+    [
+      {"op": "addSlide", "title": "The big picture", "around": ["vpc", "users"], "docs": ["overview"], "notes": "How an order flows."},
+      {"op": "addSlide", "title": "The front door", "around": ["API Gateway", "Cognito"], "docs": ["API Gateway", "Cognito"]},
+      {"op": "updateSlide", "slide": "The front door", "notes": "Every request is checked here first.", "position": 2},
+      {"op": "orderSlides", "slides": ["The big picture", "The front door"]}
+    ]
+
+"docs" may only list items and connections on the slide, or "overview"; leave it out to walk through everything on it that has a doc, in reading order. Slides on detail levels take "level"; orderSlides works across levels. Slides follow their items when the level is laid out again. removeNode removes a slide. Start with an overview slide, then a slide per part with a few components each.
 
 ## Levels
 A component can have a detail diagram: addDetail makes one, and a level is the path of components drilled into, like "orders/validate". Give "level" on the call, or on one change to send it elsewhere. The picture in the result shows the deepest level the call changed.

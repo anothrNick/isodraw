@@ -230,3 +230,42 @@ describe('forTools', () => {
     );
   });
 });
+
+describe('presentations over MCP', () => {
+  it('adds, changes and orders slides, and describe lists them', async () => {
+    vi.stubGlobal('fetch', async () => new Response(PNG));
+    const { call, store } = await connect();
+    await call('create_diagram', {
+      title: 'Talk',
+      changes: [
+        { op: 'addNode', label: 'Web', doc: 'The storefront.' },
+        { op: 'addNode', label: 'DB', kind: 'cylinder', doc: 'Orders.' },
+        { op: 'addEdge', from: 'Web', to: 'DB', label: 'SQL' },
+      ],
+    });
+    const added = await call('apply_changes', {
+      diagram: 'Talk',
+      changes: [
+        { op: 'addSlide', title: 'Everything', around: ['Web', 'DB'], docs: ['overview'], notes: 'The whole shop.' },
+        { op: 'addSlide', title: 'Storage', around: ['DB'], view: 'flat' },
+        { op: 'updateSlide', slide: 'Storage', docs: ['DB'], position: 1 },
+      ],
+    });
+    expect(added.error).toBe(false);
+    const d = [...store.values()].find((x) => x.title === 'Talk')!.content;
+    expect(d.presentation?.order).toEqual(['slide-storage', 'slide-everything']);
+    expect(d.nodes.find((n) => n.id === 'slide-storage')).toMatchObject({ kind: 'slide', slideView: '2d', docs: [{ kind: 'node', id: 'db' }] });
+
+    const described = await call('describe_diagram', { diagram: 'Talk' });
+    expect(described.text).toContain('1. slide-storage "Storage": shows db; docs db (chosen); flat');
+    expect(described.text).toContain('2. slide-everything "Everything": shows web, db; docs overview (chosen); notes “The whole shop.”');
+
+    const ordered = await call('apply_changes', { diagram: 'Talk', changes: [{ op: 'orderSlides', slides: ['Everything'] }] });
+    expect(ordered.error).toBe(false);
+    expect([...store.values()].find((x) => x.title === 'Talk')!.content.presentation?.order).toEqual(['slide-everything', 'slide-storage']);
+
+    const bad = await call('apply_changes', { diagram: 'Talk', changes: [{ op: 'updateSlide', slide: 'Storage', docs: ['Web'] }] });
+    expect(bad.error).toBe(true);
+    expect(bad.text).toMatch(/can only walk through what's on it/);
+  });
+});

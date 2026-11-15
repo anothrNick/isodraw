@@ -1,6 +1,6 @@
 # Presentation mode
 
-**Status:** in progress (phase 1 built) · **Priority:** next
+**Status:** in progress (phases 1 and 2 built) · **Priority:** next
 **Summary:** Slides drawn as regions on the diagram, each with the docs to walk through there. Present opens a full-screen mode, beside Edit and Docs, where the camera flies from slide to slide and the docs follow along.
 
 ## Why
@@ -72,7 +72,7 @@ The order lives in one list because slides can sit in different detail diagrams.
 ## Phases
 
 1. **The shape and the presenter (built):** the `slide` kind, its inspector fields and badge; filtering it out of every render path; `presentation.order` with repair; the Slides list; `IsoDiagramPresentation` with the flights, highlighting, level dives and docs panel; the Present route and button. Tests for the path maths, order repair and the export filtering.
-2. **CLI and MCP:** (until then, `describe` lists slides as items of kind `slide`) `addSlide` / `updateSlide` / `reorderSlides`, `describe` lists the slides, and the guide and MCP instructions explain them. "Make a walk-through of this diagram" then works in Claude and ChatGPT.
+2. **CLI and MCP (built):** `addSlide` (around items, with title, notes, docs, view and position), `updateSlide`, `orderSlides`; `describe` lists the slides in presenting order with what each shows and walks through. Slides are redrawn around their items whenever a level is laid out again (the platform's layout after AI changes, and Tidy). `addSlide` / `updateSlide` / `reorderSlides`, `describe` lists the slides, and the guide and MCP instructions explain them. "Make a walk-through of this diagram" then works in Claude and ChatGPT.
 3. **A first draft:** "Draft slides" makes one slide per area or top-level group in reading order (the docs navigation's order), each with its contents' docs, as a starting point to edit.
 4. **Sharing:** present from a share link, and a "Present" embed. Waits on [share links](share-links.md).
 5. **Later:** per-slide connection animation (trace a request's path), revealing things step by step within a slide, the projection morph, presenter notes on a second screen, export to PDF.

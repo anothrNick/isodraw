@@ -12,5 +12,6 @@ export { ISO_ICON_COLOR, isIsoIcon, isoIconLibrary } from '../../isodraw/src/lib
 export { followPins, layoutLevel, settleLevel } from '../../isodraw/src/lib/layout';
 export { layoutLevelAsync, settleLevelAsync } from '../../isodraw/src/lib/elkLayout';
 export { noteDepth } from '../../isodraw/src/lib/notes';
+export { collectSlides, isSlide, refitSlides, regionAround, slideContents, slideOrder, slidePages, withSlideOrder, type SlideRef } from '../../isodraw/src/lib/slides';
 export { lineAnchor, lineTop, sideToward } from '../../isodraw/src/lib/lifelines';
-export type { Diagram, DiagramNode, DiagramEdge, ShapeKind, LineStyle } from '../../isodraw/src/lib/types';
+export type { Diagram, DiagramNode, DiagramEdge, DocTarget, ShapeKind, LineStyle } from '../../isodraw/src/lib/types';
