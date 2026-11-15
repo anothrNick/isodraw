@@ -585,7 +585,15 @@ button.isd-pub-toc-twist:hover { color: var(--isd-text); }
 .isd-slide-list .isd-slide-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isd-slide-list .isd-slide-where { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--isd-muted); font-size: 11.5px; }
 .isd-slide-docs { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.isd-slide-docs li { display: flex; align-items: center; gap: 4px; font-size: 13px; padding: 3px 0; }
+.isd-slide-docs li { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 4px 4px 2px; border-radius: 5px; border-top: 2px solid transparent; }
+.isd-slide-docs li[draggable="true"] { cursor: grab; }
+.isd-slide-docs li[draggable="true"]:hover { background: var(--isd-panel); }
+.isd-slide-docs li.is-dragging { opacity: 0.45; }
+.isd-slide-docs li.is-drop { border-top-color: var(--isd-accent); }
+.isd-slide-docs .isd-slide-docs-end { height: 10px; padding: 0; }
+.isd-slide-docs .isd-slide-grip { flex: none; color: var(--isd-muted); font-size: 11px; letter-spacing: -2px; user-select: none; }
+.isd-link { align-self: flex-start; margin-top: 4px; padding: 0; border: 0; background: none; color: var(--isd-accent); font: inherit; font-size: 12.5px; cursor: pointer; }
+.isd-link:hover { text-decoration: underline; }
 .isd-slide-docs li > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isd-slide-docs button { padding: 2px 5px; border: 0; background: none; color: var(--isd-muted); cursor: pointer; border-radius: 4px; font: inherit; }
 .isd-slide-docs button:hover:not(:disabled) { background: var(--isd-panel); color: var(--isd-text); }

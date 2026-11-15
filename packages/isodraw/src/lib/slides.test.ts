@@ -111,12 +111,16 @@ describe('a slide', () => {
     ]);
   });
 
-  it('uses the docs it lists instead, skipping ones that are gone', () => {
+  it('uses the docs it lists instead, skipping ones that are gone or outside it', () => {
     const d = sample();
-    const s1 = { ...d.nodes.find((n) => n.id === 's1')!, docs: [{ kind: 'node' as const, id: 'c' }, { kind: 'node' as const, id: 'gone' }, { kind: 'diagram' as const }] };
+    const s1 = {
+      ...d.nodes.find((n) => n.id === 's1')!,
+      docs: [{ kind: 'edge' as const, id: 'ab' }, { kind: 'node' as const, id: 'c' }, { kind: 'node' as const, id: 'gone' }, { kind: 'diagram' as const }, { kind: 'node' as const, id: 'b' }],
+    };
     expect(slidePages(s1, d)).toEqual([
-      { kind: 'doc', target: { kind: 'node', id: 'c' } },
+      { kind: 'doc', target: { kind: 'edge', id: 'ab' } },
       { kind: 'doc', target: { kind: 'diagram' } },
+      { kind: 'doc', target: { kind: 'node', id: 'b' } },
     ]);
   });
 

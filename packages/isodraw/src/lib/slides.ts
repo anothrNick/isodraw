@@ -110,20 +110,21 @@ export type SlidePage = { kind: 'notes' } | { kind: 'doc'; target: DocTarget };
 /**
  * The pages for a slide: its notes first when it has some, then the docs it
  * lists, or (when it lists none) the documented items inside it in reading order.
- * Listed items that are gone are skipped.
+ * A slide only walks through what's inside it (and the diagram's overview):
+ * listed items that are gone, or have moved out of it, are skipped.
  */
 export function slidePages(slide: DiagramNode, d: Diagram): SlidePage[] {
   const pages: SlidePage[] = [];
   if (slide.notes?.trim()) pages.push({ kind: 'notes' });
   const has = (md?: string) => !!md && md.trim().length > 0;
+  const contents = slideContents(slide, d);
   if (slide.docs) {
     for (const t of slide.docs) {
       if (t.kind === 'diagram') pages.push({ kind: 'doc', target: t });
-      else if (t.kind === 'node' ? d.nodes.some((n) => n.id === t.id && !isSlide(n)) : d.edges.some((e) => e.id === t.id)) pages.push({ kind: 'doc', target: t });
+      else if (t.kind === 'node' ? contents.nodes.some((n) => n.id === t.id) : contents.edges.some((e) => e.id === t.id)) pages.push({ kind: 'doc', target: t });
     }
     return pages;
   }
-  const contents = slideContents(slide, d);
   for (const n of readingOrder(contents.nodes, d)) if (has(n.doc)) pages.push({ kind: 'doc', target: { kind: 'node', id: n.id } });
   for (const e of contents.edges) if (has(e.doc)) pages.push({ kind: 'doc', target: { kind: 'edge', id: e.id } });
   return pages;

@@ -2015,7 +2015,6 @@ function SlideInspector({
   onDuplicate: () => void;
 }) {
   const auto = !node.docs;
-  const pages = slidePages({ ...node, notes: undefined }, diagram);
   const inside = slideContents(node, diagram);
   const title = (t: DocTarget) => (t.kind === 'diagram' ? 'Overview' : t.kind === 'node' ? nodeTitle(diagram.nodes.find((n) => n.id === t.id) ?? ({ kind: 'block' } as DiagramNode)) : edgeLabel(t.id));
   const edgeLabel = (id: string) => {
@@ -2025,20 +2024,24 @@ function SlideInspector({
     const b = diagram.nodes.find((n) => n.id === e.to);
     return e.label?.trim() || `${a ? nodeTitle(a) : '?'} → ${b ? nodeTitle(b) : '?'}`;
   };
-  const docs = node.docs ?? [];
+  // The pages the presenter walks through: what's inside in reading order until the list is changed, then the list.
+  const docs = slidePages({ ...node, notes: undefined }, diagram).flatMap((p) => (p.kind === 'doc' ? [p.target] : []));
   const key = (t: DocTarget) => (t.kind === 'diagram' ? 'diagram' : `${t.kind}:${t.id}`);
-  // Documented items to add: what's inside first, then the rest of the level.
+  // Only what's inside the slide can be added (and the diagram's overview).
   const has = (md?: string) => !!md && md.trim().length > 0;
-  const insideIds = new Set(inside.nodes.map((n) => n.id));
   const choices: DocTarget[] = [
     { kind: 'diagram' } as DocTarget,
-    ...[...diagram.nodes].filter((n) => !isSlide(n) && has(n.doc)).sort((a, b) => Number(insideIds.has(b.id)) - Number(insideIds.has(a.id))).map((n) => ({ kind: 'node' as const, id: n.id })),
-    ...diagram.edges.filter((e) => has(e.doc)).map((e) => ({ kind: 'edge' as const, id: e.id })),
+    ...inside.nodes.filter((n) => has(n.doc)).map((n) => ({ kind: 'node' as const, id: n.id })),
+    ...inside.edges.filter((e) => has(e.doc)).map((e) => ({ kind: 'edge' as const, id: e.id })),
   ].filter((t) => !docs.some((d) => key(d) === key(t)));
   const setDocs = (next: DocTarget[]) => onChange({ docs: next });
-  const move = (i: number, dir: -1 | 1) => {
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const drop = (to: number) => {
+    if (dragging === null || dragging === to) return;
     const next = [...docs];
-    [next[i], next[i + dir]] = [next[i + dir], next[i]];
+    const [item] = next.splice(dragging, 1);
+    next.splice(dragging < to ? to - 1 : to, 0, item);
     setDocs(next);
   };
   const view = node.slideView ?? '';
@@ -2055,55 +2058,85 @@ function SlideInspector({
           ? `Shows ${inside.nodes.length} item${inside.nodes.length === 1 ? '' : 's'}. Resize it to change what's in it.`
           : 'Nothing inside yet. Move or resize it over the items it should show.'}
       </p>
-      <Field label="Docs to walk through">
-        <Segmented
-          value={auto ? 'auto' : 'chosen'}
-          options={[
-            ['auto', "What's inside"],
-            ['chosen', 'Choose'],
-          ]}
-          onChange={(v) => onChange({ docs: v === 'auto' ? undefined : pages.flatMap((p) => (p.kind === 'doc' ? [p.target] : [])) })}
-        />
-      </Field>
-      {auto ? (
-        <p className="isd-hint">
-          {pages.length ? `In reading order: ${pages.map((p) => (p.kind === 'doc' ? title(p.target) : '')).join(', ')}.` : 'Nothing inside has docs yet.'}
-        </p>
-      ) : (
-        <>
-          <ul className="isd-slide-docs">
-            {docs.map((t, i) => (
-              <li key={key(t)}>
-                <span>{title(t)}</span>
-                <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Earlier">↑</button>
-                <button type="button" disabled={i === docs.length - 1} onClick={() => move(i, 1)} aria-label="Later">↓</button>
-                <button type="button" onClick={() => setDocs(docs.filter((_, k) => k !== i))} aria-label={`Remove ${title(t)}`}>
-                  <Icon name="close" size={12} />
-                </button>
-              </li>
-            ))}
-            {!docs.length && <li className="isd-hint">No docs: the slide shows its notes only.</li>}
-          </ul>
-          {choices.length > 0 && (
-            <select
-              className="isd-input"
-              value=""
-              onChange={(e) => {
-                const t = choices.find((c) => key(c) === e.target.value);
-                if (t) setDocs([...docs, t]);
+      {/* Not a <label>: the list's buttons and the select are separate controls. */}
+      <div className="isd-field" role="group" aria-label="Docs to walk through">
+        <span>Docs to walk through</span>
+        <ul className="isd-slide-docs" onDragLeave={(e) => e.currentTarget === e.target && setOver(null)}>
+          {docs.map((t, i) => (
+            <li
+              key={key(t)}
+              draggable
+              className={`${dragging === i ? 'is-dragging' : ''}${over === i && dragging !== null && dragging !== i ? ' is-drop' : ''}`}
+              title="Drag to reorder"
+              onDragStart={(e) => {
+                setDragging(i);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', key(t));
+              }}
+              onDragOver={(e) => {
+                if (dragging === null) return;
+                e.preventDefault();
+                setOver(i);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                drop(i);
+                setDragging(null);
+                setOver(null);
+              }}
+              onDragEnd={() => {
+                setDragging(null);
+                setOver(null);
               }}
             >
-              <option value="">Add a doc…</option>
-              {choices.map((t) => (
-                <option key={key(t)} value={key(t)}>
-                  {title(t)}
-                  {t.kind === 'node' && insideIds.has(t.id) ? ' (inside)' : ''}
-                </option>
-              ))}
-            </select>
+              <span className="isd-slide-grip" aria-hidden>⋮⋮</span>
+              <span>{title(t)}</span>
+              <button type="button" onClick={() => setDocs(docs.filter((_, k) => k !== i))} aria-label={`Remove ${title(t)}`} title="Remove">
+                <Icon name="close" size={12} />
+              </button>
+            </li>
+          ))}
+          {/* Dropping below the last item moves it to the end. */}
+          {dragging !== null && (
+            <li
+              className={`isd-slide-docs-end${over === docs.length ? ' is-drop' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setOver(docs.length);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                drop(docs.length);
+                setDragging(null);
+                setOver(null);
+              }}
+            />
           )}
-        </>
-      )}
+          {!docs.length && <li className="isd-hint">{auto ? 'Nothing inside has docs yet.' : 'No docs: the slide shows its notes only.'}</li>}
+        </ul>
+        {choices.length > 0 && (
+          <select
+            className="isd-input"
+            value=""
+            onChange={(e) => {
+              const t = choices.find((c) => key(c) === e.target.value);
+              if (t) setDocs([...docs, t]);
+            }}
+          >
+            <option value="">Add a doc from this slide…</option>
+            {choices.map((t) => (
+              <option key={key(t)} value={key(t)}>
+                {title(t)}
+              </option>
+            ))}
+          </select>
+        )}
+        {!auto && (
+          <button type="button" className="isd-link" onClick={() => onChange({ docs: undefined })} title="Walk through everything inside that has docs, in reading order">
+            Reset to what's inside
+          </button>
+        )}
+      </div>
       <Field label="Notes">
         <textarea
           className="isd-input"
