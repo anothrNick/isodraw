@@ -82,7 +82,8 @@ camera from slide to slide and walks through each slide's docs beside it.
      {"op": "orderSlides", "slides": ["The big picture", "The front door"]}]
 
 "docs" lists items or connections on the slide (or "overview"); leave it out
-to walk through everything on the slide that has a doc, in reading order.
+to walk through the "around" items that have docs, in that order. New slides
+are presented in the order they're added.
 Slides follow their items when a level is laid out again. Remove one with
 removeNode. \`describe\` lists the slides in order with what each shows.
 
@@ -156,7 +157,7 @@ A slide is a region around some items; presenting flies from slide to slide and 
       {"op": "orderSlides", "slides": ["The big picture", "The front door"]}
     ]
 
-"docs" may only list items and connections on the slide, or "overview"; leave it out to walk through everything on it that has a doc, in reading order. Slides on detail levels take "level"; orderSlides works across levels. Slides follow their items when the level is laid out again. removeNode removes a slide. Start with an overview slide, then a slide per part with a few components each.
+"docs" may only list items and connections on the slide, or "overview"; leave it out to walk through the "around" items that have docs, in that order. New slides are presented in the order they're added. A slide is a rectangle, so it can take in other items between the ones it's around; keep each slide to items that sit together. Slides on detail levels take "level"; orderSlides works across levels. Slides follow their items when the level is laid out again. removeNode removes a slide. Start with an overview slide, then a slide per part with a few components each.
 
 ## Levels
 A component can have a detail diagram: addDetail makes one, and a level is the path of components drilled into, like "orders/validate". Give "level" on the call, or on one change to send it elsewhere. The picture in the result shows the deepest level the call changed.

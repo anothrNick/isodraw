@@ -574,11 +574,13 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
               label: op.title,
               ...regionAround(items),
               ...(op.notes ? { notes: op.notes } : {}),
-              ...(op.docs ? { docs: op.docs.map((r) => docTarget(d, r)) } : {}),
+              // Its docs: the ones given, or else the items it was drawn around that have docs, in the order given.
+              // (A slide is a rectangle, so it can take in other items too; those it shows but doesn't walk through.)
+              docs: op.docs ? op.docs.map((r) => docTarget(d, r)) : items.filter((n) => n.doc?.trim()).map((n) => ({ kind: 'node' as const, id: n.id })),
               ...slideView(op),
             };
             added.push(id);
-            slides.push({ level, id, around: items.map((n) => n.id), docs: !!op.docs?.length, position: op.position, added: true });
+            slides.push({ level, id, around: items.map((n) => n.id), docs: true, position: op.position, added: true });
             changes.push(`added slide ${id} (${op.title}) around ${items.map((n) => n.id).join(', ')}${where}`);
             return { ...d, nodes: [...d.nodes, slide] };
           }
@@ -637,7 +639,7 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
     }
   }
   diagram = await arrange(diagram, touched, loose);
-  diagram = finishSlides(diagram, slides, changes);
+  diagram = finishSlides(diagram, root, slides, changes);
   return { diagram, changes, added };
 }
 
@@ -681,7 +683,7 @@ async function arrange(root: Diagram, touched: Map<string, LevelPath>, loose: { 
  * items where they are now, their docs checked to be on the slide, and put in
  * the presenting order (new ones last unless given a position).
  */
-function finishSlides(root: Diagram, slides: { level: LevelPath; id: string; around?: string[]; docs?: boolean; position?: number; added?: boolean }[], changes: string[]): Diagram {
+function finishSlides(root: Diagram, original: Diagram, slides: { level: LevelPath; id: string; around?: string[]; docs?: boolean; position?: number; added?: boolean }[], changes: string[]): Diagram {
   if (!slides.length) return root;
   let diagram = root;
   for (const s of slides) {
@@ -705,9 +707,11 @@ function finishSlides(root: Diagram, slides: { level: LevelPath; id: string; aro
     });
   }
   // The order: what it was, new slides last, then any positions asked for.
-  let ids = slideOrder(root).map((s) => s.node.id);
+  // New slides follow in the order they were added.
+  const before = slideOrder(original).map((s) => s.node.id);
   const all = slideOrder(diagram).map((s) => s.node.id);
-  ids = [...ids.filter((id) => all.includes(id)), ...all.filter((id) => !ids.includes(id))];
+  const fresh = slides.filter((s) => s.added).map((s) => s.id);
+  let ids = [...before.filter((id) => all.includes(id)), ...all.filter((id) => !before.includes(id) && !fresh.includes(id)), ...fresh.filter((id) => all.includes(id))];
   for (const s of slides) {
     if (!s.position) continue;
     const rest = ids.filter((id) => id !== s.id);

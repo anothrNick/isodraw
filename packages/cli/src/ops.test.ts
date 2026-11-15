@@ -365,15 +365,19 @@ describe('slides', () => {
 
   it('adds a slide around items, last in the order, with notes and its own docs', async () => {
     const { diagram, added } = await applyOps(base(), [
-      { op: 'addSlide', title: 'The API', around: ['orders-api', 'Orders DB'], notes: 'Start here.', docs: ['SQL', 'orders-api'] },
       { op: 'addSlide', title: 'Edge', id: 'edge', around: ['CDN'] },
+      { op: 'addSlide', title: 'The API', around: ['orders-api', 'Orders DB'], notes: 'Start here.', docs: ['SQL', 'orders-api'] },
     ]);
-    expect(added).toEqual(['slide-the-api', 'edge']);
+    expect(added).toEqual(['edge', 'slide-the-api']);
     const s = slideOf(diagram, 'slide-the-api');
     expect(s).toMatchObject({ kind: 'slide', label: 'The API', notes: 'Start here.', docs: [{ kind: 'edge', id: 'e1' }, { kind: 'node', id: 'api' }] });
     // Around both items, with a unit of room.
     expect(s).toMatchObject({ x: -1, y: -1, w: 10, d: 4 });
-    expect(diagram.presentation).toEqual({ order: ['slide-the-api', 'edge'] });
+    // In the order they were added, not the order they read on the diagram.
+    expect(diagram.presentation).toEqual({ order: ['edge', 'slide-the-api'] });
+    // Without "docs": the items it's around that have docs, in the order given.
+    const { diagram: d2 } = await applyOps(base(), [{ op: 'addSlide', title: 'Both', around: ['Orders DB', 'orders-api'] }]);
+    expect(slideOf(d2, 'slide-both').docs).toEqual([{ kind: 'node', id: 'api' }]);
   });
 
   it('only walks through what is on the slide', async () => {
@@ -409,8 +413,8 @@ describe('slides', () => {
     await expect(applyOps(diagram, [{ op: 'addEdge', from: 'API', to: 'CDN' }])).rejects.toThrow(/not things to connect|matches/);
     const o = outline(diagram, { title: 'T', version: 1 });
     expect(o.components.map((c) => c.id)).not.toContain('slide-api');
-    expect(o.slides).toEqual([{ id: 'slide-api', title: 'API', level: [], shows: ['api'], docs: ['api'], chosen: false }]);
-    expect(describeText(o)).toMatch(/## Slides \(1, in presenting order\)\n1\. slide-api "API": shows api; docs api \(what's on it\)/);
+    expect(o.slides).toEqual([{ id: 'slide-api', title: 'API', level: [], shows: ['api'], docs: ['api'], chosen: true }]);
+    expect(describeText(o)).toMatch(/## Slides \(1, in presenting order\)\n1\. slide-api "API": shows api; docs api \(chosen\)/);
   });
 
   it('follows its items when the level is laid out again', async () => {
