@@ -149,10 +149,15 @@ export function boundsOf(pts: { x: number; y: number }[]): Rect {
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }
 
-/** The slide's region in scene pixels, reaching up to the tops of tall things inside it. */
+/**
+ * What the camera frames for a slide, in scene pixels: the things inside it,
+ * up to their tops. An empty slide frames its own outline. (In 2.5D a slide's
+ * outline is a diamond much wider than what's in it, so it isn't framed itself.)
+ */
 export function slideRect(slide: DiagramNode, d: Diagram, proj: Projector): Rect {
-  const pts = footprint(slide).map((q) => proj.project(q.x, q.y, slide.z));
-  for (const n of slideContents(slide, d).nodes) {
+  const contents = slideContents(slide, d).nodes;
+  const pts = contents.length ? [] : footprint(slide).map((q) => proj.project(q.x, q.y, slide.z));
+  for (const n of contents) {
     const top = n.z + (n.kind === 'sphere' ? Math.min(n.w, n.d) : n.h);
     for (const q of footprint(n)) pts.push(proj.project(q.x, q.y, top));
   }

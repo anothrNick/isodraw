@@ -3,6 +3,8 @@ import { parseDiagram, type Diagram } from '../lib';
 import { exists, parseMentionHref } from '../lib/docs';
 import { withDocs } from './docs';
 import { EXAMPLES } from './examples';
+import { slideContents, slideOrder, slidePages } from '../lib/slides';
+import { levelAt } from '../lib/levels';
 import kubernetesDocs from './docs/kubernetes.md?raw';
 import serverlessDocs from './docs/serverless.md?raw';
 import streamingDocs from './docs/streaming.md?raw';
@@ -14,6 +16,7 @@ import aiAssistantDocs from './docs/ai-assistant.md?raw';
 const SOURCES: Record<string, string> = {
   'three-tier': threeTierDocs,
   serverless: serverlessDocs,
+  'serverless-walkthrough': serverlessDocs,
   streaming: streamingDocs,
   kubernetes: kubernetesDocs,
   retail: retailDocs,
@@ -66,7 +69,8 @@ describe.each(EXAMPLES.map((e) => [e.id, e] as const))('example %s', (id, exampl
   it('has a doc for the diagram and every component', () => {
     expect(d.doc?.trim()).toBeTruthy();
     // Unlabeled shapes are drawing aids (a sequence diagram's lifelines and activation bars), not components.
-    const undocumented = d.nodes.filter((n) => n.kind !== 'text' && n.label?.trim() && !n.doc?.trim()).map((n) => n.id);
+    // Slides are stops in a presentation, not components.
+    const undocumented = d.nodes.filter((n) => n.kind !== 'text' && n.kind !== 'slide' && n.label?.trim() && !n.doc?.trim()).map((n) => n.id);
     expect(undocumented).toEqual([]);
   });
 
@@ -91,6 +95,28 @@ describe.each(EXAMPLES.map((e) => [e.id, e] as const))('example %s', (id, exampl
       for (const [, json] of md.matchAll(/```isodraw\n([\s\S]*?)\n```/g)) {
         expect(() => parseDiagram(JSON.parse(json))).not.toThrow();
       }
+    }
+  });
+});
+
+describe('the presentation template', () => {
+  const d = EXAMPLES.find((e) => e.id === 'serverless-walkthrough')!.diagram;
+
+  it('presents its slides in order, with one inside the order function', () => {
+    expect(slideOrder(d).map((s) => [s.node.id, s.level])).toEqual([
+      ['tour-overview', []],
+      ['tour-front', []],
+      ['tour-write', []],
+      ['tour-inside', ['orders']],
+      ['tour-after', []],
+    ]);
+  });
+
+  it('has something to show and something to read on every slide', () => {
+    for (const s of slideOrder(d)) {
+      const level = levelAt(d, s.level)!;
+      expect(slideContents(s.node, level).nodes.length, s.node.id).toBeGreaterThan(0);
+      expect(slidePages(s.node, level).length, s.node.id).toBeGreaterThan(1);
     }
   });
 });

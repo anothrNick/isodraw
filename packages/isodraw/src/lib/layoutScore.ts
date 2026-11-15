@@ -130,7 +130,8 @@ export function scoreLayout(d: Diagram, before?: Diagram): LayoutScore {
     const now = parentMap(d.nodes);
     const old = new Map(before.nodes.map((n) => [n.id, n]));
     for (const n of d.nodes) {
-      if (was.get(n.id) !== now.get(n.id)) regrouped++;
+      // Slides aren't laid out: they stay where they're drawn while areas move.
+      if (n.kind !== 'slide' && was.get(n.id) !== now.get(n.id)) regrouped++;
       const o = old.get(n.id);
       if (o) moved += Math.hypot(n.x - o.x, n.y - o.y);
     }

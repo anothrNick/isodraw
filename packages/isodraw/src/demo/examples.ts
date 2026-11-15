@@ -109,6 +109,39 @@ const serverless: Diagram = {
   ],
 };
 
+// The same order API with slides, ready to present: an overview, then a stop
+// for each part, with a dive into orders-api's detail diagram on the way.
+function slide(id: string, label: string, x: number, y: number, w: number, d: number, extra: Partial<DiagramNode> = {}): DiagramNode {
+  return { id, kind: 'slide', label, x, y, w, d, h: 0, z: 0, color: '#2563eb', ...extra };
+}
+
+const serverlessWalkthrough = (): Diagram => {
+  const base = withDocs({ ...serverless, nodes: serverless.nodes.map((n) => (n.id === 'orders' ? { ...n, detail: ordersInternals } : n)) }, serverlessDocs);
+  const inside = slide('tour-inside', 'Inside orders-api', -1, -1, 16, 8, {
+    notes: 'One invocation, start to finish: check the order, write it once, then announce it. Nothing reaches the queue unless the write succeeded.',
+  });
+  return {
+    ...base,
+    nodes: [
+      ...base.nodes.map((n) => (n.id === 'orders' && n.detail ? { ...n, detail: { ...n.detail, nodes: [...n.detail.nodes, inside] } } : n)),
+      slide('tour-overview', 'The big picture', -7, -6.5, 30, 19.5, {
+        notes: 'A mobile app places orders through one API. Everything after the order is written happens in the background, off a queue.',
+        docs: [{ kind: 'diagram' }],
+      }),
+      slide('tour-front', 'The front door', -6.5, -3.5, 9.5, 9, {
+        notes: 'Every request comes in through API Gateway, which checks the sign-in token with Cognito before anything else runs.',
+      }),
+      slide('tour-write', 'Taking an order', 5, -2, 10.5, 8, {
+        notes: 'orders-api writes the order to DynamoDB and puts an OrderPlaced event on the queue, then answers the app.',
+      }),
+      slide('tour-after', 'After the order', 15.5, -2, 5.5, 12.5, {
+        notes: 'notify picks events off the queue: it stores a receipt and tells the customer, retrying on its own if anything fails.',
+      }),
+    ],
+    presentation: { order: ['tour-overview', 'tour-front', 'tour-write', 'tour-inside', 'tour-after'] },
+  };
+};
+
 // ---------------------------------------------------------------------------
 // Streaming IoT pipeline
 // ---------------------------------------------------------------------------
@@ -235,6 +268,12 @@ export const EXAMPLES: Example[] = [
     name: 'Serverless order API',
     description: 'API Gateway, Lambda, DynamoDB and a queue, with a detail diagram for the order function.',
     diagram: withDocs({ ...serverless, nodes: serverless.nodes.map((n) => (n.id === 'orders' ? { ...n, detail: ordersInternals } : n)) }, serverlessDocs),
+  },
+  {
+    id: 'serverless-walkthrough',
+    name: 'Serverless order API, ready to present',
+    description: 'The serverless order API with five slides: press Present to fly through it, docs alongside, diving into the order function on the way.',
+    diagram: serverlessWalkthrough(),
   },
   {
     id: 'streaming',
