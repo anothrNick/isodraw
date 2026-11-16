@@ -64,6 +64,8 @@ export interface IsoCanvasProps {
   focus?: DocTarget | null;
   /** Each slide's number in the presentation, for its badge. */
   slideNumbers?: ReadonlyMap<string, number>;
+  /** Draw slides' outlines and badges (default true). Hidden slides can't be picked on the canvas. */
+  showSlides?: boolean;
 }
 
 type Drag =
@@ -1058,7 +1060,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const hoverNode = hover && tool === 'connect' && !drag ? nodeById.get(hover) : undefined;
 
   // ----- slides: outlines on top of the picture, picked by their border or badge only -----
-  const slideLayer = diagram.nodes.filter(isSlide).map((n) => {
+  const slideLayer = (props.showSlides === false ? [] : diagram.nodes.filter(isSlide)).map((n) => {
     const pts = footprint(n).map((q) => proj.project(q.x, q.y, n.z));
     const top = Math.min(...pts.map((p) => p.y));
     const corner = pts.filter((p) => p.y - top < 0.5).reduce((a, b) => (b.x < a.x ? b : a));

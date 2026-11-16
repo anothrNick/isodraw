@@ -214,6 +214,8 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [tool, setTool] = useState<Tool>('select');
   const [showGrid, setShowGrid] = useState(true);
+  /** Slide outlines and badges on the canvas; hide them to see the diagram as others will. */
+  const [showSlides, setShowSlides] = useState(true);
   const [animate, setAnimate] = useState(true);
   /** Style for new connections: follows the last connection you styled. */
   const [edgeStyle, setEdgeStyle] = useState<Partial<DiagramEdge>>({});
@@ -584,6 +586,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const addNode = (node: DiagramNode) => {
     commit((d) => ({ ...d, nodes: [...d.nodes, node] }));
     // A new slide comes last in the presentation, whichever level it's on (part of the same undo step).
+    if (isSlide(node)) setShowSlides(true);
     if (isSlide(node)) setHist((h) => ({ ...h, d: withSlideOrder(h.d, [...slideOrder(h.d).map((s) => s.node.id).filter((id) => id !== node.id), node.id]) }));
     setSelection({ nodes: [node.id], edges: [] });
     setTool('select');
@@ -970,6 +973,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   };
   /** Show a slide in the editor: its level, selected, in the middle of the screen. */
   const showSlide = (s: SlideRef) => {
+    setShowSlides(true);
     if (!sameLevel(s.level, path)) {
       goLevel(s.level, { select: { kind: 'node', id: s.node.id } });
       return;
@@ -1101,6 +1105,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             />
           )}
           <ToolButton icon="grid" label="Toggle grid" active={showGrid} onClick={() => setShowGrid(!showGrid)} />
+          <ToolButton icon="present" label={showSlides ? 'Hide slide outlines' : 'Show slide outlines'} active={showSlides} onClick={() => setShowSlides(!showSlides)} />
           <ToolButton icon={animate ? 'pause' : 'play'} label={animate ? 'Pause connection animations' : 'Play connection animations'} onClick={() => setAnimate(!animate)} />
         </div>
         <div className="isd-spacer" />
@@ -1334,6 +1339,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
             tool={tool}
             readOnly={readOnly}
             showGrid={showGrid}
+            showSlides={showSlides}
             animate={animate}
             onOpenDocs={openDocs}
             onOpenDetail={openDetail}
