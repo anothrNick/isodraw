@@ -573,9 +573,10 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
               id,
               label: op.title,
               ...regionAround(items),
+              // It shows exactly these, whatever else its outline happens to cover.
+              shows: items.map((n) => n.id),
               ...(op.notes ? { notes: op.notes } : {}),
               // Its docs: the ones given, or else the items it was drawn around that have docs, in the order given.
-              // (A slide is a rectangle, so it can take in other items too; those it shows but doesn't walk through.)
               docs: op.docs ? op.docs.map((r) => docTarget(d, r)) : items.filter((n) => n.doc?.trim()).map((n) => ({ kind: 'node' as const, id: n.id })),
               ...slideView(op),
             };
@@ -591,7 +592,7 @@ export async function applyOps(root: Diagram, ops: Op[], defaultLevel: LevelPath
             if (op.notes !== undefined) patch.notes = op.notes || undefined;
             if (op.docs !== undefined) patch.docs = op.docs === null ? undefined : op.docs.map((r) => docTarget(d, r));
             const items = op.around ? slideItems(d, op.around) : undefined;
-            if (items) Object.assign(patch, regionAround(items));
+            if (items) Object.assign(patch, regionAround(items), { shows: items.map((n) => n.id) });
             slides.push({ level, id: s.id, around: items?.map((n) => n.id), docs: !!patch.docs?.length, position: op.position });
             changes.push(`changed slide ${s.id} (${[...Object.keys(patch).filter((k) => !['x', 'y', 'w', 'd'].includes(k)), ...(items ? ['around'] : []), ...(op.position ? ['position'] : [])].join(', ') || 'nothing'})${where}`);
             return { ...d, nodes: d.nodes.map((x) => (x.id === s.id ? { ...x, ...patch } : x)) };

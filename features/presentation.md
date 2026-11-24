@@ -14,7 +14,7 @@ A diagram with docs already explains a system to someone reading on their own. P
 - **Docs point to existing pages:** a slide lists the docs pages to walk through (a component's, a connection's or the diagram's), with optional notes of its own on top.
 - **Slides can be any shape:** the region is fitted to the screen with a margin. It's a footprint on the floor, so a fixed 16:9 wouldn't hold in 3D anyway.
 - **Moving between slides is an animated zoom and pan,** never a cut.
-- **What's inside a slide:** items whose middle is inside it, and areas only when the whole area fits (so a big VPC around everything doesn't count).
+- **What's on a slide:** its own list of items (`shows`) when it has one: "Add a slide around these", the MCP's `around`, or picking items in its panel. Only those light up, even when others sit under its outline (a rectangle on a diagonal layout always takes in neighbours). Without a list, whatever is under the outline: items whose middle is inside, and areas only when they fit whole. A selected slide tints its items on the canvas.
 - **New slides go last** in the order, whichever level they're drawn on. "Add a slide around these" (with several items selected) draws one around the selection.
 - **Only a slide's border and badge pick it,** so clicking inside a slide still selects the components under it. Slides are never connection targets.
 

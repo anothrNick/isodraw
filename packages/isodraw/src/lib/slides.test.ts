@@ -91,6 +91,21 @@ describe('a slide', () => {
     expect(c.edges.map((e) => e.id)).toEqual(['ab']);
   });
 
+  it('shows only the items it lists, whatever else is under its outline', () => {
+    const d = sample();
+    // s1's outline covers a and b, but it lists only b (and c, far away), plus an id that's gone.
+    const s1 = { ...d.nodes.find((n) => n.id === 's1')!, shows: ['b', 'c', 'gone'] };
+    const c = slideContents(s1, d);
+    expect(c.nodes.map((n) => n.id)).toEqual(['b', 'c']);
+    expect(c.edges.map((e) => e.id)).toEqual(['bc']);
+    // An area brings what's in it.
+    const area: DiagramNode = { ...node('zone', -2, -2), kind: 'area', w: 10, d: 6, h: 0 };
+    const withArea = { ...d, nodes: [...d.nodes, area] };
+    expect(slideContents({ ...s1, shows: ['zone'] }, withArea).nodes.map((n) => n.id).sort()).toEqual(['a', 'b', 'zone']);
+    // Nothing it lists is left: back to what's under the outline.
+    expect(slideContents({ ...s1, shows: ['gone'] }, d).nodes.map((n) => n.id)).toEqual(['a', 'b']);
+  });
+
   it('counts an area only when the whole of it is inside', () => {
     const d = sample();
     const big: DiagramNode = { ...node('vpc', -10, -10), kind: 'area', w: 22, d: 22, h: 0 };

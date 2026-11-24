@@ -5,7 +5,7 @@ import { containerOf, descendantsOf, isContainer } from './containers';
 import { hasDoc } from './docs';
 import { fitIsoIcon, isIsoIcon } from './isoIcons';
 import { SceneContent, SlideOutline, TargetHighlight, edgeGeometry, isoIconRect, labelPoint, standingRect } from './render';
-import { isSlide } from './slides';
+import { isSlide, slideContents } from './slides';
 import {
   SIDES,
   type InferredRoute,
@@ -1060,6 +1060,21 @@ export function IsoCanvas(props: IsoCanvasProps) {
   const hoverNode = hover && tool === 'connect' && !drag ? nodeById.get(hover) : undefined;
 
   // ----- slides: outlines on top of the picture, picked by their border or badge only -----
+  // A selected slide lights up exactly what it shows, so it's clear what's on it.
+  const selectedSlide = props.showSlides === false || selection.nodes.length !== 1 ? undefined : diagram.nodes.find((n) => n.id === selection.nodes[0] && isSlide(n));
+  const slideMembers = selectedSlide
+    ? slideContents(selectedSlide, diagram).nodes.map((m) => (
+        <polygon
+          key={`member-${m.id}`}
+          points={pointsAttr(footprint(m).map((q) => proj.project(q.x, q.y, m.z)))}
+          fill={selectedSlide.color}
+          fillOpacity={isContainer(m) ? 0.06 : 0.22}
+          stroke={selectedSlide.color}
+          strokeWidth={1.5}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))
+    : null;
   const slideLayer = (props.showSlides === false ? [] : diagram.nodes.filter(isSlide)).map((n) => {
     const pts = footprint(n).map((q) => proj.project(q.x, q.y, n.z));
     const top = Math.min(...pts.map((p) => p.y));
@@ -1142,6 +1157,7 @@ export function IsoCanvas(props: IsoCanvasProps) {
           <SceneContent diagram={diagram} proj={proj} idPrefix={idPrefix} selectedEdges={selectedSet} animate={animate} />
         </g>
         <g data-noexport="" pointerEvents="none" className="isd-slides">
+          {slideMembers}
           {slideLayer}
         </g>
         <g data-noexport="">

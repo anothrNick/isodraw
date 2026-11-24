@@ -117,7 +117,7 @@ function LayerView({
             {contents && contents.nodes.length > 0 && (
               // Keyed by slide, so moving to another slide on this level fades the new contents in.
               <g key={layer.slideId} className="isd-present-spot">
-                <rect x={-1e5} y={-1e5} width={2e5} height={2e5} fill={CANVAS_BG[theme]} opacity={0.72} />
+                <rect x={-1e5} y={-1e5} width={2e5} height={2e5} fill={CANVAS_BG[theme]} opacity={0.84} />
                 <SceneContent diagram={contents} proj={proj} idPrefix={`${idPrefix}-s`} />
               </g>
             )}
@@ -362,19 +362,22 @@ export default function PresentationView({ diagram, title, start, useHash, onExi
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if ((e.target as HTMLElement)?.closest?.('input,textarea,select,[contenteditable="true"]')) return;
       const k = e.key;
+      // On a focused button, Space presses it rather than moving on as well.
+      if (k === ' ' && (e.target as HTMLElement)?.closest?.('button,a')) return;
       if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || k === ' ') next();
       else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp') prev();
       else if (k === 'Home') goSlide(0);
       else if (k === 'End') goSlide(slides.length - 1);
       else if (k === 'f' || k === 'F') fullScreen();
       else if (k === 'd' || k === 'D') setDocsOpen((o) => !o);
+      else if (k === 'Escape' && detour) setDetour(null);
       else if (k === 'Escape' && !document.fullscreenElement) onExit?.();
       else return;
       e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [next, prev, goSlide, slides.length, onExit]);
+  }, [next, prev, goSlide, slides.length, onExit, detour]);
 
   // The slide number lives in the hash, so reloading or going back keeps the place.
   useEffect(() => {
@@ -403,6 +406,12 @@ export default function PresentationView({ diagram, title, start, useHash, onExi
     setDocsOpen(true);
   };
 
+  // A new page starts at the top of the panel.
+  const docsBody = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    docsBody.current?.scrollTo?.({ top: 0 });
+  }, [index, page, detour]);
+
   // ----- what the docs panel shows -----
   const shownTarget: DocTarget | null = detour ?? (pageNow?.kind === 'doc' ? pageNow.target : null);
   const focus = hover ?? (shownTarget && shownTarget.kind !== 'diagram' ? shownTarget : null);
@@ -412,7 +421,7 @@ export default function PresentationView({ diagram, title, start, useHash, onExi
   if (current) {
     const doc = shownTarget ? pageDoc(shownTarget, diagram, current.level, siteTitle) : null;
     panel = (
-      <aside className="isd-present-docs" aria-label="Slide docs">
+      <aside className="isd-present-docs" aria-label="Slide docs" onPointerUp={(e) => (e.target as HTMLElement).closest('button')?.blur()}>
         <div className="isd-present-docs-head">
           <span className="isd-present-kicker">
             Slide {index + 1} of {slides.length}
@@ -420,7 +429,7 @@ export default function PresentationView({ diagram, title, start, useHash, onExi
           </span>
           <h2>{current.node.label?.trim() || `Slide ${index + 1}`}</h2>
         </div>
-        <div className="isd-present-docs-body">
+        <div className="isd-present-docs-body" ref={docsBody}>
           {detour && (
             <button type="button" className="isd-present-back" onClick={() => setDetour(null)}>
               <Icon name="left" size={14} /> Back to the slide
@@ -482,7 +491,8 @@ export default function PresentationView({ diagram, title, start, useHash, onExi
               <div className="isd-present-progress" aria-hidden>
                 <span style={{ width: `${((index + 1) / slides.length) * 100}%` }} />
               </div>
-              <div className="isd-present-bar" onClick={(e) => e.stopPropagation()}>
+              {/* Buttons let go of the focus after a click, so Space and the arrows keep moving through the slides. */}
+              <div className="isd-present-bar" onClick={(e) => e.stopPropagation()} onPointerUp={(e) => (e.target as HTMLElement).closest('button')?.blur()}>
                 <button type="button" onClick={prev} disabled={index === 0 && page === 0 && !detour} aria-label="Back (←)" title="Back (←)">
                   <Icon name="left" />
                 </button>

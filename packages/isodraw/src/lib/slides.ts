@@ -1,5 +1,5 @@
 import { center, footprint, Projector } from './geometry';
-import { isContainer } from './containers';
+import { descendantsOf, isContainer } from './containers';
 import { readingOrder } from './docs';
 import type { LevelPath } from './levels';
 import type { Camera, Diagram, DiagramNode, DocTarget, Rotation, ViewMode } from './types';
@@ -92,10 +92,17 @@ const inside = (slide: DiagramNode, n: DiagramNode) => {
   return within(slide, c.x, c.y);
 };
 
-/** What the slide shows: the items whose middle is inside it (whole areas only), and the connections between them. */
+/**
+ * What the slide shows, and the connections between those items: the items
+ * it lists (an area with what's in it), or when it lists none, the items whose
+ * middle is under its outline (whole areas only).
+ */
 export function slideContents(slide: DiagramNode, d: Diagram): Diagram {
-  const nodes = d.nodes.filter((n) => !isSlide(n) && inside(slide, n));
-  const ids = new Set(nodes.map((n) => n.id));
+  const listed = slide.shows?.filter((id) => d.nodes.some((n) => n.id === id && !isSlide(n))) ?? [];
+  const ids = listed.length
+    ? new Set([...listed, ...descendantsOf(listed.filter((id) => isContainer(d.nodes.find((n) => n.id === id)!)), d.nodes)])
+    : new Set(d.nodes.filter((n) => !isSlide(n) && inside(slide, n)).map((n) => n.id));
+  const nodes = d.nodes.filter((n) => ids.has(n.id) && !isSlide(n));
   return {
     version: 1,
     ...(d.view ? { view: d.view } : {}),

@@ -120,7 +120,7 @@ const Change = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('addSlide'),
     title: z.string().describe('What the slide shows, e.g. "The front door".'),
-    around: z.array(z.string()).min(1).describe('The items it shows (ids or labels); it is drawn around them, and follows them when the level is laid out.'),
+    around: z.array(z.string()).min(1).describe('The items it shows (ids or labels; an area brings what is in it). Only these are lit up when presenting, even if others sit between them. It follows them when the level is laid out.'),
     id: z.string().optional(),
     ...SlideSettings,
     ...at,

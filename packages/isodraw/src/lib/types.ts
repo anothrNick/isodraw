@@ -82,6 +82,11 @@ export interface DiagramNode {
    * clears this, and automatic layout never moves items a person placed.
    */
   placed?: 'auto';
+  /**
+   * For slides: the items it shows, by id (an area brings what's in it). Unset:
+   * whatever sits under its outline.
+   */
+  shows?: string[];
   /** For slides: the docs to walk through, in order (unset: the docs of what's inside). */
   docs?: DocTarget[];
   /** For slides: talking points of its own, in Markdown, shown before the docs. */

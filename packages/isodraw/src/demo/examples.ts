@@ -129,12 +129,15 @@ const serverlessWalkthrough = (): Diagram => {
         docs: [{ kind: 'diagram' }],
       }),
       slide('tour-front', 'The front door', -6.5, -3.5, 9.5, 9, {
+        shows: ['client', 'cognito', 'apigw'],
         notes: 'Every request comes in through API Gateway, which checks the sign-in token with Cognito before anything else runs.',
       }),
       slide('tour-write', 'Taking an order', 5, -2, 10.5, 8, {
+        shows: ['orders', 'ddb', 'sqs'],
         notes: 'orders-api writes the order to DynamoDB and puts an OrderPlaced event on the queue, then answers the app.',
       }),
       slide('tour-after', 'After the order', 15.5, -2, 5.5, 12.5, {
+        shows: ['notify', 'receipts', 'sns'],
         notes: 'notify picks events off the queue: it stores a receipt and tells the customer, retrying on its own if anything fails.',
       }),
     ],

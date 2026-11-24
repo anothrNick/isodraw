@@ -992,7 +992,7 @@ export function IsoDiagramEditor(props: IsoDiagramEditorProps) {
   const slideAroundSelection = () => {
     const sel = diagram.nodes.filter((n) => selection.nodes.includes(n.id) && !isSlide(n));
     if (!sel.length) return;
-    addNode({ ...createShape('slide', 0, 0), ...regionAround(sel), label: `Slide ${slides.length + 1}` });
+    addNode({ ...createShape('slide', 0, 0), ...regionAround(sel), shows: sel.map((n) => n.id), label: `Slide ${slides.length + 1}` });
   };
 
   /** "Diagram", then each component drilled into. */
@@ -2019,6 +2019,11 @@ function SlideInspector({
 }) {
   const auto = !node.docs;
   const inside = slideContents(node, diagram);
+  /** Its own list of items, when it has one (the ones still on the level). */
+  const listed = node.shows ? node.shows.map((id) => diagram.nodes.find((n) => n.id === id && !isSlide(n))).filter((n): n is DiagramNode => !!n) : null;
+  const addable = diagram.nodes.filter((n) => !isSlide(n) && n.kind !== 'note' && !(n.kind === 'text' && !n.label) && !listed?.some((x) => x.id === n.id));
+  // Changing the items draws the outline around them again.
+  const setShows = (items: DiagramNode[]) => onChange(items.length ? { shows: items.map((n) => n.id), ...regionAround(items) } : { shows: undefined });
   const title = (t: DocTarget) => (t.kind === 'diagram' ? 'Overview' : t.kind === 'node' ? nodeTitle(diagram.nodes.find((n) => n.id === t.id) ?? ({ kind: 'block' } as DiagramNode)) : edgeLabel(t.id));
   const edgeLabel = (id: string) => {
     const e = diagram.edges.find((x) => x.id === id);
@@ -2056,11 +2061,57 @@ function SlideInspector({
       <Field label="Title">
         <input className="isd-input" value={node.label ?? ''} placeholder="What this slide shows" onChange={(e) => onChange({ label: e.target.value }, 'label')} />
       </Field>
-      <p className="isd-hint">
-        {inside.nodes.length
-          ? `Shows ${inside.nodes.length} item${inside.nodes.length === 1 ? '' : 's'}. Resize it to change what's in it.`
-          : 'Nothing inside yet. Move or resize it over the items it should show.'}
-      </p>
+      {/* What it shows: its own list of items, or whatever is under its outline. */}
+      <div className="isd-field" role="group" aria-label="Shows">
+        <span>Shows</span>
+        {listed ? (
+          <>
+            <ul className="isd-slide-docs">
+              {listed.map((n) => (
+                <li key={n.id}>
+                  <span>{nodeTitle(n)}</span>
+                  <button type="button" onClick={() => setShows(listed.filter((x) => x.id !== n.id))} aria-label={`Take ${nodeTitle(n)} off the slide`} title="Take off the slide">
+                    <Icon name="close" size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {addable.length > 0 && (
+              <select
+                className="isd-input"
+                value=""
+                onChange={(e) => {
+                  const n = addable.find((x) => x.id === e.target.value);
+                  if (n) setShows([...listed, n]);
+                }}
+              >
+                <option value="">Add an item…</option>
+                {addable.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {nodeTitle(n)}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button type="button" className="isd-link" onClick={() => onChange({ shows: undefined })} title="Show whatever sits under the slide's outline instead">
+              Use what's under the outline
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="isd-hint" style={{ margin: 0 }}>
+              {inside.nodes.length
+                ? `Whatever is under its outline: ${inside.nodes.map(nodeTitle).join(', ')}.`
+                : 'Nothing under its outline yet. Move or resize it over the items it should show.'}
+            </p>
+            {inside.nodes.length > 0 && (
+              <button type="button" className="isd-link" onClick={() => setShows(inside.nodes.filter((n) => !isContainer(n) || !inside.nodes.some((m) => m !== n && isContainer(m) && descendantsOf([m.id], diagram.nodes).has(n.id))))} title="List the items, to add or take off exactly the ones you want">
+                Choose the items instead
+              </button>
+            )}
+          </>
+        )}
+      </div>
       {/* Not a <label>: the list's buttons and the select are separate controls. */}
       <div className="isd-field" role="group" aria-label="Docs to walk through">
         <span>Docs to walk through</span>
